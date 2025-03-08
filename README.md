@@ -128,7 +128,7 @@ graph TD
    ```
 5. Run system:
    ```bash
-   python src/main.py --mode backtest  # Available modes: backtest/paper/live
+   python src/bin/main.py --mode backtest  # Available modes: backtest/paper/live
    ```
 
 ---
@@ -146,10 +146,10 @@ graph TD
 
 ```bash
 # Basic backtest
-python src/main.py --mode backtest
+python src/bin/main.py --mode backtest
 
 # Specify configuration
-python src/main.py --mode backtest --config path/to/custom_backtest_config.yaml
+python src/bin/main.py --mode backtest --config path/to/custom_backtest_config.yaml
 ```
 
 ### Backtest Configuration
@@ -220,9 +220,9 @@ The system supports three trading modes, each with a consistent interface but sp
 
 ```bash
 # Select mode via command line
-python src/main.py --mode backtest
-python src/main.py --mode paper
-python src/main.py --mode live
+python src/bin/main.py --mode backtest
+python src/bin/main.py --mode paper
+python src/bin/main.py --mode live
 
 # Or specify in config.yaml
 default_config:
@@ -310,10 +310,10 @@ live_trading:
 
 ```bash
 # Start live trading
-python src/main.py --mode live
+python src/bin/main.py --mode live
 
 # Use specific configuration
-python src/main.py --mode live --config path/to/live_config.yaml
+python src/bin/main.py --mode live --config path/to/live_config.yaml
 ```
 
 ### Safety Precautions
