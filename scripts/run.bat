@@ -20,7 +20,6 @@ if not exist "%LOG_DIR%" (
 REM Create a proper date-time string for log filename (Windows-safe)
 for /f "tokens=2-4 delims=/ " %%a in ('date /t') do (set LOGDATE=%%c-%%a-%%b)
 for /f "tokens=1-2 delims=: " %%a in ('time /t') do (set LOGTIME=%%a%%b)
-set "LOG_FILE=%LOG_DIR%\app_%LOGDATE%_%LOGTIME%.log"
 
 REM --------------------------
 REM Simple ASCII Art Header
@@ -202,16 +201,9 @@ REM --------------------------
 echo.
 echo [*] Launching trading system...
 echo [*] Command: %COMMAND%
-echo [*] Log file: %LOG_FILE%
 echo [*] Working directory: %CD%
 echo.
 echo ===============================================
-
-REM Execute with output to console and log file
-%COMMAND% 2>&1 | findstr /V "^$" | tee "%LOG_FILE%"
-if %ERRORLEVEL% neq 0 (
-    %COMMAND%
-)
 
 set EXIT_CODE=%ERRORLEVEL%
 

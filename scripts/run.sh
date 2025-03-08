@@ -25,7 +25,6 @@ LOG_DIR="$PROJECT_ROOT/logs"
 
 # Create logs directory if it doesn't exist
 mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/app_$(date +%Y%m%d_%H%M%S).log"
 
 # --------------------------
 # ASCII Art Header
@@ -203,7 +202,6 @@ main() {
     echo -e "${CYAN}===============================================${NC}"
     
     # Execute with simultaneous logging to file
-    eval $COMMAND | tee -a "$LOG_FILE"
     EXIT_CODE=${PIPESTATUS[0]}
     
     echo -e "${CYAN}===============================================${NC}\n"
