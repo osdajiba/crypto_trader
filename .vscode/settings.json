@@ -10,6 +10,7 @@
     "python.testing.unittestEnabled": true,
     "cSpell.words": [
         "coro",
-        "ohlcv"
+        "ohlcv",
+        "ttkthemes"
     ]
 }

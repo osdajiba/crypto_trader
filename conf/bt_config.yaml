@@ -58,7 +58,7 @@ strategy:                             # 调整为 ConfigManager 期望的 'strat
 # Backtest Configuration
 backtest:
   mode: full  # Options: full, single_pass, walk_forward
-  start_date: "2022-01-01"  # Backtest start date
+  start_date: "2023-12-01"  # Backtest start date
   end_date: "2023-12-31"    # Backtest end date
   initial_capital: 100000   # Initial backtest capital
   transaction_costs:

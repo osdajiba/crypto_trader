@@ -1,48 +1,60 @@
-2025-03-08 13:48:27,114 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:48:27,115 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:51:00,590 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:51:00,590 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:52:15,737 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:52:15,738 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:52:49,885 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:52:49,886 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:53:30,517 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:53:30,517 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:05:51,430 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:05:51,432 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:06:40,209 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:06:40,210 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:08:55,547 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:08:55,548 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:08:55,553 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:08:56,550 - system.tradingmodefactory - ERROR - 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-2025-03-08 14:08:56,550 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-2025-03-08 14:19:53,289 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:19:53,291 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:19:53,298 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:19:54,033 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:19:54,034 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:22:20,842 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:22:20,842 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:22:20,844 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:22:21,342 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:22:21,342 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:23:40,077 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:23:40,077 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:23:40,082 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:23:40,588 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:23:40,589 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:28:24,540 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:28:24,541 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:28:24,544 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:28:25,189 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,190 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:44:28,811 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:44:28,812 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:44:28,815 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:45:16,700 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:45:16,701 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:45:16,705 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:46:23,959 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:46:23,960 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:46:23,962 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:32:30,829 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:32:30,833 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:32:30,854 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:33:31,517 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:33:31,519 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:33:31,523 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:34:16,426 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:34:16,436 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:34:16,441 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:34:43,147 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:34:43,148 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:34:43,153 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:41:30,841 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:41:30,843 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:41:30,847 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:45:11,706 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:45:11,708 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:45:11,712 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:46:34,569 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:46:34,570 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:46:34,573 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:48:41,622 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:48:41,623 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:48:41,627 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:49:45,871 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:49:45,874 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:49:45,880 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:50:10,275 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:50:10,276 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:50:10,280 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:51:53,777 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:51:53,779 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:51:58,120 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:52:30,430 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:52:30,432 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:52:30,435 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:54:27,782 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:54:27,783 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:54:27,787 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:55:04,594 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:55:04,595 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:55:04,599 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:55:23,321 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:55:23,323 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:55:23,325 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:55:37,471 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:55:37,472 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:55:37,476 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:56:39,171 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:56:39,173 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:56:39,177 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:58:24,410 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:58:24,412 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:58:24,415 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 17:00:47,759 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 17:00:47,761 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 17:00:47,765 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 17:02:01,909 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 17:02:01,910 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 17:02:01,913 - system.tradingmodefactory - INFO - 创建新的 backtest 实例

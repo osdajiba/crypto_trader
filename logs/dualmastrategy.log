@@ -1,14 +1,72 @@
-2025-03-08 14:44:29,351 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
-2025-03-08 14:44:29,353 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
-2025-03-08 14:44:29,366 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
-2025-03-08 14:44:29,367 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
-2025-03-08 14:44:29,371 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
-2025-03-08 14:44:29,372 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
-2025-03-08 14:45:17,212 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
-2025-03-08 14:45:17,223 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
-2025-03-08 14:46:24,483 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
-2025-03-08 14:46:24,486 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
-2025-03-08 14:46:43,615 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
-2025-03-08 14:46:43,616 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
-2025-03-08 14:46:43,622 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
-2025-03-08 14:46:43,623 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:32:31,520 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:32:31,522 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:32:31,537 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:32:31,539 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:32:31,543 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:32:31,543 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:33:32,071 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:33:32,082 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:33:32,097 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:33:32,098 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:33:32,103 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:33:32,103 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:34:17,161 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:34:17,163 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:34:37,332 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:34:37,333 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:34:37,339 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:34:37,340 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:34:43,673 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:34:43,676 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:41:31,446 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:41:31,447 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:45:06,084 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:45:06,085 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:45:06,090 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:45:06,091 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:46:13,832 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:46:13,833 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:48:13,384 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:48:13,386 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:49:36,035 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:49:36,036 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:50:04,356 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:50:04,357 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:52:53,992 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:52:53,993 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:54:33,550 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:54:33,552 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:54:50,942 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:54:50,943 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:54:50,958 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:54:50,959 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:55:05,160 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:55:05,162 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:55:17,641 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:55:17,642 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:55:17,649 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:55:17,650 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:55:24,094 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:55:24,096 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:55:38,064 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:55:38,065 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:56:30,907 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:56:30,908 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:56:30,912 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:56:30,913 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:56:39,713 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:56:39,714 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:58:24,944 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:58:24,944 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 17:00:30,069 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 17:00:30,072 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:00:30,076 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 17:00:30,077 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:00:48,354 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 17:00:48,355 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 17:01:22,634 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 17:01:22,635 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:01:22,639 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 17:01:22,640 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:02:02,607 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 17:02:02,609 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30

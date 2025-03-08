@@ -1,0 +1,26 @@
+{
+    "exchange": "binance",
+    "symbols": [
+        "BTC/USDT",
+        "ETH/USDT",
+        "SOL/USDT"
+    ],
+    "timeframes": [
+        "1m",
+        "5m",
+        "15m",
+        "1h",
+        "4h",
+        "1d"
+    ],
+    "strategies": [
+        "dual_ma",
+        "neural_net"
+    ],
+    "data_source": "local",
+    "mode": "backtest",
+    "theme": "light",
+    "start_date": "",
+    "end_date": "",
+    "auto_download": true
+}

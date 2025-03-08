@@ -41,11 +41,10 @@ logs/
 tmp/
 database/
 db/
-config/
 
 # 忽略配置文件和敏感信息
 conf/*
-!conf/.gitignore  # 如果需要提交部分配置文件，可以这样保留
+!conf/config.json
 # 忽略文档和脚本文件
 docs/
 scripts/

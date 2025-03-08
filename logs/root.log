@@ -1,544 +1,69 @@
-2025-03-08 13:39:16,533 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 13:44:36,532 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 13:44:36,533 - trading_system - INFO - Starting in backtest mode
-2025-03-08 13:48:27,088 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 13:48:27,089 - trading_system - INFO - Starting in backtest mode
-2025-03-08 13:48:27,114 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:48:27,115 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:51:00,585 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 13:51:00,590 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:51:00,590 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:52:15,727 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 13:52:15,737 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:52:15,738 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:52:49,878 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 13:52:49,885 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:52:49,886 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:52:49,888 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 13:53:30,513 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 13:53:30,517 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 13:53:30,517 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 13:53:30,518 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 14:03:23,574 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:03:23,622 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:03:23,623 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:03:23,624 - AsyncExecutor - ERROR - Error in task task_2959339699424_0: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
+2025-03-08 16:32:30,757 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:32:30,806 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:32:30,808 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:32:30,829 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:32:30,833 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:32:30,835 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:32:30,837 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:32:30,849 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:32:30,851 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:32:30,854 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:32:30,857 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:32:30,859 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:32:30,865 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 36, in async_main
-    available_modes = TradingModeFactory.get_available_modes()
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
-2025-03-08 14:03:23,629 - AsyncExecutor - ERROR - Error during execution: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 153, in run
-    return loop.run_until_complete(self.submit(wrapper))
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Jacky\anaconda3\envs\torch\Lib\asyncio\base_events.py", line 653, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 36, in async_main
-    available_modes = TradingModeFactory.get_available_modes()
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
-2025-03-08 14:05:17,202 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:05:17,236 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:05:17,237 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:05:17,238 - AsyncExecutor - ERROR - Error in task task_2229091415552_0: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 36, in async_main
-    available_modes = TradingModeFactory.get_available_modes()
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
-2025-03-08 14:05:17,241 - AsyncExecutor - ERROR - Error during execution: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 153, in run
-    return loop.run_until_complete(self.submit(wrapper))
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Jacky\anaconda3\envs\torch\Lib\asyncio\base_events.py", line 653, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 36, in async_main
-    available_modes = TradingModeFactory.get_available_modes()
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: TradingModeFactory.get_available_modes() missing 1 required positional argument: 'self'
-2025-03-08 14:05:51,387 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:05:51,424 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:05:51,424 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:05:51,430 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:05:51,432 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:05:51,433 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 14:05:51,433 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:05:51,434 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:05:51,435 - trading_system - ERROR - Error in trading pipeline: 'TradingModeFactory' object has no attribute 'create_mode'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 61, in run_pipeline
-    self.trading_mode = await self.mode_factory.create_mode(self.mode)
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'TradingModeFactory' object has no attribute 'create_mode'
-2025-03-08 14:05:51,437 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:05:51,438 - AsyncExecutor - ERROR - Error in task task_1843625833504_0: 'str' object has no attribute 'shutdown'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 40, in async_main
-    result = await core.run_pipeline()
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\core\core.py", line 76, in run_pipeline
-    await self.shutdown()
-  File "D:\jacky\crypto_py\src\core\core.py", line 88, in shutdown
-    await self.trading_mode.shutdown()
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'str' object has no attribute 'shutdown'
-2025-03-08 14:05:51,439 - AsyncExecutor - ERROR - Error during execution: 'str' object has no attribute 'shutdown'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 153, in run
-    return loop.run_until_complete(self.submit(wrapper))
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Jacky\anaconda3\envs\torch\Lib\asyncio\base_events.py", line 653, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 40, in async_main
-    result = await core.run_pipeline()
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\core\core.py", line 76, in run_pipeline
-    await self.shutdown()
-  File "D:\jacky\crypto_py\src\core\core.py", line 88, in shutdown
-    await self.trading_mode.shutdown()
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'str' object has no attribute 'shutdown'
-2025-03-08 14:06:40,167 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:06:40,202 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:06:40,204 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:06:40,209 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:06:40,210 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:06:40,211 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 14:06:40,211 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:06:40,212 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:06:40,212 - trading_system - ERROR - Error in trading pipeline: 'TradingModeFactory' object has no attribute 'create_mode'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 61, in run_pipeline
-    self.trading_mode = await self.mode_factory.create_mode(self.mode)
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'TradingModeFactory' object has no attribute 'create_mode'
-2025-03-08 14:06:40,214 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:06:40,215 - AsyncExecutor - ERROR - Error in task task_3056431330336_0: 'str' object has no attribute 'shutdown'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 40, in async_main
-    result = await core.run_pipeline()
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\core\core.py", line 76, in run_pipeline
-    await self.shutdown()
-  File "D:\jacky\crypto_py\src\core\core.py", line 88, in shutdown
-    await self.trading_mode.shutdown()
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'str' object has no attribute 'shutdown'
-2025-03-08 14:06:40,217 - AsyncExecutor - ERROR - Error during execution: 'str' object has no attribute 'shutdown'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 153, in run
-    return loop.run_until_complete(self.submit(wrapper))
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\Jacky\anaconda3\envs\torch\Lib\asyncio\base_events.py", line 653, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\bin\main.py", line 40, in async_main
-    result = await core.run_pipeline()
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\core\core.py", line 76, in run_pipeline
-    await self.shutdown()
-  File "D:\jacky\crypto_py\src\core\core.py", line 88, in shutdown
-    await self.trading_mode.shutdown()
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'str' object has no attribute 'shutdown'
-2025-03-08 14:08:55,489 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:08:55,538 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:08:55,539 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:08:55,547 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:08:55,548 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:08:55,549 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:08:55,550 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:08:55,551 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:08:55,551 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:08:55,553 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:08:55,554 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:08:55,555 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:08:56,536 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:08:56,540 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:08:56,541 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:08:56,547 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:08:56,549 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:08:56,550 - system.tradingmodefactory - ERROR - 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-2025-03-08 14:08:56,550 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-2025-03-08 14:08:56,551 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 213, in _get_or_create
-    instance = class_type(self.config, merged_params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 49, in __init__
-    self.risk_manager = risk_manager or self._create_risk_manager()
-                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 84, in _create_risk_manager
-    return BaseRiskManager(config=self.config)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-During handling of the above exception, another exception occurred:
+2025-03-08 16:32:30,869 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-2025-03-08 14:08:56,554 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:08:56,555 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:08:56,555 - AsyncExecutor - INFO - Task task_1869352268672_0 cancelled
-2025-03-08 14:08:56,557 - AsyncExecutor - INFO - Task task_1869352268672_0 was cancelled
-2025-03-08 14:19:53,237 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:19:53,279 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:19:53,280 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:19:53,289 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:19:53,291 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:19:53,293 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:19:53,294 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:19:53,295 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:19:53,297 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:19:53,298 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:19:53,300 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:19:53,302 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:19:54,010 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:19:54,024 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:19:54,025 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:19:54,026 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:19:54,028 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:19:54,030 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
-2025-03-08 14:19:54,031 - mode.backtesttradingmode - INFO - Initializing backtest mode
-2025-03-08 14:19:54,032 - system.strategyfactory - ERROR - 创建失败: 未知类型: simple
-2025-03-08 14:19:54,033 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:19:54,034 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:19:54,035 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
-    concrete_class = await self._get_concrete_class(name)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
-    return await self._load_class_from_path(name, BaseStrategy)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
-    raise ValueError(f"未知类型: {name}")
-ValueError: 未知类型: simple
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:19:54,039 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:19:54,040 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:19:54,041 - AsyncExecutor - INFO - Task task_2234421933088_0 cancelled
-2025-03-08 14:19:54,044 - AsyncExecutor - INFO - Task task_2234421933088_0 was cancelled
-2025-03-08 14:22:20,796 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:22:20,832 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:22:20,833 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:22:20,842 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:22:20,842 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:22:20,843 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:22:20,843 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:22:20,844 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:22:20,844 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:22:20,844 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:22:20,845 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:22:20,846 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:22:21,333 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:22:21,336 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:22:21,336 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:22:21,339 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:22:21,340 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:22:21,340 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
-2025-03-08 14:22:21,341 - mode.backtesttradingmode - INFO - Initializing backtest mode
-2025-03-08 14:22:21,341 - system.strategyfactory - ERROR - 创建失败: 未知类型: simple
-2025-03-08 14:22:21,342 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:22:21,342 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:22:21,342 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
-    concrete_class = await self._get_concrete_class(name)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
-    return await self._load_class_from_path(name, BaseStrategy)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
-    raise ValueError(f"未知类型: {name}")
-ValueError: 未知类型: simple
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:22:21,345 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:22:21,345 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:22:21,348 - AsyncExecutor - INFO - Task task_1826998645792_0 cancelled
-2025-03-08 14:22:21,350 - AsyncExecutor - INFO - Task task_1826998645792_0 was cancelled
-2025-03-08 14:23:40,033 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:23:40,069 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:23:40,070 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:23:40,077 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:23:40,077 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:23:40,078 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:23:40,079 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:23:40,079 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:23:40,081 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:23:40,082 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:23:40,083 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:23:40,084 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:23:40,577 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:23:40,580 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:23:40,581 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:23:40,583 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:23:40,584 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:23:40,586 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
-2025-03-08 14:23:40,587 - mode.backtesttradingmode - INFO - Initializing backtest mode
-2025-03-08 14:23:40,588 - system.strategyfactory - ERROR - 创建失败: 未知类型: simple
-2025-03-08 14:23:40,588 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:23:40,589 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:23:40,589 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
-    concrete_class = await self._get_concrete_class(name)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
-    return await self._load_class_from_path(name, BaseStrategy)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
-    raise ValueError(f"未知类型: {name}")
-ValueError: 未知类型: simple
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:23:40,594 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:23:40,595 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:23:40,596 - AsyncExecutor - INFO - Task task_2641911608032_0 cancelled
-2025-03-08 14:23:40,599 - trading_system - INFO - Shutting down trading system...
-2025-03-08 14:23:40,600 - AsyncExecutor - INFO - Task task_2641911608032_0 was cancelled
-2025-03-08 14:28:24,461 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:28:24,532 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:28:24,532 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:28:24,540 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:28:24,541 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:28:24,541 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:28:24,542 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:28:24,542 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:28:24,543 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:28:24,544 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:28:24,545 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:28:24,545 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:28:25,164 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:28:25,167 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:28:25,167 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:28:25,171 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:28:25,173 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:28:25,175 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
-2025-03-08 14:28:25,176 - mode.backtesttradingmode - INFO - Initializing backtest mode
-2025-03-08 14:28:25,186 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
-2025-03-08 14:28:25,187 - system.strategyfactory - ERROR - 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,188 - system.strategyfactory - ERROR - 创建失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,189 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,190 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,191 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 213, in _get_or_create
-    instance = class_type(self.config, merged_params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,195 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:28:25,195 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:28:25,197 - AsyncExecutor - INFO - Task task_3012377244544_0 cancelled
-2025-03-08 14:28:25,199 - trading_system - INFO - Shutting down trading system...
-2025-03-08 14:28:25,199 - AsyncExecutor - INFO - Task task_3012377244544_0 was cancelled
-2025-03-08 14:36:53,671 - AsyncExecutor - ERROR - Error in task task_1940011726144_2: name 'DataUtils' is not defined
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 117, in initialize
-    await self._preload_historical_data()
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 148, in _preload_historical_data
-    cleaned_df = DataUtils.clean_ohlcv(df)
-                 ^^^^^^^^^
-NameError: name 'DataUtils' is not defined
-2025-03-08 14:36:53,674 - AsyncExecutor - ERROR - Error in task task_1939978650240_1: name 'DataUtils' is not defined
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\strategy\DualMA.py", line 46, in initialize
-    await self.executor.submit(super().initialize)
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 117, in initialize
-    await self._preload_historical_data()
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 148, in _preload_historical_data
-    cleaned_df = DataUtils.clean_ohlcv(df)
-                 ^^^^^^^^^
-NameError: name 'DataUtils' is not defined
-2025-03-08 14:36:53,675 - AsyncExecutor - INFO - Task task_1940011497280_0 cancelled
-2025-03-08 14:36:53,676 - AsyncExecutor - INFO - Task task_1940011497280_0 was cancelled
-2025-03-08 14:37:05,477 - AsyncExecutor - ERROR - Error in task task_1849341359168_2: name 'DataUtils' is not defined
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 117, in initialize
-    await self._preload_historical_data()
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 148, in _preload_historical_data
-    cleaned_df = DataUtils.clean_ohlcv(df)
-                 ^^^^^^^^^
-NameError: name 'DataUtils' is not defined
-2025-03-08 14:37:05,481 - AsyncExecutor - ERROR - Error in task task_1849341358592_1: name 'DataUtils' is not defined
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "d:\jacky\crypto_py\src\strategy\DualMA.py", line 46, in initialize
-    await self.executor.submit(super().initialize)
-  File "D:\jacky\crypto_py\src\common\async_executor.py", line 115, in submit
-    return await task
-           ^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 117, in initialize
-    await self._preload_historical_data()
-  File "D:\jacky\crypto_py\src\strategy\base_strategy.py", line 148, in _preload_historical_data
-    cleaned_df = DataUtils.clean_ohlcv(df)
-                 ^^^^^^^^^
-NameError: name 'DataUtils' is not defined
-2025-03-08 14:37:05,492 - AsyncExecutor - INFO - Task task_1849341130560_0 cancelled
-2025-03-08 14:37:05,494 - AsyncExecutor - INFO - Task task_1849341130560_0 was cancelled
-2025-03-08 14:44:28,764 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:44:28,804 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:44:28,804 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:44:28,811 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:44:28,812 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:44:28,812 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:44:28,813 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:44:28,814 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:44:28,814 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:44:28,815 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:44:28,817 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:44:28,817 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:44:28,819 - system.strategyfactory - INFO - 注册了2个默认策略
-2025-03-08 14:44:28,824 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
-2025-03-08 14:44:29,330 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:44:29,333 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:44:29,337 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
-2025-03-08 14:44:29,342 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:44:29,344 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:44:29,346 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
-2025-03-08 14:44:29,347 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
-2025-03-08 14:44:29,348 - mode.backtesttradingmode - INFO - Initializing backtest mode
-2025-03-08 14:44:29,349 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
-2025-03-08 14:44:29,350 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
-2025-03-08 14:44:29,351 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
-2025-03-08 14:44:29,353 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
-2025-03-08 14:44:29,354 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
-2025-03-08 14:44:29,355 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:44:29,356 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
-2025-03-08 14:44:29,357 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
-2025-03-08 14:44:29,360 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
-2025-03-08 14:44:29,361 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
-2025-03-08 14:44:29,361 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+2025-03-08 16:32:30,870 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:32:30,870 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:32:30,872 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:32:30,875 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:32:31,487 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:32:31,490 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:32:31,493 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:32:31,498 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:32:31,512 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:32:31,513 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:32:31,515 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:32:31,516 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:32:31,517 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:32:31,518 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:32:31,520 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:32:31,522 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:32:31,523 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:32:31,524 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:32:31,525 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:32:31,529 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:32:31,530 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:32:31,532 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 16:32:31,533 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
 Traceback (most recent call last):
   File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
     await self._pre_run_setup(symbols, timeframe)
@@ -547,84 +72,85 @@ Traceback (most recent call last):
   File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
     raise ValueError("Failed to get historical data")
 ValueError: Failed to get historical data
-2025-03-08 14:44:29,364 - mode.backtesttradingmode - INFO - Shutting down backtest mode
-2025-03-08 14:44:29,366 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
-2025-03-08 14:44:29,367 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
-2025-03-08 14:44:29,368 - system.execution - INFO - Execution engine closed
-2025-03-08 14:44:29,369 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
-2025-03-08 14:44:29,369 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:44:29,370 - mode.backtesttradingmode - INFO - Shutting down backtest mode
-2025-03-08 14:44:29,371 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
-2025-03-08 14:44:29,372 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
-2025-03-08 14:44:29,372 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
-2025-03-08 14:44:29,373 - AsyncExecutor - INFO - Task task_2100230567904_0 cancelled
-2025-03-08 14:44:29,375 - trading_system - INFO - Shutting down trading system...
-2025-03-08 14:44:29,376 - AsyncExecutor - INFO - Task task_2100230567904_0 was cancelled
-2025-03-08 14:45:16,653 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:45:16,692 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:45:16,692 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:45:16,700 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:45:16,701 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:45:16,701 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:45:16,702 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:45:16,702 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:45:16,703 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:45:16,705 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:45:16,707 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:45:16,707 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:45:16,708 - system.strategyfactory - INFO - 注册了2个默认策略
-2025-03-08 14:45:16,710 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
-2025-03-08 14:45:17,192 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:45:17,194 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:45:17,198 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
-2025-03-08 14:45:17,203 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:45:17,205 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:45:17,206 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
-2025-03-08 14:45:17,208 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
-2025-03-08 14:45:17,208 - mode.backtesttradingmode - INFO - Initializing backtest mode
-2025-03-08 14:45:17,209 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
-2025-03-08 14:45:17,210 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
-2025-03-08 14:45:17,212 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
-2025-03-08 14:45:17,223 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
-2025-03-08 14:45:17,224 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
-2025-03-08 14:45:17,224 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:45:17,224 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
-2025-03-08 14:45:48,781 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
-2025-03-08 14:45:51,660 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
-2025-03-08 14:45:54,041 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
-2025-03-08 14:46:23,916 - AsyncExecutor - INFO - AsyncExecutor started
-2025-03-08 14:46:23,952 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
-2025-03-08 14:46:23,953 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:46:23,959 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
-2025-03-08 14:46:23,960 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
-2025-03-08 14:46:23,960 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:46:23,961 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:46:23,961 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:46:23,962 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:46:23,962 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
-2025-03-08 14:46:23,963 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:46:23,964 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:46:23,966 - system.strategyfactory - INFO - 注册了2个默认策略
-2025-03-08 14:46:23,968 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
-2025-03-08 14:46:24,461 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:46:24,464 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:46:24,467 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
-2025-03-08 14:46:24,473 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:46:24,476 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:46:24,478 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
-2025-03-08 14:46:24,479 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
-2025-03-08 14:46:24,479 - mode.backtesttradingmode - INFO - Initializing backtest mode
-2025-03-08 14:46:24,481 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
-2025-03-08 14:46:24,482 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
-2025-03-08 14:46:24,483 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
-2025-03-08 14:46:24,486 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
-2025-03-08 14:46:24,487 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
-2025-03-08 14:46:24,488 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:46:24,488 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
-2025-03-08 14:46:28,691 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
-2025-03-08 14:46:28,696 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
-2025-03-08 14:46:28,698 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
-2025-03-08 14:46:43,608 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+2025-03-08 16:32:31,536 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:32:31,537 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:32:31,539 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:32:31,540 - system.execution - INFO - Execution engine closed
+2025-03-08 16:32:31,541 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:32:31,541 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:32:31,542 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:32:31,543 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:32:31,543 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:32:31,544 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:32:31,545 - AsyncExecutor - INFO - Task task_1232337092448_0 cancelled
+2025-03-08 16:32:31,549 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:32:31,550 - AsyncExecutor - INFO - Task task_1232337092448_0 was cancelled
+2025-03-08 16:33:31,462 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:33:31,504 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:33:31,506 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:33:31,517 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:33:31,519 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:33:31,519 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:33:31,520 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:33:31,520 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:33:31,521 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:33:31,523 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:33:31,524 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:33:31,525 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:33:31,527 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:33:31,529 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:33:31,530 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:33:31,531 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:33:31,532 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:33:31,534 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:33:32,053 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:33:32,055 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:33:32,057 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:33:32,060 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:33:32,062 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:33:32,063 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:33:32,064 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:33:32,065 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:33:32,067 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:33:32,069 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:33:32,071 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:33:32,082 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:33:32,083 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:33:32,084 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:33:32,085 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:33:32,088 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:33:32,090 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:33:32,091 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 16:33:32,093 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
 Traceback (most recent call last):
   File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
     await self._pre_run_setup(symbols, timeframe)
@@ -633,16 +159,1138 @@ Traceback (most recent call last):
   File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
     raise ValueError("Failed to get historical data")
 ValueError: Failed to get historical data
-2025-03-08 14:46:43,614 - mode.backtesttradingmode - INFO - Shutting down backtest mode
-2025-03-08 14:46:43,615 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
-2025-03-08 14:46:43,616 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
-2025-03-08 14:46:43,618 - system.execution - INFO - Execution engine closed
-2025-03-08 14:46:43,619 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
-2025-03-08 14:46:43,621 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:46:43,621 - mode.backtesttradingmode - INFO - Shutting down backtest mode
-2025-03-08 14:46:43,622 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
-2025-03-08 14:46:43,623 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
-2025-03-08 14:46:43,624 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
-2025-03-08 14:46:43,624 - AsyncExecutor - INFO - Task task_1616289904768_0 cancelled
-2025-03-08 14:46:43,630 - trading_system - INFO - Shutting down trading system...
-2025-03-08 14:46:43,631 - AsyncExecutor - INFO - Task task_1616289904768_0 was cancelled
+2025-03-08 16:33:32,095 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:33:32,097 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:33:32,098 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:33:32,099 - system.execution - INFO - Execution engine closed
+2025-03-08 16:33:32,100 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:33:32,101 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:33:32,102 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:33:32,103 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:33:32,103 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:33:32,104 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:33:32,105 - AsyncExecutor - INFO - Task task_2489916292960_0 cancelled
+2025-03-08 16:33:32,108 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:33:32,109 - AsyncExecutor - INFO - Task task_2489916292960_0 was cancelled
+2025-03-08 16:34:16,368 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:34:16,413 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:34:16,414 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:34:16,426 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:34:16,436 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:34:16,437 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:34:16,438 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:34:16,439 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:34:16,440 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:34:16,441 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:34:16,442 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:34:16,442 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:34:16,446 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:34:16,448 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:34:16,449 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:34:16,450 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:34:16,451 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:34:16,453 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:34:17,141 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:17,143 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:17,146 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:34:17,152 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:17,154 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:17,156 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:34:17,157 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:34:17,158 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:34:17,159 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:34:17,159 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:34:17,161 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:34:17,163 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:34:17,164 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:34:17,164 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:34:17,166 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:34:37,314 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:34:37,317 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:34:37,323 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 16:34:37,326 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 16:34:37,331 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:34:37,332 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:34:37,333 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:34:37,334 - system.execution - INFO - Execution engine closed
+2025-03-08 16:34:37,335 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:34:37,336 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:34:37,338 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:34:37,339 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:34:37,340 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:34:37,341 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:34:37,342 - AsyncExecutor - INFO - Task task_2349333660192_0 cancelled
+2025-03-08 16:34:37,348 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:34:37,348 - AsyncExecutor - INFO - Task task_2349333660192_0 was cancelled
+2025-03-08 16:34:43,099 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:34:43,137 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:34:43,137 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:34:43,147 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:34:43,148 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:34:43,149 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:34:43,149 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:34:43,151 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:34:43,152 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:34:43,153 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:34:43,153 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:34:43,154 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:34:43,158 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:34:43,161 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:34:43,162 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:34:43,163 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:34:43,164 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:34:43,166 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:34:43,655 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:43,658 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:43,660 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:34:43,664 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:43,666 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:43,668 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:34:43,669 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:34:43,670 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:34:43,671 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:34:43,672 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:34:43,673 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:34:43,676 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:34:43,677 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:34:43,678 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:34:43,679 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:41:11,350 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:41:24,386 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:41:30,792 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:41:30,830 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:41:30,831 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:41:30,841 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:41:30,843 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:41:30,843 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:41:30,845 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:41:30,845 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:41:30,846 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:41:30,847 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:41:30,848 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:41:30,849 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:41:30,852 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:41:30,854 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:41:30,855 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:41:30,856 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:41:30,857 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:41:30,860 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:41:31,429 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:41:31,431 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:41:31,433 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:41:31,437 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:41:31,439 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:41:31,440 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:41:31,441 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:41:31,442 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:41:31,443 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:41:31,444 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:41:31,446 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:41:31,447 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:41:31,448 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:41:31,449 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:41:31,450 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:42:24,075 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:45:06,067 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:45:06,073 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 16:45:06,078 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 16:45:06,082 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:45:06,084 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:45:06,085 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:45:06,085 - system.execution - INFO - Execution engine closed
+2025-03-08 16:45:06,086 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:45:06,088 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:45:06,089 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:45:06,090 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:45:06,091 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:45:06,091 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:45:06,091 - AsyncExecutor - INFO - Task task_2475635425984_0 cancelled
+2025-03-08 16:45:06,099 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:45:06,100 - AsyncExecutor - INFO - Task task_2475635425984_0 was cancelled
+2025-03-08 16:45:11,641 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:45:11,697 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:45:11,698 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:45:11,706 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:45:11,708 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:45:11,708 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:45:11,709 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:45:11,710 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:45:11,711 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:45:11,712 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:45:11,714 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:45:11,714 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:46:13,283 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:46:13,290 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:46:13,292 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:46:13,294 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:46:13,297 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:46:13,301 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:46:13,807 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:46:13,809 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:46:13,812 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:46:13,817 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:46:13,818 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:46:13,819 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:46:13,820 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:46:13,821 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:46:13,822 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:46:13,823 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:46:13,832 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:46:13,833 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:46:13,834 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:46:13,834 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:46:13,835 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:46:34,520 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:46:34,557 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:46:34,557 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:46:34,569 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:46:34,570 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:46:34,570 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:46:34,571 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:46:34,572 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:46:34,572 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:46:34,573 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:46:34,573 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:46:34,573 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:48:12,824 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:48:12,830 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:48:12,833 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:48:12,834 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:48:12,838 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:48:12,841 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:48:13,359 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:48:13,361 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:48:13,364 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:48:13,368 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:48:13,370 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:48:13,371 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:48:13,372 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:48:13,373 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:48:13,374 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:48:13,375 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:48:13,384 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:48:13,386 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:48:13,386 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:48:13,387 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:48:13,388 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:48:41,575 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:48:41,610 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:48:41,612 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:48:41,622 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:48:41,623 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:48:41,624 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:48:41,625 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:48:41,626 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:48:41,626 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:48:41,627 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:48:41,628 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:48:41,629 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:49:35,484 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:49:35,491 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:49:35,493 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:49:35,494 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:49:35,497 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:49:35,502 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:49:36,009 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:49:36,013 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:49:36,014 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:49:36,018 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:49:36,020 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:49:36,021 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:49:36,022 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:49:36,023 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:49:36,024 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:49:36,026 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:49:36,035 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:49:36,036 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:49:36,037 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:49:36,038 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:49:36,038 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:49:45,786 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:49:45,847 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:49:45,849 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:49:45,871 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:49:45,874 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:49:45,875 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:49:45,876 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:49:45,878 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:49:45,879 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:49:45,880 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:49:45,882 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:49:45,883 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:50:03,807 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:50:03,813 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:50:03,814 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:50:03,815 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:50:03,817 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:50:03,820 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:50:04,325 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:50:04,327 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:50:04,329 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:50:04,335 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:50:04,338 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:50:04,340 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:50:04,342 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:50:04,344 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:50:04,345 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:50:04,347 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:50:04,356 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:50:04,357 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:50:04,358 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:50:04,359 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:50:04,360 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:50:10,223 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:50:10,265 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:50:10,266 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:50:10,275 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:50:10,276 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:50:10,277 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:50:10,278 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:50:10,279 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:50:10,279 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:50:10,280 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:50:10,281 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:50:10,282 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:51:12,424 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:51:12,460 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:51:12,461 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:51:38,654 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:51:38,688 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:51:38,688 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:51:53,777 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:51:53,779 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:51:58,113 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:51:58,114 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:51:58,117 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:51:58,118 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:51:58,120 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:51:58,122 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:51:58,122 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:52:30,383 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:52:30,419 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:52:30,420 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:52:30,430 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:52:30,432 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:52:30,432 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:52:30,433 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:52:30,434 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:52:30,434 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:52:30,435 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:52:30,437 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:52:30,437 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:52:53,358 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:52:53,380 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:52:53,384 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:52:53,385 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:52:53,387 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:52:53,388 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:52:53,389 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:52:53,391 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:52:53,394 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:52:53,965 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:52:53,968 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:52:53,970 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:52:53,975 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:52:53,976 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:52:53,978 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:52:53,979 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:52:53,981 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:52:53,982 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:52:53,982 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:52:53,992 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:52:53,993 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:52:53,994 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:52:53,994 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:52:53,996 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:53:18,579 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:53:24,323 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2022-01-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:53:24,324 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2022-01-01 - 2023-12-31
+2025-03-08 16:53:24,576 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为18个部分
+2025-03-08 16:53:24,577 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-01-01 16:00:00+08:00 - 2022-02-11 04:00:00+08:00
+2025-03-08 16:53:24,578 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:53:24,780 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:26,792 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:30,794 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:30,796 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:30,798 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:32,810 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:36,824 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:36,826 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:36,828 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-01-01 16:00:00+08:00 - 2022-02-11 04:00:00+08:00
+2025-03-08 16:53:39,844 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-02-11 04:00:00+08:00 - 2022-03-23 16:00:00+08:00
+2025-03-08 16:53:39,846 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:53:39,848 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:41,855 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:45,872 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:45,874 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:45,877 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:47,897 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:51,895 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:51,897 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:51,898 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-02-11 04:00:00+08:00 - 2022-03-23 16:00:00+08:00
+2025-03-08 16:53:54,892 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-03-23 16:00:00+08:00 - 2022-05-03 04:00:00+08:00
+2025-03-08 16:53:54,894 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:53:54,896 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:56,902 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:00,930 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:00,932 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:00,933 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:02,951 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:06,975 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:06,976 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:06,977 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-03-23 16:00:00+08:00 - 2022-05-03 04:00:00+08:00
+2025-03-08 16:54:09,975 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-05-03 04:00:00+08:00 - 2022-06-12 16:00:00+08:00
+2025-03-08 16:54:09,978 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:54:09,980 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:12,001 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:16,024 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:16,025 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:16,028 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:18,052 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:22,068 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:22,071 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:22,073 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-05-03 04:00:00+08:00 - 2022-06-12 16:00:00+08:00
+2025-03-08 16:54:27,723 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:54:27,774 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:54:27,774 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:54:27,782 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:54:27,783 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:54:27,784 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:54:27,784 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:54:27,786 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:54:27,786 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:54:27,787 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:54:27,789 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:54:27,790 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:54:32,967 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:54:32,989 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:54:32,991 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:54:32,992 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:54:32,994 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:54:32,996 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:54:32,997 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:54:32,998 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:54:33,002 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:54:33,532 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:54:33,535 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:54:33,537 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:54:33,542 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:54:33,543 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:54:33,545 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:54:33,547 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:54:33,547 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:54:33,548 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:54:33,549 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:54:33,550 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:54:33,552 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:54:33,553 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:54:33,554 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:54:33,554 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:54:33,557 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:54:38,382 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:54:38,384 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:54:38,593 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:54:38,594 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:54:38,595 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:54:38,884 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:40,896 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:44,902 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:44,904 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:44,906 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:46,914 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:50,916 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:50,918 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:50,921 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:54:50,924 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 16:54:50,926 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 16:54:50,928 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 16:54:50,932 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 16:54:50,933 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 16:54:50,941 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:54:50,942 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:54:50,943 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:54:50,944 - system.execution - INFO - Execution engine closed
+2025-03-08 16:54:50,945 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:54:50,956 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:54:50,957 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:54:50,958 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:54:50,959 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:54:50,960 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:54:50,961 - AsyncExecutor - INFO - Task task_1964508627648_0 cancelled
+2025-03-08 16:54:50,963 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:54:50,964 - AsyncExecutor - INFO - Task task_1964508627648_0 was cancelled
+2025-03-08 16:55:04,531 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:55:04,581 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:55:04,582 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:55:04,594 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:55:04,595 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:55:04,597 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:55:04,597 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:55:04,597 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:55:04,599 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:04,599 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:55:04,601 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:55:04,602 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:55:04,621 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:55:04,645 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:55:04,646 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:55:04,647 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:55:04,648 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:55:04,648 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:55:04,649 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:55:04,651 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:55:04,653 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:55:05,140 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:05,143 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:05,145 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:55:05,149 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:05,152 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:05,154 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:55:05,155 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:55:05,156 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:55:05,157 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:55:05,158 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:55:05,160 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:55:05,162 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:55:05,163 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:55:05,164 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:05,165 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:55:05,168 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:55:05,168 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:55:05,170 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:55:05,379 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:55:05,380 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:55:05,381 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:55:05,560 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:07,574 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:11,581 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:11,583 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:11,584 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:13,598 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:17,617 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:17,620 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:17,621 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:55:17,623 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 16:55:17,627 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 16:55:17,628 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 16:55:17,631 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 16:55:17,633 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 16:55:17,640 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:55:17,641 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:55:17,642 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:55:17,644 - system.execution - INFO - Execution engine closed
+2025-03-08 16:55:17,645 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:55:17,646 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:55:17,648 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:55:17,649 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:55:17,650 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:55:17,650 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:55:17,651 - AsyncExecutor - INFO - Task task_1766228148768_0 cancelled
+2025-03-08 16:55:17,652 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:55:17,653 - AsyncExecutor - INFO - Task task_1766228148768_0 was cancelled
+2025-03-08 16:55:23,232 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:55:23,310 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:55:23,311 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:55:23,321 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:55:23,323 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:55:23,323 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:55:23,324 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:55:23,324 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:55:23,325 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:23,325 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:55:23,328 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:55:23,329 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:55:23,360 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:55:23,401 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:55:23,403 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:55:23,405 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:55:23,406 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:55:23,407 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:55:23,409 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:55:23,411 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:55:23,414 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:55:24,070 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:24,074 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:24,078 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:55:24,084 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:24,086 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:24,088 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:55:24,090 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:55:24,091 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:55:24,092 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:55:24,093 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:55:24,094 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:55:24,096 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:55:24,097 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:55:24,099 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:24,099 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:55:24,103 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:55:24,104 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:55:24,105 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:55:24,310 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:55:24,311 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:55:24,312 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:55:24,516 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:26,544 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:30,548 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:30,550 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:30,552 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:32,578 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:37,425 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:55:37,461 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:55:37,461 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:55:37,471 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:55:37,472 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:55:37,474 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:55:37,474 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:55:37,474 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:55:37,475 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:37,476 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:55:37,476 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:55:37,477 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:55:37,504 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:55:37,541 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:55:37,542 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:55:37,542 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:55:37,543 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:55:37,543 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:55:37,545 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:55:37,546 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:55:37,560 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:55:38,048 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:38,050 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:38,052 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:55:38,056 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:38,057 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:38,058 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:55:38,060 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:55:38,061 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:55:38,062 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:55:38,062 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:55:38,064 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:55:38,065 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:55:38,066 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:55:38,066 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:38,067 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:55:38,070 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:55:38,071 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:55:41,647 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:56:03,744 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:56:18,583 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:56:18,584 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:56:18,820 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:20,826 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:24,846 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:24,848 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:24,849 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:26,867 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:30,888 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:30,891 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:30,893 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:56:30,895 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 16:56:30,897 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 16:56:30,898 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 16:56:30,900 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 16:56:30,901 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 16:56:30,906 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:56:30,907 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 16:56:30,908 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:56:30,908 - system.execution - INFO - Execution engine closed
+2025-03-08 16:56:30,910 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:56:30,911 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:56:30,912 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 16:56:30,912 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 16:56:30,913 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 16:56:30,914 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 16:56:30,914 - AsyncExecutor - INFO - Task task_1436217033248_0 cancelled
+2025-03-08 16:56:30,915 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:56:30,916 - AsyncExecutor - INFO - Task task_1436217033248_0 was cancelled
+2025-03-08 16:56:39,111 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:56:39,158 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:56:39,159 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:56:39,171 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:56:39,173 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:56:39,173 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:56:39,174 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:56:39,174 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:56:39,176 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:56:39,177 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:56:39,179 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:56:39,179 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:56:39,200 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:56:39,223 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:56:39,224 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:56:39,226 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:56:39,226 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:56:39,227 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:56:39,228 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:56:39,228 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:56:39,230 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:56:39,694 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:56:39,698 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:56:39,700 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:56:39,703 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:56:39,705 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:56:39,706 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:56:39,708 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:56:39,708 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:56:39,710 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:56:39,710 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:56:39,713 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:56:39,714 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:56:39,715 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:56:39,716 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:56:39,717 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:56:39,720 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:56:39,721 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:56:50,917 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:56:51,113 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:57:37,814 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:57:37,816 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:58:24,364 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 16:58:24,401 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 16:58:24,402 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:58:24,410 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 16:58:24,412 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 16:58:24,413 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:58:24,413 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:58:24,414 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:58:24,414 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:58:24,415 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 16:58:24,416 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:58:24,416 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:58:24,438 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:58:24,458 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:58:24,458 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:58:24,460 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:58:24,461 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:58:24,462 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:58:24,462 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:58:24,463 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:58:24,465 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:58:24,926 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:58:24,929 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:58:24,931 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:58:24,935 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:58:24,937 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:58:24,938 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:58:24,939 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 16:58:24,941 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 16:58:24,942 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:58:24,943 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:58:24,944 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 16:58:24,944 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 16:58:24,946 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 16:58:24,947 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:58:24,948 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 16:58:24,950 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:58:24,951 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:58:33,833 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:58:34,010 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:58:49,708 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:58:49,711 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:59:34,348 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:59:48,601 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:24,019 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:24,020 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:24,021 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:26,034 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:30,045 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:30,047 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:30,049 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:00:30,052 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 17:00:30,055 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 17:00:30,057 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 17:00:30,059 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 17:00:30,061 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 17:00:30,068 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 17:00:30,069 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 17:00:30,072 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:00:30,073 - system.execution - INFO - Execution engine closed
+2025-03-08 17:00:30,074 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 17:00:30,075 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 17:00:30,076 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 17:00:30,076 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 17:00:30,077 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:00:30,078 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 17:00:30,079 - AsyncExecutor - INFO - Task task_1806294090752_0 cancelled
+2025-03-08 17:00:30,080 - trading_system - INFO - Shutting down trading system...
+2025-03-08 17:00:30,081 - AsyncExecutor - INFO - Task task_1806294090752_0 was cancelled
+2025-03-08 17:00:34,580 - ccxt.base.exchange - WARNING - binance requires to release all resources with an explicit call to the .close() coroutine. If you are using the exchange instance with async coroutines, add `await exchange.close()` to your code into a place when you're done with the exchange and don't need the exchange instance anymore (at the end of your async coroutine).
+2025-03-08 17:00:34,581 - asyncio - ERROR - Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000001A48F7B4150>
+2025-03-08 17:00:47,707 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 17:00:47,745 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 17:00:47,747 - trading_system - INFO - Trading system initializing...
+2025-03-08 17:00:47,759 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 17:00:47,761 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 17:00:47,762 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 17:00:47,762 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 17:00:47,763 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 17:00:47,764 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 17:00:47,765 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 17:00:47,766 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 17:00:47,767 - trading_system - INFO - 创建了local数据源
+2025-03-08 17:00:47,794 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 17:00:47,817 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 17:00:47,818 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 17:00:47,819 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 17:00:47,821 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 17:00:47,821 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 17:00:47,822 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 17:00:47,824 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 17:00:47,826 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 17:00:48,332 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:00:48,335 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:00:48,337 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 17:00:48,342 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:00:48,344 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:00:48,346 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 17:00:48,347 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 17:00:48,349 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 17:00:48,350 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 17:00:48,351 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 17:00:48,354 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 17:00:48,355 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 17:00:48,357 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 17:00:48,357 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 17:00:48,359 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 17:00:48,361 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 17:00:48,362 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 17:00:48,363 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 17:00:48,538 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 17:01:10,349 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:01:10,351 - trading_system - INFO - 将请求分为2个块
+2025-03-08 17:01:10,597 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:12,603 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:16,597 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:16,599 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:16,601 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:18,602 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:22,614 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:22,616 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:22,618 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:01:22,620 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 17:01:22,623 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 17:01:22,624 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 17:01:22,626 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 17:01:22,627 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 17:01:22,632 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 17:01:22,634 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 已关闭
+2025-03-08 17:01:22,635 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:01:22,636 - system.execution - INFO - Execution engine closed
+2025-03-08 17:01:22,637 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 17:01:22,637 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 17:01:22,638 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 17:01:22,639 - system.strategy.dualmastrategy - WARNING - 策略 DualMAStrategy 未初始化，跳过关闭
+2025-03-08 17:01:22,640 - system.strategy.dualmastrategy - INFO - DualMAStrategy shutdown complete
+2025-03-08 17:01:22,641 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 17:01:22,642 - AsyncExecutor - INFO - Task task_2216593490464_0 cancelled
+2025-03-08 17:01:22,644 - trading_system - INFO - Shutting down trading system...
+2025-03-08 17:01:22,645 - AsyncExecutor - INFO - Task task_2216593490464_0 was cancelled
+2025-03-08 17:02:01,855 - AsyncExecutor - INFO - AsyncExecutor started
+2025-03-08 17:02:01,898 - ConfigManager - INFO - Configuration loaded from d:\jacky\crypto_py\conf\bt_config.yaml
+2025-03-08 17:02:01,899 - trading_system - INFO - Trading system initializing...
+2025-03-08 17:02:01,909 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 17:02:01,910 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 17:02:01,911 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 17:02:01,911 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 17:02:01,912 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 17:02:01,912 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 17:02:01,913 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 17:02:01,914 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 17:02:01,915 - trading_system - INFO - 创建了local数据源
+2025-03-08 17:02:01,942 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 17:02:01,989 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 17:02:01,991 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 17:02:01,993 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 17:02:01,995 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 17:02:01,996 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 17:02:01,997 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 17:02:01,998 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 17:02:02,001 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 17:02:02,588 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:02:02,591 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:02:02,593 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 17:02:02,598 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:02:02,601 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:02:02,602 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 17:02:02,603 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 17:02:02,604 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 17:02:02,605 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 17:02:02,606 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 17:02:02,607 - system.strategy.dualmastrategy - INFO - 策略 DualMAStrategy 初始化完成
+2025-03-08 17:02:02,609 - system.strategy.dualmastrategy - INFO - Initialized DualMAStrategy with short_window=10, long_window=30
+2025-03-08 17:02:02,610 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 17:02:02,611 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 17:02:02,612 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 17:02:02,616 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 17:02:02,616 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 17:02:02,617 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 17:02:02,784 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 17:02:29,748 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:02:29,750 - trading_system - INFO - 将请求分为2个块
+2025-03-08 17:03:37,790 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:03:57,425 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:04:06,438 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:04:06,440 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:04:10,512 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'

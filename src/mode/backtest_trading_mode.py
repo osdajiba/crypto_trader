@@ -1,6 +1,6 @@
 # src/mode/backtest_trading_mode.py
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import pandas as pd
 from datetime import datetime
 

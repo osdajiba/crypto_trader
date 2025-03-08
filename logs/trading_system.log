@@ -1,252 +1,696 @@
-2025-03-08 13:44:36,533 - trading_system - INFO - Starting in backtest mode
-2025-03-08 13:48:27,089 - trading_system - INFO - Starting in backtest mode
-2025-03-08 13:52:49,888 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 13:53:30,518 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 14:03:23,623 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:05:17,237 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:05:51,424 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:05:51,433 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 14:05:51,433 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:05:51,434 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:05:51,435 - trading_system - ERROR - Error in trading pipeline: 'TradingModeFactory' object has no attribute 'create_mode'
+2025-03-08 16:32:30,808 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:32:30,835 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:32:30,837 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:32:30,849 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:32:30,851 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:32:30,857 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:32:30,859 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:32:30,865 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 61, in run_pipeline
-    self.trading_mode = await self.mode_factory.create_mode(self.mode)
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'TradingModeFactory' object has no attribute 'create_mode'
-2025-03-08 14:05:51,437 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:06:40,204 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:06:40,211 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
-2025-03-08 14:06:40,211 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:06:40,212 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:06:40,212 - trading_system - ERROR - Error in trading pipeline: 'TradingModeFactory' object has no attribute 'create_mode'
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 61, in run_pipeline
-    self.trading_mode = await self.mode_factory.create_mode(self.mode)
-                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'TradingModeFactory' object has no attribute 'create_mode'
-2025-03-08 14:06:40,214 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:08:55,539 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:08:55,549 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:08:55,550 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:08:55,551 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:08:55,551 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:08:55,554 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:08:55,555 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:08:56,551 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 213, in _get_or_create
-    instance = class_type(self.config, merged_params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 49, in __init__
-    self.risk_manager = risk_manager or self._create_risk_manager()
-                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 84, in _create_risk_manager
-    return BaseRiskManager(config=self.config)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-During handling of the above exception, another exception occurred:
-
+2025-03-08 16:32:30,869 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
-2025-03-08 14:08:56,554 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:08:56,555 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:19:53,280 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:19:53,293 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:19:53,294 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:19:53,295 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:19:53,297 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:19:53,300 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:19:53,302 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:19:54,035 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:32:30,870 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:32:30,870 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:32:31,529 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:32:31,530 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:32:31,541 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:32:31,549 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:33:31,506 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:33:31,519 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:33:31,520 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:33:31,520 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:33:31,521 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:33:31,524 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:33:31,525 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:33:31,527 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
-    concrete_class = await self._get_concrete_class(name)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
-    return await self._load_class_from_path(name, BaseStrategy)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
-    raise ValueError(f"未知类型: {name}")
-ValueError: 未知类型: simple
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-During handling of the above exception, another exception occurred:
-
+2025-03-08 16:33:31,529 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:19:54,039 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:19:54,040 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:22:20,833 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:22:20,843 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:22:20,843 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:22:20,844 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:22:20,844 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:22:20,845 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:22:20,846 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:22:21,342 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:33:31,530 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:33:31,531 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:33:32,088 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:33:32,090 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:33:32,101 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:33:32,108 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:34:16,414 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:34:16,437 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:34:16,438 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:34:16,439 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:34:16,440 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:34:16,442 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:34:16,442 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:34:16,446 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
-    concrete_class = await self._get_concrete_class(name)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
-    return await self._load_class_from_path(name, BaseStrategy)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
-    raise ValueError(f"未知类型: {name}")
-ValueError: 未知类型: simple
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-During handling of the above exception, another exception occurred:
-
+2025-03-08 16:34:16,448 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:22:21,345 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:22:21,345 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:23:40,070 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:23:40,078 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:23:40,079 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:23:40,079 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:23:40,081 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:23:40,083 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:23:40,084 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:23:40,589 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:34:16,449 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:34:16,450 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:34:37,314 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:34:37,317 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:34:37,336 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:34:37,348 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:34:43,137 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:34:43,149 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:34:43,149 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:34:43,151 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:34:43,152 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:34:43,153 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:34:43,154 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:34:43,158 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
-    concrete_class = await self._get_concrete_class(name)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
-    return await self._load_class_from_path(name, BaseStrategy)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
-    raise ValueError(f"未知类型: {name}")
-ValueError: 未知类型: simple
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-During handling of the above exception, another exception occurred:
-
+2025-03-08 16:34:43,161 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 未知类型: simple
-2025-03-08 14:23:40,594 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:23:40,595 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:23:40,599 - trading_system - INFO - Shutting down trading system...
-2025-03-08 14:28:24,532 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:28:24,541 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:28:24,542 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:28:24,542 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:28:24,543 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:28:24,545 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:28:24,545 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:28:25,191 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:34:43,162 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:34:43,163 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:41:11,350 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:41:24,386 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:41:30,831 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:41:30,843 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:41:30,845 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:41:30,845 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:41:30,846 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:41:30,848 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:41:30,849 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:41:30,852 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 213, in _get_or_create
-    instance = class_type(self.config, merged_params)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-During handling of the above exception, another exception occurred:
-
+2025-03-08 16:41:30,854 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
-    await instance.initialize()
-  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
-    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
 
-During handling of the above exception, another exception occurred:
-
+2025-03-08 16:41:30,855 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:41:30,856 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:42:24,075 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:45:06,067 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2022-01-01-2023-12-31
+2025-03-08 16:45:06,088 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:45:06,099 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:45:11,698 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:45:11,708 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:45:11,709 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:45:11,710 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:45:11,711 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:45:11,714 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:45:11,714 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:46:13,283 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
 Traceback (most recent call last):
-  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
-    self.trading_mode = await self.mode_factory.create(self.mode)
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
-    return await self._get_or_create(name, concrete_class, params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
-    raise ValueError(f"创建 {name} 失败: {e}")
-ValueError: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,195 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:28:25,195 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
-2025-03-08 14:28:25,199 - trading_system - INFO - Shutting down trading system...
-2025-03-08 14:44:28,804 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:44:28,812 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:44:28,813 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:44:28,814 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:44:28,814 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:44:28,817 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:44:28,817 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:44:29,357 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
-2025-03-08 14:44:29,360 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
-2025-03-08 14:44:29,369 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:44:29,375 - trading_system - INFO - Shutting down trading system...
-2025-03-08 14:45:16,692 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:45:16,701 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:45:16,702 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:45:16,702 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:45:16,703 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:45:16,707 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:45:16,707 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:45:48,781 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
-2025-03-08 14:45:51,660 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
-2025-03-08 14:46:23,953 - trading_system - INFO - Trading system initializing...
-2025-03-08 14:46:23,960 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
-2025-03-08 14:46:23,961 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
-2025-03-08 14:46:23,961 - trading_system - INFO - Starting trading pipeline...
-2025-03-08 14:46:23,962 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
-2025-03-08 14:46:23,963 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
-2025-03-08 14:46:23,964 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
-2025-03-08 14:46:28,691 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
-2025-03-08 14:46:28,696 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
-2025-03-08 14:46:43,621 - trading_system - INFO - Initiating system shutdown...
-2025-03-08 14:46:43,630 - trading_system - INFO - Shutting down trading system...
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:46:13,290 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:46:13,292 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:46:13,294 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:46:34,557 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:46:34,570 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:46:34,571 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:46:34,572 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:46:34,572 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:46:34,573 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:46:34,573 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:48:12,824 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:48:12,830 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:48:12,833 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:48:12,834 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:48:41,612 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:48:41,624 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:48:41,625 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:48:41,626 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:48:41,626 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:48:41,628 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:48:41,629 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:49:35,484 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:49:35,491 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:49:35,493 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:49:35,494 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:49:45,849 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:49:45,875 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:49:45,876 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:49:45,878 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:49:45,879 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:49:45,882 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:49:45,883 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:50:03,807 - trading_system - ERROR - 连接Binance失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:50:03,813 - trading_system - ERROR - 创建exchange数据源失败: unhashable type: 'dict'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\data\sources.py", line 478, in create_source
+    source = sources[source_type](config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\data\sources.py", line 310, in __init__
+    self.exchange = Binance(config=config)
+                    ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 53, in __init__
+    self._connect_exchange()
+  File "D:\jacky\crypto_py\src\utils\error_handling.py", line 85, in sync_wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\exchange\binance.py", line 90, in _connect_exchange
+    headers = self.config.get('api', 'headers', {})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\config_manager.py", line 302, in get
+    if not isinstance(config, dict) or key not in config:
+                                       ^^^^^^^^^^^^^^^^^
+TypeError: unhashable type: 'dict'
+
+2025-03-08 16:50:03,814 - trading_system - WARNING - 无法创建备用交易所数据源: unhashable type: 'dict'
+2025-03-08 16:50:03,815 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:50:10,266 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:50:10,277 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:50:10,278 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:50:10,279 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:50:10,279 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:50:10,281 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:50:10,282 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:51:12,461 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:51:38,688 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:51:58,113 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:51:58,114 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:51:58,117 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:51:58,118 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:51:58,122 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:51:58,122 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:52:30,420 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:52:30,432 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:52:30,433 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:52:30,434 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:52:30,434 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:52:30,437 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:52:30,437 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:52:53,358 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:52:53,380 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:52:53,384 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:52:53,385 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:52:53,387 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:52:53,388 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:52:53,389 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:53:18,579 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:53:24,323 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2022-01-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:53:24,324 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2022-01-01 - 2023-12-31
+2025-03-08 16:53:24,576 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为18个部分
+2025-03-08 16:53:24,577 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-01-01 16:00:00+08:00 - 2022-02-11 04:00:00+08:00
+2025-03-08 16:53:24,578 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:53:24,780 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:26,792 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:30,794 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:30,796 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:30,798 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:32,810 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:36,824 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:36,826 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:36,828 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-01-01 16:00:00+08:00 - 2022-02-11 04:00:00+08:00
+2025-03-08 16:53:39,844 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-02-11 04:00:00+08:00 - 2022-03-23 16:00:00+08:00
+2025-03-08 16:53:39,846 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:53:39,848 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:41,855 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:45,872 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:45,874 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:45,877 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:47,897 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:51,895 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:51,897 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:51,898 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-02-11 04:00:00+08:00 - 2022-03-23 16:00:00+08:00
+2025-03-08 16:53:54,892 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-03-23 16:00:00+08:00 - 2022-05-03 04:00:00+08:00
+2025-03-08 16:53:54,894 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:53:54,896 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:53:56,902 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:00,930 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:00,932 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:00,933 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:02,951 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:06,975 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:06,976 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:06,977 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-03-23 16:00:00+08:00 - 2022-05-03 04:00:00+08:00
+2025-03-08 16:54:09,975 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2022-05-03 04:00:00+08:00 - 2022-06-12 16:00:00+08:00
+2025-03-08 16:54:09,978 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:54:09,980 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:12,001 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:16,024 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:16,025 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:16,028 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:18,052 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:22,068 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:22,071 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:22,073 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2022-05-03 04:00:00+08:00 - 2022-06-12 16:00:00+08:00
+2025-03-08 16:54:27,774 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:54:27,784 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:54:27,784 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:54:27,786 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:54:27,786 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:54:27,789 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:54:27,790 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:54:32,967 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:54:32,989 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:54:32,991 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:54:32,992 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:54:32,994 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:54:32,996 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:54:32,997 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:54:33,557 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:54:38,382 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:54:38,384 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:54:38,593 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:54:38,594 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:54:38,595 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:54:38,884 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:40,896 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:44,902 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:44,904 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:44,906 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:46,914 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:50,916 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:50,918 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:54:50,921 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:54:50,924 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 16:54:50,926 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 16:54:50,928 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 16:54:50,956 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:54:50,963 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:55:04,582 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:55:04,597 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:55:04,597 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:55:04,597 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:55:04,599 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:04,601 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:55:04,602 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:55:04,621 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:55:04,645 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:55:04,646 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:55:04,647 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:55:04,648 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:55:04,648 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:55:04,649 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:55:05,168 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:55:05,168 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:55:05,170 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:55:05,379 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:55:05,380 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:55:05,381 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:55:05,560 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:07,574 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:11,581 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:11,583 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:11,584 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:13,598 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:17,617 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:17,620 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:17,621 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:55:17,623 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 16:55:17,627 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 16:55:17,628 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 16:55:17,646 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:55:17,652 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:55:23,311 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:55:23,323 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:55:23,324 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:55:23,324 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:55:23,325 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:23,328 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:55:23,329 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:55:23,360 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:55:23,401 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:55:23,403 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:55:23,405 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:55:23,406 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:55:23,407 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:55:23,409 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:55:24,103 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:55:24,104 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:55:24,105 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:55:24,310 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:55:24,311 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:55:24,312 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:55:24,516 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:26,544 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:30,548 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:30,550 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:30,552 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:32,578 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:55:37,461 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:55:37,474 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:55:37,474 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:55:37,474 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:55:37,475 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:55:37,476 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:55:37,477 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:55:37,504 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:55:37,541 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:55:37,542 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:55:37,542 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:55:37,543 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:55:37,543 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:55:37,545 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:55:38,070 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:55:38,071 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:55:41,647 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:56:03,744 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:56:18,583 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:56:18,584 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:56:18,820 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:20,826 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:24,846 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:24,848 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:24,849 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:26,867 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:30,888 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:30,891 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:56:30,893 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:56:30,895 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 16:56:30,897 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 16:56:30,898 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 16:56:30,911 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 16:56:30,915 - trading_system - INFO - Shutting down trading system...
+2025-03-08 16:56:39,159 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:56:39,173 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:56:39,174 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:56:39,174 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:56:39,176 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:56:39,179 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:56:39,179 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:56:39,200 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:56:39,223 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:56:39,224 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:56:39,226 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:56:39,226 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:56:39,227 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:56:39,228 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:56:39,720 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:56:39,721 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:56:50,917 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:56:51,113 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:57:37,814 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:57:37,816 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:58:24,402 - trading_system - INFO - Trading system initializing...
+2025-03-08 16:58:24,413 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 16:58:24,413 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 16:58:24,414 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 16:58:24,414 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 16:58:24,416 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 16:58:24,416 - trading_system - INFO - 创建了local数据源
+2025-03-08 16:58:24,438 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 16:58:24,458 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 16:58:24,458 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 16:58:24,460 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 16:58:24,461 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 16:58:24,462 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 16:58:24,462 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 16:58:24,950 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 16:58:24,951 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 16:58:33,833 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 16:58:34,010 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 16:58:49,708 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 16:58:49,711 - trading_system - INFO - 将请求分为2个块
+2025-03-08 16:59:34,348 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 16:59:48,601 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:24,019 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:24,020 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:24,021 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:26,034 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:30,045 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:30,047 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:00:30,049 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:00:30,052 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 17:00:30,055 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 17:00:30,057 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 17:00:30,075 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 17:00:30,080 - trading_system - INFO - Shutting down trading system...
+2025-03-08 17:00:47,747 - trading_system - INFO - Trading system initializing...
+2025-03-08 17:00:47,762 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 17:00:47,762 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 17:00:47,763 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 17:00:47,764 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 17:00:47,766 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 17:00:47,767 - trading_system - INFO - 创建了local数据源
+2025-03-08 17:00:47,794 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 17:00:47,817 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 17:00:47,818 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 17:00:47,819 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 17:00:47,821 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 17:00:47,821 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 17:00:47,822 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 17:00:48,361 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 17:00:48,362 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 17:00:48,363 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 17:00:48,538 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 17:01:10,349 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:01:10,351 - trading_system - INFO - 将请求分为2个块
+2025-03-08 17:01:10,597 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:12,603 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:16,597 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:16,599 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:16,601 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:18,602 - trading_system - WARNING - 第2块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:22,614 - trading_system - ERROR - 第2块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:22,616 - trading_system - ERROR - 获取第2块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:01:22,618 - trading_system - WARNING - 没有获取到任何数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:01:22,620 - trading_system - WARNING - 没有获取到BTC/USDT 1h的数据
+2025-03-08 17:01:22,623 - trading_system - ERROR - 无法从交易所获取 BTC/USDT 1h 数据
+2025-03-08 17:01:22,624 - trading_system - WARNING - 无法获取历史数据: BTC/USDT 1h 2023-12-01-2023-12-31
+2025-03-08 17:01:22,637 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 17:01:22,644 - trading_system - INFO - Shutting down trading system...
+2025-03-08 17:02:01,899 - trading_system - INFO - Trading system initializing...
+2025-03-08 17:02:01,911 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 17:02:01,911 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 17:02:01,912 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 17:02:01,912 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 17:02:01,914 - trading_system - INFO - LocalSource初始化完成，数据路径: db/historical/
+2025-03-08 17:02:01,915 - trading_system - INFO - 创建了local数据源
+2025-03-08 17:02:01,942 - trading_system - INFO - 同步客户端API密钥验证成功
+2025-03-08 17:02:01,989 - trading_system - INFO - 异步客户端初始化成功
+2025-03-08 17:02:01,991 - trading_system - INFO - Binance接口初始化完成
+2025-03-08 17:02:01,993 - trading_system - INFO - ExchangeSource初始化完成，最大请求频率: 20/分钟
+2025-03-08 17:02:01,995 - trading_system - INFO - 创建了exchange数据源
+2025-03-08 17:02:01,996 - trading_system - INFO - 创建了交易所备用数据源用于自动下载缺失数据
+2025-03-08 17:02:01,997 - trading_system - INFO - DataManager初始化完成: 数据源=local, 缓存=True, 交易模式=BACKTEST
+2025-03-08 17:02:02,616 - trading_system - WARNING - 本地文件未找到或加载失败: BTC_USDT_1h
+2025-03-08 17:02:02,616 - trading_system - WARNING - 本地历史数据不存在或不完整: BTC/USDT 1h 2023-12-01-2023-12-31，尝试从交易所下载
+2025-03-08 17:02:02,617 - trading_system - INFO - 从交易所获取历史数据: BTC/USDT 1h 2023-12-01 - 2023-12-31
+2025-03-08 17:02:02,784 - trading_system - INFO - 将BTC/USDT 1h的数据获取分为1个部分
+2025-03-08 17:02:29,748 - trading_system - INFO - 开始智能获取OHLCV数据: BTC/USDT 1h 2023-12-01 16:00:00+08:00 - 2023-12-31 16:00:00+08:00
+2025-03-08 17:02:29,750 - trading_system - INFO - 将请求分为2个块
+2025-03-08 17:03:37,790 - trading_system - WARNING - 第1块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:03:57,425 - trading_system - WARNING - 第1块数据获取失败，尝试重试(2/3): unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:04:06,438 - trading_system - ERROR - 第1块数据获取失败，已达到最大重试次数: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:04:06,440 - trading_system - ERROR - 获取第1块数据时出错: unsupported operand type(s) for /: 'NoneType' and 'int'
+2025-03-08 17:04:10,512 - trading_system - WARNING - 第2块数据获取失败，尝试重试(1/3): unsupported operand type(s) for /: 'NoneType' and 'int'

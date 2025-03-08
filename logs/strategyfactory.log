@@ -1,61 +1,180 @@
-2025-03-08 14:08:56,536 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:08:56,540 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:08:56,541 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:08:56,547 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:08:56,549 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:19:54,010 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:19:54,024 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:19:54,025 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:19:54,026 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:19:54,028 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:19:54,032 - system.strategyfactory - ERROR - 创建失败: 未知类型: simple
-2025-03-08 14:22:21,333 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:22:21,336 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:22:21,336 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:22:21,339 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:22:21,340 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:22:21,341 - system.strategyfactory - ERROR - 创建失败: 未知类型: simple
-2025-03-08 14:23:40,577 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:23:40,580 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:23:40,581 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:23:40,583 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:23:40,584 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:23:40,588 - system.strategyfactory - ERROR - 创建失败: 未知类型: simple
-2025-03-08 14:28:25,164 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:28:25,167 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:28:25,167 - system.strategyfactory - INFO - 自动注册 example_strategy (src.strategy.strategy_factory.ExampleStrategy)
-2025-03-08 14:28:25,171 - system.strategyfactory - WARNING - 加载模块 src.strategy.strategy_loader 时出错: No module named 'strategy'
-2025-03-08 14:28:25,173 - system.strategyfactory - INFO - 自动发现完成，注册了 3 个项目
-2025-03-08 14:28:25,186 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
-2025-03-08 14:28:25,187 - system.strategyfactory - ERROR - 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:28:25,188 - system.strategyfactory - ERROR - 创建失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
-2025-03-08 14:44:28,819 - system.strategyfactory - INFO - 注册了2个默认策略
-2025-03-08 14:44:28,824 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
-2025-03-08 14:44:29,330 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:44:29,333 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:44:29,337 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
-2025-03-08 14:44:29,342 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:44:29,344 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:44:29,346 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
-2025-03-08 14:44:29,349 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
-2025-03-08 14:44:29,350 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
-2025-03-08 14:45:16,708 - system.strategyfactory - INFO - 注册了2个默认策略
-2025-03-08 14:45:16,710 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
-2025-03-08 14:45:17,192 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:45:17,194 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:45:17,198 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
-2025-03-08 14:45:17,203 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:45:17,205 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:45:17,206 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
-2025-03-08 14:45:17,209 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
-2025-03-08 14:45:17,210 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
-2025-03-08 14:46:23,966 - system.strategyfactory - INFO - 注册了2个默认策略
-2025-03-08 14:46:23,968 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
-2025-03-08 14:46:24,461 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:46:24,464 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:46:24,467 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
-2025-03-08 14:46:24,473 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
-2025-03-08 14:46:24,476 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
-2025-03-08 14:46:24,478 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
-2025-03-08 14:46:24,481 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
-2025-03-08 14:46:24,482 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:32:30,872 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:32:30,875 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:32:31,487 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:32:31,490 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:32:31,493 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:32:31,498 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:32:31,512 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:32:31,513 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:32:31,517 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:32:31,518 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:33:31,532 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:33:31,534 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:33:32,053 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:33:32,055 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:33:32,057 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:33:32,060 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:33:32,062 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:33:32,063 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:33:32,067 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:33:32,069 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:34:16,451 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:34:16,453 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:34:17,141 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:17,143 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:17,146 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:34:17,152 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:17,154 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:17,156 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:34:17,159 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:34:17,159 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:34:43,164 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:34:43,166 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:34:43,655 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:43,658 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:43,660 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:34:43,664 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:34:43,666 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:34:43,668 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:34:43,671 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:34:43,672 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:41:30,857 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:41:30,860 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:41:31,429 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:41:31,431 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:41:31,433 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:41:31,437 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:41:31,439 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:41:31,440 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:41:31,443 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:41:31,444 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:46:13,297 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:46:13,301 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:46:13,807 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:46:13,809 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:46:13,812 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:46:13,817 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:46:13,818 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:46:13,819 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:46:13,822 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:46:13,823 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:48:12,838 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:48:12,841 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:48:13,359 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:48:13,361 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:48:13,364 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:48:13,368 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:48:13,370 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:48:13,371 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:48:13,374 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:48:13,375 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:49:35,497 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:49:35,502 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:49:36,009 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:49:36,013 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:49:36,014 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:49:36,018 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:49:36,020 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:49:36,021 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:49:36,024 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:49:36,026 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:50:03,817 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:50:03,820 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:50:04,325 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:50:04,327 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:50:04,329 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:50:04,335 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:50:04,338 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:50:04,340 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:50:04,345 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:50:04,347 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:52:53,391 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:52:53,394 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:52:53,965 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:52:53,968 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:52:53,970 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:52:53,975 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:52:53,976 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:52:53,978 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:52:53,982 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:52:53,982 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:54:32,998 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:54:33,002 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:54:33,532 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:54:33,535 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:54:33,537 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:54:33,542 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:54:33,543 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:54:33,545 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:54:33,548 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:54:33,549 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:55:04,651 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:55:04,653 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:55:05,140 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:05,143 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:05,145 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:55:05,149 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:05,152 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:05,154 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:55:05,157 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:55:05,158 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:55:23,411 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:55:23,414 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:55:24,070 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:24,074 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:24,078 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:55:24,084 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:24,086 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:24,088 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:55:24,092 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:55:24,093 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:55:37,546 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:55:37,560 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:55:38,048 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:38,050 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:38,052 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:55:38,056 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:55:38,057 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:55:38,058 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:55:38,062 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:55:38,062 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:56:39,228 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:56:39,230 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:56:39,694 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:56:39,698 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:56:39,700 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:56:39,703 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:56:39,705 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:56:39,706 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:56:39,710 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:56:39,710 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 16:58:24,463 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 16:58:24,465 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 16:58:24,926 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:58:24,929 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:58:24,931 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 16:58:24,935 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 16:58:24,937 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 16:58:24,938 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 16:58:24,942 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 16:58:24,943 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 17:00:47,824 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 17:00:47,826 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 17:00:48,332 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:00:48,335 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:00:48,337 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 17:00:48,342 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:00:48,344 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:00:48,346 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 17:00:48,350 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 17:00:48,351 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
+2025-03-08 17:02:01,998 - system.strategyfactory - INFO - 注册了2个默认策略
+2025-03-08 17:02:02,001 - system.strategyfactory - INFO - 自动注册 dual_ma (src.strategy.DualMA.DualMAStrategy)
+2025-03-08 17:02:02,588 - system.strategyfactory - WARNING - 加载模块 src.strategy.rotation 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:02:02,591 - system.strategyfactory - WARNING - 加载模块 src.strategy.spbbt 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:02:02,593 - system.strategyfactory - INFO - 自动发现完成，注册了 0 个项目
+2025-03-08 17:02:02,598 - system.strategyfactory - WARNING - 处理文件 rotation.py 时出错: module 'ccxt' has no attribute 'okex'
+2025-03-08 17:02:02,601 - system.strategyfactory - WARNING - 处理文件 spbbt.py 时出错: cannot import name 'factors_lib' from 'lib' (unknown location)
+2025-03-08 17:02:02,602 - system.strategyfactory - INFO - 自动发现完成，共注册3个策略
+2025-03-08 17:02:02,605 - system.strategyfactory - WARNING - 使用标准方法加载策略 dual_ma 失败: 未知类型: dual_ma，尝试替代方法
+2025-03-08 17:02:02,606 - system.strategyfactory - INFO - 创建新的 dual_ma 实例
