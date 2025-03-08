@@ -40,7 +40,8 @@ __pycache__/
 logs/
 tmp/
 database/
-da/
+db/
+config/
 
 # 忽略配置文件和敏感信息
 conf/*
