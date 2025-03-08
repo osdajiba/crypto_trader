@@ -5,6 +5,55 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+## Quick Start
+
+### Prerequisites
+
+* Python 3.8+
+* Redis (optional, for caching)
+* PostgreSQL (recommended for production)
+
+### Installation
+
+1. Clone repository:
+   ```bash
+   git clone https://github.com/your-org/quant-trading-system.git
+   cd quant-trading-system
+   ```
+2. Create virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Linux/macOS
+   .venv\Scripts\activate     # Windows
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r docs/requirements.txt
+   ```
+4. Configuration:
+   ```bash
+   cp config/config.example.yaml config/config.yaml
+   # Edit config.yaml with your credentials and settings
+   ```
+5. Run system:
+   run scripts to start:
+   ```bash
+   # if you are using Windows system
+   cd scripts
+   ./run.bat
+   ```
+   ```bash
+   # if you are using Linux system (make sure you have set the permission)
+   cd scripts
+   ./run.sh
+   ```
+   or you can run:
+   ```bash
+   python src/bin/main.py --mode backtest  # Available modes: backtest/paper/live
+   ```
+
+---
+
 ## Overview
 
 A modular quantitative trading system supporting multi-asset automated trading across cryptocurrency markets. Provides a complete workflow from data acquisition, strategy research, backtesting to live trading execution. Designed for extensibility to traditional financial markets.
@@ -94,55 +143,6 @@ graph TD
 └── tmp/                    # Temporary files
 ```
 
----
-
-## Quick Start
-
-### Prerequisites
-
-* Python 3.8+
-* Redis (optional, for caching)
-* PostgreSQL (recommended for production)
-
-### Installation
-
-1. Clone repository:
-   ```bash
-   git clone https://github.com/your-org/quant-trading-system.git
-   cd quant-trading-system
-   ```
-2. Create virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/macOS
-   .venv\Scripts\activate     # Windows
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r docs/requirements.txt
-   ```
-4. Configuration:
-   ```bash
-   cp config/config.example.yaml config/config.yaml
-   # Edit config.yaml with your credentials and settings
-   ```
-5. Run system:
-   run scripts to start:
-   ```bash
-   # if you are using Windows system
-   cd scripts
-   ./run.bat
-   ```
-   ```bash
-   # if you are using Linux system (make sure you have set the permission)
-   cd scripts
-   ./run.sh
-   ```
-   or you can run:
-   ```bash
-   python src/bin/main.py --mode backtest  # Available modes: backtest/paper/live
-   ```
-   
 ---
 
 ## Backtesting Framework
