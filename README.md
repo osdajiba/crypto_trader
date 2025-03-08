@@ -127,10 +127,22 @@ graph TD
    # Edit config.yaml with your credentials and settings
    ```
 5. Run system:
+   run scripts to start:
+   ```bash
+   # if you are using Windows system
+   cd scripts
+   ./run.bat
+   ```
+   ```bash
+   # if you are using Linux system (make sure you have set the permission)
+   cd scripts
+   ./run.sh
+   ```
+   or you can run:
    ```bash
    python src/bin/main.py --mode backtest  # Available modes: backtest/paper/live
    ```
-
+   
 ---
 
 ## Backtesting Framework
