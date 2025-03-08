@@ -1,48 +1,54 @@
-# ==============================
-# Data and logs (不提交数据库和日志文件)
-# ==============================
-/database/               # 数据库文件
-/db/
-/logs/                   # 日志目录
-*.log                    # 所有日志文件
-/tmp/                    # 临时文件夹
+*.iso
+*.img
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.csv
+*.xlsx
+*.xls
+*.db
+*.sqlite
 
-# ==============================
-# Compiled files (Python 缓存和编译文件)
-# ==============================
-__pycache__/             # Python 编译缓存
-*.pyc                    # Python 编译文件
-*.pyo                    # Python 优化编译文件
-*.pyd                    # Python 动态链接库
+# 忽略暂存文件和临时文件
+*.tmp
+*.bak
+*.swp
+*.swo
+*.log
+*.lock
 
-# ==============================
-# IDE and tools (开发环境配置)
-# ==============================
-.idea/                   # JetBrains IDE 配置
-.vscode/                 # VS Code 配置
-.pytest_cache/           # Pytest 缓存
-.VSCodeCounter/          # VSCode 代码统计工具生成的文件
+# 忽略编译生成的文件
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
 
-# ==============================
-# Environment and secret (环境变量和本地配置)
-# ==============================
-.env                     # 环境变量文件
-config.local.yaml        # 本地配置文件
+# 忽略 IDE 自动生成的文件
+.idea/
+.vscode/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sdf
+*.ipch
+*.vcxproj.filters
+*.sln.docstates
 
-# ==============================
-# OS and editor-specific files (系统和编辑器自动生成的文件)
-# ==============================
-.DS_Store                # macOS 目录元数据
-Thumbs.db                # Windows 缩略图缓存
-desktop.ini              # Windows 目录配置
+# 忽略日志文件和数据库文件
+logs/
+tmp/
+database/
+da/
 
-# ==============================
-# Ignore compiled Python files in subdirectories
-# ==============================
-src/**/__pycache__/      # Python缓存文件
-tests/**/__pycache__/    # 测试代码缓存文件
+# 忽略配置文件和敏感信息
+conf/*
+!conf/.gitignore  # 如果需要提交部分配置文件，可以这样保留
+# 忽略文档和脚本文件
+docs/
+scripts/
 
-# ==============================
-# Shell scripts (如果某些脚本不希望提交，可添加具体规则)
-# ==============================
-# scripts/*.sh
+# 忽略其他特定文件
+*.gitignore.un~
+*.gitignore~
