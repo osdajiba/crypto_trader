@@ -1,0 +1,252 @@
+2025-03-08 13:44:36,533 - trading_system - INFO - Starting in backtest mode
+2025-03-08 13:48:27,089 - trading_system - INFO - Starting in backtest mode
+2025-03-08 13:52:49,888 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
+2025-03-08 13:53:30,518 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
+2025-03-08 14:03:23,623 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:05:17,237 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:05:51,424 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:05:51,433 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
+2025-03-08 14:05:51,433 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:05:51,434 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:05:51,435 - trading_system - ERROR - Error in trading pipeline: 'TradingModeFactory' object has no attribute 'create_mode'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\core\core.py", line 61, in run_pipeline
+    self.trading_mode = await self.mode_factory.create_mode(self.mode)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TradingModeFactory' object has no attribute 'create_mode'
+2025-03-08 14:05:51,437 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:06:40,204 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:06:40,211 - trading_system - INFO - Available trading modes: {'backtest': '历史数据回测', 'paper': '模拟交易（使用真实市场数据但不使用真实资金）', 'live': '实盘交易（在交易所使用真实资金）', 'custom_mode': '自定义交易模式'}Trading core initialized | Mode: unknown | Version: Starting in backtest mode
+2025-03-08 14:06:40,211 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:06:40,212 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:06:40,212 - trading_system - ERROR - Error in trading pipeline: 'TradingModeFactory' object has no attribute 'create_mode'
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\core\core.py", line 61, in run_pipeline
+    self.trading_mode = await self.mode_factory.create_mode(self.mode)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'TradingModeFactory' object has no attribute 'create_mode'
+2025-03-08 14:06:40,214 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:08:55,539 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:08:55,549 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:08:55,550 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:08:55,551 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:08:55,551 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:08:55,554 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:08:55,555 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:08:56,551 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 213, in _get_or_create
+    instance = class_type(self.config, merged_params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 49, in __init__
+    self.risk_manager = risk_manager or self._create_risk_manager()
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 84, in _create_risk_manager
+    return BaseRiskManager(config=self.config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
+    self.trading_mode = await self.mode_factory.create(self.mode)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
+    return await self._get_or_create(name, concrete_class, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
+    raise ValueError(f"创建 {name} 失败: {e}")
+ValueError: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
+2025-03-08 14:08:56,554 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:08:56,555 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
+2025-03-08 14:19:53,280 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:19:53,293 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:19:53,294 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:19:53,295 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:19:53,297 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:19:53,300 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:19:53,302 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:19:54,035 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
+    await instance.initialize()
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
+    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
+    concrete_class = await self._get_concrete_class(name)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
+    return await self._load_class_from_path(name, BaseStrategy)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
+    raise ValueError(f"未知类型: {name}")
+ValueError: 未知类型: simple
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
+    self.trading_mode = await self.mode_factory.create(self.mode)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
+    return await self._get_or_create(name, concrete_class, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
+    raise ValueError(f"创建 {name} 失败: {e}")
+ValueError: 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:19:54,039 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:19:54,040 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
+2025-03-08 14:22:20,833 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:22:20,843 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:22:20,843 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:22:20,844 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:22:20,844 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:22:20,845 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:22:20,846 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:22:21,342 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
+    await instance.initialize()
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
+    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
+    concrete_class = await self._get_concrete_class(name)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
+    return await self._load_class_from_path(name, BaseStrategy)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
+    raise ValueError(f"未知类型: {name}")
+ValueError: 未知类型: simple
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
+    self.trading_mode = await self.mode_factory.create(self.mode)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
+    return await self._get_or_create(name, concrete_class, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
+    raise ValueError(f"创建 {name} 失败: {e}")
+ValueError: 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:22:21,345 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:22:21,345 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
+2025-03-08 14:23:40,070 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:23:40,078 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:23:40,079 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:23:40,079 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:23:40,081 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:23:40,083 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:23:40,084 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:23:40,589 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 未知类型: simple
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
+    await instance.initialize()
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
+    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 70, in create
+    concrete_class = await self._get_concrete_class(name)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\strategy\strategy_factory.py", line 61, in _get_concrete_class
+    return await self._load_class_from_path(name, BaseStrategy)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 303, in _load_class_from_path
+    raise ValueError(f"未知类型: {name}")
+ValueError: 未知类型: simple
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
+    self.trading_mode = await self.mode_factory.create(self.mode)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
+    return await self._get_or_create(name, concrete_class, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
+    raise ValueError(f"创建 {name} 失败: {e}")
+ValueError: 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:23:40,594 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:23:40,595 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
+2025-03-08 14:23:40,599 - trading_system - INFO - Shutting down trading system...
+2025-03-08 14:28:24,532 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:28:24,541 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:28:24,542 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:28:24,542 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:28:24,543 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:28:24,545 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:28:24,545 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:28:25,191 - trading_system - ERROR - Error in trading pipeline: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 213, in _get_or_create
+    instance = class_type(self.config, merged_params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 222, in _get_or_create
+    await instance.initialize()
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 29, in initialize
+    self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
+    return await self._get_or_create(name, concrete_class, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
+    raise ValueError(f"创建 {name} 失败: {e}")
+ValueError: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\core\core.py", line 65, in run_pipeline
+    self.trading_mode = await self.mode_factory.create(self.mode)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 73, in create
+    return await self._get_or_create(name, concrete_class, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\jacky\crypto_py\src\common\abstract_factory.py", line 231, in _get_or_create
+    raise ValueError(f"创建 {name} 失败: {e}")
+ValueError: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+2025-03-08 14:28:25,195 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:28:25,195 - trading_system - WARNING - Trading mode not properly initialized, skipping shutdown
+2025-03-08 14:28:25,199 - trading_system - INFO - Shutting down trading system...
+2025-03-08 14:44:28,804 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:44:28,812 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:44:28,813 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:44:28,814 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:44:28,814 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:44:28,817 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:44:28,817 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:44:29,357 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
+2025-03-08 14:44:29,360 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
+2025-03-08 14:44:29,369 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:44:29,375 - trading_system - INFO - Shutting down trading system...
+2025-03-08 14:45:16,692 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:45:16,701 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:45:16,702 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:45:16,702 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:45:16,703 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:45:16,707 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:45:16,707 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:45:48,781 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
+2025-03-08 14:45:51,660 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
+2025-03-08 14:46:23,953 - trading_system - INFO - Trading system initializing...
+2025-03-08 14:46:23,960 - trading_system - INFO - Trading core initialized | Mode: backtest | Version: unknown
+2025-03-08 14:46:23,961 - trading_system - INFO - Available trading modes: ['backtest', 'paper', 'live', 'custom_mode']
+2025-03-08 14:46:23,961 - trading_system - INFO - Starting trading pipeline...
+2025-03-08 14:46:23,962 - trading_system - INFO - Starting trading pipeline | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:46:23,963 - trading_system - INFO - LocalSource initialized with data_path=db/historical/
+2025-03-08 14:46:23,964 - trading_system - INFO - DataManager initialized with source_type=local, cache_enabled=True
+2025-03-08 14:46:28,691 - trading_system - WARNING - 本地文件未找到: db/historical/BTC_USDT_1h.csv
+2025-03-08 14:46:28,696 - trading_system - WARNING - 获取的历史数据为空: BTC/USDT|1h|2022-01-01|2023-12-31
+2025-03-08 14:46:43,621 - trading_system - INFO - Initiating system shutdown...
+2025-03-08 14:46:43,630 - trading_system - INFO - Shutting down trading system...

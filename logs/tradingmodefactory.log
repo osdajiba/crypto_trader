@@ -1,0 +1,48 @@
+2025-03-08 13:48:27,114 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 13:48:27,115 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 13:51:00,590 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 13:51:00,590 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 13:52:15,737 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 13:52:15,738 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 13:52:49,885 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 13:52:49,886 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 13:53:30,517 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 13:53:30,517 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:05:51,430 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:05:51,432 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:06:40,209 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:06:40,210 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:08:55,547 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:08:55,548 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:08:55,553 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 14:08:56,550 - system.tradingmodefactory - ERROR - 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
+2025-03-08 14:08:56,550 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: Can't instantiate abstract class BaseRiskManager with abstract methods check_position_limits, execute_risk_control, validate_signals
+2025-03-08 14:19:53,289 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:19:53,291 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:19:53,298 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 14:19:54,033 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:19:54,034 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:22:20,842 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:22:20,842 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:22:20,844 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 14:22:21,342 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:22:21,342 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:23:40,077 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:23:40,077 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:23:40,082 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 14:23:40,588 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:23:40,589 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 未知类型: simple
+2025-03-08 14:28:24,540 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:28:24,541 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:28:24,544 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 14:28:25,189 - system.tradingmodefactory - ERROR - 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+2025-03-08 14:28:25,190 - system.tradingmodefactory - ERROR - 创建失败: 创建 backtest 失败: 创建 dual_ma 失败: Can't instantiate abstract class DualMAStrategy with abstract method _generate_signals
+2025-03-08 14:44:28,811 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:44:28,812 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:44:28,815 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 14:45:16,700 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:45:16,701 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:45:16,705 - system.tradingmodefactory - INFO - 创建新的 backtest 实例
+2025-03-08 14:46:23,959 - system.tradingmodefactory - INFO - 自动注册 custom_mode (src.mode.trading_mode_factory.CustomTradingMode)
+2025-03-08 14:46:23,960 - system.tradingmodefactory - INFO - 自动发现完成，注册了 4 个项目
+2025-03-08 14:46:23,962 - system.tradingmodefactory - INFO - 创建新的 backtest 实例

@@ -1,0 +1,48 @@
+# ==============================
+# Data and logs (不提交数据库和日志文件)
+# ==============================
+/database/               # 数据库文件
+/db/
+/logs/                   # 日志目录
+*.log                    # 所有日志文件
+/tmp/                    # 临时文件夹
+
+# ==============================
+# Compiled files (Python 缓存和编译文件)
+# ==============================
+__pycache__/             # Python 编译缓存
+*.pyc                    # Python 编译文件
+*.pyo                    # Python 优化编译文件
+*.pyd                    # Python 动态链接库
+
+# ==============================
+# IDE and tools (开发环境配置)
+# ==============================
+.idea/                   # JetBrains IDE 配置
+.vscode/                 # VS Code 配置
+.pytest_cache/           # Pytest 缓存
+.VSCodeCounter/          # VSCode 代码统计工具生成的文件
+
+# ==============================
+# Environment and secret (环境变量和本地配置)
+# ==============================
+.env                     # 环境变量文件
+config.local.yaml        # 本地配置文件
+
+# ==============================
+# OS and editor-specific files (系统和编辑器自动生成的文件)
+# ==============================
+.DS_Store                # macOS 目录元数据
+Thumbs.db                # Windows 缩略图缓存
+desktop.ini              # Windows 目录配置
+
+# ==============================
+# Ignore compiled Python files in subdirectories
+# ==============================
+src/**/__pycache__/      # Python缓存文件
+tests/**/__pycache__/    # 测试代码缓存文件
+
+# ==============================
+# Shell scripts (如果某些脚本不希望提交，可添加具体规则)
+# ==============================
+# scripts/*.sh

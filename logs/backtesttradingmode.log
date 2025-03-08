@@ -1,0 +1,52 @@
+2025-03-08 14:19:54,030 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 14:19:54,031 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 14:22:21,340 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 14:22:21,341 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 14:23:40,586 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 14:23:40,587 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 14:28:25,175 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 14:28:25,176 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 14:44:29,347 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 14:44:29,348 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 14:44:29,354 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 14:44:29,355 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:44:29,356 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 14:44:29,361 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 14:44:29,361 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 14:44:29,364 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 14:44:29,369 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 14:44:29,370 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 14:44:29,372 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 14:45:17,208 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 14:45:17,208 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 14:45:17,224 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 14:45:17,224 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:45:17,224 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 14:45:54,041 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 14:46:24,479 - mode.backtesttradingmode - INFO - Initializing backtest trading mode
+2025-03-08 14:46:24,479 - mode.backtesttradingmode - INFO - Initializing backtest mode
+2025-03-08 14:46:24,487 - mode.backtesttradingmode - INFO - Backtest mode initialization complete
+2025-03-08 14:46:24,488 - mode.backtesttradingmode - INFO - Starting backtest mode | Symbols: ['BTC/USDT'] | Timeframe: 1h
+2025-03-08 14:46:24,488 - mode.backtesttradingmode - INFO - State initialized with 100000 initial capital
+2025-03-08 14:46:28,698 - mode.backtesttradingmode - WARNING - BTC/USDT has no historical data
+2025-03-08 14:46:43,608 - mode.backtesttradingmode - ERROR - backtest mode error: Failed to get historical data
+Traceback (most recent call last):
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 135, in run
+    await self._pre_run_setup(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\base_trading_mode.py", line 171, in _pre_run_setup
+    await self._prepare_run(symbols, timeframe)
+  File "D:\jacky\crypto_py\src\mode\backtest_trading_mode.py", line 50, in _prepare_run
+    raise ValueError("Failed to get historical data")
+ValueError: Failed to get historical data
+2025-03-08 14:46:43,614 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 14:46:43,619 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
+2025-03-08 14:46:43,621 - mode.backtesttradingmode - INFO - Shutting down backtest mode
+2025-03-08 14:46:43,624 - mode.backtesttradingmode - INFO - Backtest mode shutdown complete
