@@ -5,6 +5,13 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+
+## Overview
+
+A modular quantitative trading system supporting multi-asset automated trading across cryptocurrency markets. Provides a complete workflow from data acquisition, strategy research, backtesting to live trading execution. Designed for extensibility to traditional financial markets.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -51,12 +58,6 @@
    ```bash
    python src/bin/main.py --mode backtest  # Available modes: backtest/paper/live
    ```
-
----
-
-## Overview
-
-A modular quantitative trading system supporting multi-asset automated trading across cryptocurrency markets. Provides a complete workflow from data acquisition, strategy research, backtesting to live trading execution. Designed for extensibility to traditional financial markets.
 
 ---
 
