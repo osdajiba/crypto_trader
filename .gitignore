@@ -47,7 +47,6 @@ conf/*
 !conf/config.json
 # 忽略文档和脚本文件
 docs/
-scripts/
 
 # 忽略其他特定文件
 *.gitignore.un~
