@@ -65,7 +65,7 @@ class DataManager:
         self.executor = AsyncExecutor()
         
         # 数据路径配置
-        self.data_path = config.get("data", "paths", "historical_data_path") if config else "data/historical"
+        self.data_path = config.get("data", "paths", "historical_data_path") if config else "db/historical"
         if not os.path.exists(self.data_path):
             try:
                 os.makedirs(self.data_path)

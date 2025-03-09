@@ -1,68 +1,93 @@
 # utils/time_utils.py
 
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Union, Optional
+
+from src.common.log_manager import LogManager
+
+logger = LogManager.get_logger("trading_system")
+
 
 class TimeUtils:
     """时间处理工具类"""
-
+    
     @staticmethod
-    def parse_timestamp(
-        time_val: Union[str, datetime, int, float, None],
-        default_delta: Optional[timedelta] = None,
-        tz: str = 'Asia/Shanghai'
-    ) -> datetime:
+    def parse_timestamp(timestamp: Union[str, datetime, int, float, None], 
+                       default_days_ago: int = 30) -> Optional[datetime]:
         """
-        统一解析时间，支持多种输入格式并转换为指定时区的时间。
+        Parse various timestamp formats into a datetime object
         
         Args:
-            time_val (Union[str, datetime, int, float, None]): 输入时间值。
-            default_delta (Optional[timedelta]): 默认时间偏移量（当输入为 None 时）。
-            tz (str): 目标时区，默认 'Asia/Shanghai'。
-        
+            timestamp: Timestamp in various formats
+            default_days_ago: Days ago to use if timestamp is None
+                
         Returns:
-            datetime: 解析后的时间（带时区）。
-        
-        Raises:
-            ValueError: 时间格式不支持或解析失败。
+            Datetime object with timezone (UTC)
         """
-        target_tz = pytz.timezone(tz)
-        try:
-            if time_val is None:
-                base_time = datetime.now(pytz.utc)
-                return (base_time - default_delta).astimezone(target_tz) if default_delta else base_time.astimezone(target_tz)
-
-            if isinstance(time_val, str):
-                formats = [
-                    '%Y-%m-%d %H:%M:%S',  # 完整日期时间
-                    '%Y-%m-%d',           # 仅日期
-                    '%H:%M:%S',           # 仅时间（当天）
-                ]
-                for fmt in formats:
-                    try:
-                        dt = datetime.strptime(time_val, fmt)
-                        if fmt == '%H:%M:%S':
-                            dt = datetime.combine(datetime.now().date(), dt.time())
-                        return pytz.utc.localize(dt).astimezone(target_tz)
-                    except ValueError:
-                        continue
-                raise ValueError(f"无法解析的时间格式: {time_val}")
-
-            elif isinstance(time_val, datetime):
-                if time_val.tzinfo is None:
-                    return pytz.utc.localize(time_val).astimezone(target_tz)
-                return time_val.astimezone(target_tz)
-
-            elif isinstance(time_val, (int, float)):
-                divisor = 1000 if time_val > 1e12 else 1  # 判断毫秒或秒
-                dt = datetime.fromtimestamp(time_val / divisor, pytz.utc)
-                return dt.astimezone(target_tz)
-
-            raise ValueError(f"不支持的时间类型: {type(time_val)}")
-        except Exception as e:
-            raise ValueError(f"时间解析失败: {str(e)}")
-
+        # Return default if None
+        if timestamp is None:
+            return datetime.now(timezone.utc) - timedelta(days=default_days_ago)
+        
+        # If already a datetime
+        if isinstance(timestamp, datetime):
+            # Add timezone if missing
+            if timestamp.tzinfo is None:
+                return timestamp.replace(tzinfo=timezone.utc)
+            return timestamp
+        
+        # Parse integers (timestamps)
+        if isinstance(timestamp, (int, float)):
+            # Check if milliseconds or seconds
+            if timestamp > 1e11:  # Milliseconds have more digits
+                return datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc)
+            else:
+                return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        
+        # Parse strings with common formats
+        if isinstance(timestamp, str):
+            # Try ISO format first
+            try:
+                # Handle 'Z' suffix for UTC time
+                clean_ts = timestamp.replace('Z', '+00:00')
+                # Handle ISO format
+                if 'T' in clean_ts or '+' in clean_ts or '-' in clean_ts and 'T' in clean_ts:
+                    dt = datetime.fromisoformat(clean_ts)
+                    # Add UTC timezone if missing
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    return dt
+            except ValueError:
+                pass
+            
+            # Try common date formats
+            date_formats = [
+                '%Y-%m-%d',       # 2023-01-31
+                '%Y/%m/%d',       # 2023/01/31
+                '%m/%d/%Y',       # 01/31/2023
+                '%d-%m-%Y',       # 31-01-2023
+                '%Y-%m-%d %H:%M:%S',  # 2023-01-31 14:30:00
+                '%Y-%m-%dT%H:%M:%S',  # 2023-01-31T14:30:00
+                '%Y%m%d'          # 20230131
+            ]
+            
+            for fmt in date_formats:
+                try:
+                    dt = datetime.strptime(timestamp, fmt)
+                    # Add UTC timezone
+                    return dt.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+            
+            # If all formats fail, log the issue
+            logger.warning(f"Couldn't parse timestamp: {timestamp}")
+            # Return default
+            return datetime.now(timezone.utc) - timedelta(days=default_days_ago)
+        
+        # For any other type, return default
+        logger.warning(f"Unsupported timestamp type: {type(timestamp)}")
+        return datetime.now(timezone.utc) - timedelta(days=default_days_ago)
+    
     @staticmethod
     def to_timestamp(dt: datetime, milliseconds: bool = True) -> int:
         """

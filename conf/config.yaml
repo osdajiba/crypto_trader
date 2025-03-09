@@ -1,78 +1,79 @@
 # config.yaml
 
+# Proxy settings (will be overridden by environment variables if present)
 proxies:
   http: "http://127.0.0.1:7890"       # HTTP 代理地址
   https: "http://127.0.0.1:7890"      # HTTPS 代理地址
 
-
-api:                                  # 调整为 ConfigManager 期望的 'api' 段
+# API settings (will be overridden by environment variables if present)
+api:                                  
   binance:
-    apiKey: "HbMs2a"
-    secret: "vVQe12"
-  timeout: 30000                     # 请求超时时间（毫秒）
-  enableRateLimit: true              # 是否启用 API 限频
+    # These API credentials are fallbacks if environment variables aren't present
+    # For production, prefer using environment variables
+    apiKey: "CFTnyAyxA7dKhm51WQk7BWKnkM7WyoX4KuQBzESWwQo73UbH4q3Nbd2bsAkDiWzl"
+    secret: "7STNlR595VAzY4OY5Q3irLXNjl7gvpiVpUDibSPTXWgzTiZM10PXdt6yKz1fi3Ol"
+  timeout: 60000                      # 请求超时时间（毫秒）
+  enableRateLimit: true               # 是否启用 API 限频
   headers:
-    Connection: "close"              # HTTP 请求头
+    Connection: "close"               # HTTP 请求头
 
+# Use environment variables for sensitive data
+use_env_vars: true                    # 是否优先使用环境变量中的凭据
 
 data:
-  use_live_data: False              # 是否使用实时数据
+  use_live_data: False                # 是否使用实时数据
   source_type: "local"
   paths:
-    historical_data_path: "db/historical/"                        # 数据存储路径
-    order_history: "db/order_history.csv"   # 订单历史记录文件路径
-    trade_records: "db/trade_records.json"  # 交易记录文件路径
+    historical_data_path: "db/historical/"        # 数据存储路径
+    order_history: "db/order_history.csv"         # 订单历史记录文件路径
+    trade_records: "db/trade_records.json"        # 交易记录文件路径
     database: "database/trading_data.sqlite"      # 数据库文件路径
 
-
 log_paths:
-  backtest_log: "logs/backtest.log"       # 回测日志文件路径
-  live_trading_log: "logs/live_trading.log"  # 实时交易日志文件路径
-  data_fetch_log: "logs/data_fetch.log"   # 数据获取日志文件路径
-  error_log: "logs/error.log"             # 错误日志文件路径
+  backtest_log: "logs/backtest.log"               # 回测日志文件路径
+  live_trading_log: "logs/live_trading.log"       # 实时交易日志文件路径
+  data_fetch_log: "logs/data_fetch.log"           # 数据获取日志文件路径
+  error_log: "logs/error.log"                     # 错误日志文件路径
 
-
-default_config:                       # 保留额外的交易配置
-  trade_mode: "backtest"              # 交易模式：backtest 或 live
+default_config:
+  trade_mode: "backtest"                          # 交易模式：backtest 或 live
   user_config:
-    initial_cash: 100000              # 初始资金
-    trading_pair: "BTC/USDT"          # 交易对
-    timeframe: "1m"                   # 时间框架
-    data_limit: 100                   # 数据条数限制
-    max_position: 0.1                 # 最大头寸比例
-    stop_loss_pct: 0.02               # 止损百分比
-    take_profit_pct: 0.05             # 止盈百分比
-    min_order_size: 0.001             # 最小订单量
-    slippage: 0.001                   # 滑点
-    leverage: 1                       # 杠杆倍数
+    initial_cash: 100000                          # 初始资金
+    trading_pair: "BTC/USDT"                      # 交易对
+    timeframe: "1m"                               # 时间框架
+    data_limit: 100                               # 数据条数限制
+    max_position: 0.1                             # 最大头寸比例
+    stop_loss_pct: 0.02                           # 止损百分比
+    take_profit_pct: 0.05                         # 止盈百分比
+    min_order_size: 0.001                         # 最小订单量
+    slippage: 0.001                               # 滑点
+    leverage: 1                                   # 杠杆倍数
   misc_config:
-    max_retries: 5                   # 最大重试次数
-    retry_delay: 2                   # 重试间隔（秒）
-    timezone: "UTC"                  # 时区设置
-    log_level: "INFO"                # 日志级别
+    max_retries: 5                                # 最大重试次数
+    retry_delay: 2                                # 重试间隔（秒）
+    timezone: "UTC"                               # 时区设置
+    log_level: "INFO"                             # 日志级别
 
-
-strategy:                             # 调整为 ConfigManager 期望的 'strategy' 段
-  type: "simple"                      # 策略类型
-
+strategy:
+  type: "dual_ma"                                  # 策略类型
 
 # Backtest Configuration
 backtest:
-  mode: full  # Options: full, single_pass, walk_forward
-  start_date: "2022-01-01"  # Backtest start date
-  end_date: "2023-12-31"    # Backtest end date
-  initial_capital: 100000   # Initial backtest capital
+  mode: full                                      # Options: full, single_pass, walk_forward
+  start_date: "2023-01-01"                        # Backtest start date
+  end_date: "2023-12-31"                          # Backtest end date
+  initial_capital: 100000                         # Initial backtest capital
   transaction_costs:
-    commission_rate: 0.001  # 0.1% commission
-    slippage: 0.001         # 0.1% slippage
+    commission_rate: 0.001                        # 0.1% commission
+    slippage: 0.001                               # 0.1% slippage
   risk_parameters:
-    max_drawdown: 0.2       # 20% maximum drawdown
-    daily_loss_limit: 0.05  # 5% daily loss limit
+    max_drawdown: 0.2                             # 20% maximum drawdown
+    daily_loss_limit: 0.05                        # 5% daily loss limit
 
   symbols:
     - "BTC/USDT"
     - "ETH/USDT"
-  timeframe: "1h"  # Backtest timeframe
+  timeframe: "1h"                                 # Backtest timeframe
 
 reporting:
   backtest_reports_dir: "reports/backtest/"
@@ -80,7 +81,6 @@ reporting:
     - csv
     - json
     - plot
-
 
 # Live Trading Configuration
 live_trading:
@@ -96,8 +96,8 @@ live_trading:
   exchange:
     name: 'binance'
     api:
-      apiKey: "HbMs2a"
-      secret: "vVQe12"
+      apiKey: ""
+      secret: ""
       testnet: false  # Use testnet for safe testing
     
     # Rate Limiting and Connection
