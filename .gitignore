@@ -41,8 +41,10 @@ logs/
 tmp/
 database/
 db/
+data/
 
 config/bt_config.yaml
+
 # 忽略其他特定文件
 *.gitignore.un~
 *.gitignore~
