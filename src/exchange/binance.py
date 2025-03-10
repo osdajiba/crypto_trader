@@ -1,928 +1,913 @@
-# src\exchange\binance.py
+# src/exchange/binance.py
 
 import ccxt
 import ccxt.async_support as ccxt_async
 import pandas as pd
+import asyncio
+import time
 import os
 import requests
-import asyncio
-import traceback
-from typing import Optional, Union, Dict, List, Any, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Union, Optional, Any, Tuple
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 
-from src.utils.error_handling import retry
-from src.utils.time_utils import TimeUtils
-from src.common.async_executor import AsyncExecutor
 from src.common.log_manager import LogManager
 
 logger = LogManager.get_logger("trading_system")
 
-class Direction:
-    """交易方向枚举"""
-    BUY = "buy"
-    SELL = "sell"
-
 class Binance:
     """
-    增强的Binance交易所接口，支持账户管理、订单操作和智能数据获取
-    
-    提供自动重试、速率限制管理和异步操作支持
+    High-performance Binance interface with optimized data retrieval and caching
     """
     
-    def __init__(self, config):
+    def __init__(self, config: Dict = None):
         """
-        初始化Binance接口
+        Initialize Binance interface with configuration
         
         Args:
-            config: 配置对象，包含API密钥和其他设置
+            config: Configuration dictionary with API credentials and settings
         """
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.config = config
+        self.config = config or {}
         
-        # 本地数据库路径
-        self.local_database = os.path.join(self.base_dir, config.get('data', 'data_paths', 'base_path', default="db/")) if self.config else None
+        # Set up cache directory
+        self.cache_dir = self.config.get('data', 'paths', 'historical_data_path', default='data/historical')
+        os.makedirs(self.cache_dir, exist_ok=True)
         
-        # 初始化交易所连接
+        # Extract configuration parameters with safe defaults
+        self.params = self._build_params()
+        
+        # Initialize exchange objects
         self.exchange = None
         self.async_exchange = None
+        self._init_exchange()
         
-        # 创建异步执行器
-        self.executor = AsyncExecutor()
+        # Rate limiting configuration
+        self.rate_limit = self.config.get('api', 'rate_limits', 'max_calls_per_second', default=10) * 60
+        self.current_requests = 0
+        self.rate_limit_reset = time.time() + 60
         
-        # 连接交易所
-        self._connect_exchange()
+        # Download settings
+        self.download_chunk_size = 500  # Balanced for stability
+        self.max_retry_attempts = 3
+        self.retry_delay = 2
         
-        # 速率限制设置
-        self.rate_limit_weight = 0
-        self.rate_limit_last_reset = datetime.now()
-        self.rate_limit_max = 1200  # 每分钟的最大权重
-        self.rate_limit_reset_interval = 60  # 秒
+        # Latency tracking
+        self.latency_history = []
+        self.max_latency_history = 20  # Keep last 20 measurements
         
-        # 下载设置
-        self.download_chunk_size = config.get('api', 'download', 'chunk_size', default=500) if config else 500
-        self.download_max_retries = config.get('api', 'download', 'max_retries', default=3) if config else 3
-        self.download_retry_delay = config.get('api', 'download', 'retry_delay', default=2) if config else 2
+        # Measure initial latency
+        self._measure_latency()
         
-        logger.info("Binance接口初始化完成")
+        logger.info("Binance interface initialized successfully")
+    
+    def _build_params(self) -> Dict:
+        """
+        Build CCXT parameters from configuration
 
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError, ccxt.AuthenticationError))
-    def _connect_exchange(self) -> None:
-        """初始化同步和异步交易所连接"""
-        # 检查配置
-        if not self.config or not self.config.get('api', 'binance'):
-            logger.error("未找到Binance配置")
-            return
-        
-        try:
-            # 获取认证和连接参数
-            exchange_params = {
-                'apiKey': self.config.get('api', 'binance', 'apiKey'),
-                'secret': self.config.get('api', 'binance', 'secret'),
-                'timeout': self.config.get('api', 'timeout', 30000),
-                'enableRateLimit': self.config.get('api', 'enableRateLimit', True),
-                'options': {
-                    'adjustForTimeDifference': True,
-                    'recvWindow': 60000
-                }
+        Returns:
+        Dictionary of CCXT parameters
+        """
+        # Extract API credentials safely
+        api_key = self.config.get('api', 'binance', 'apiKey')
+        api_secret = self.config.get('api', 'binance', 'secret')
+
+        # Basic parameters
+        params = {
+            'timeout': self.config.get('api', 'timeout', default=30000),
+            'enableRateLimit': self.config.get('api', 'enableRateLimit', default=True),
+            'options': {
+            'adjustForTimeDifference': self.config.get(
+            'default_config', 'options', 'adjustForTimeDifference', default=True),
+            'recvWindow': self.config.get(
+            'default_config', 'options', 'recvWindow', default=60000),
+            'defaultType': self.config.get(
+            'default_config', 'options', 'defaultType', default='spot')
+            },
+            'proxies': {
+                'http': self.config.get('proxies', 'http'),
+                'https': self.config.get('proxies', 'https')                
             }
-            
-            # 添加可选的HTTP头信息
-            headers = self.config.get('api', 'headers', 'Connection', {})
-            if headers:
-                exchange_params['headers'] = headers
-                
-            # 添加可选的代理设置
-            proxies = self.config.get('api', 'proxies', {})
-            if proxies:
-                exchange_params['proxies'] = proxies
-                
-            # 创建同步和异步客户端
-            self.exchange = ccxt.binance(exchange_params)
-            
-            # 验证认证
-            self.exchange.check_required_credentials()
-            logger.info("同步客户端API密钥验证成功")
-            
-            # 创建异步客户端
-            self.async_exchange = ccxt_async.binance(exchange_params)
-            logger.info("异步客户端初始化成功")
-            
-        except Exception as e:
-            logger.error(f"连接Binance失败: {str(e)}\n{traceback.format_exc()}")
-            raise
+        }
 
-    @retry(max_retries=3, delay=1, exceptions=(requests.RequestException,))
-    def get_current_ip(self) -> Optional[str]:
+        # Add API credentials if provided
+        if api_key and api_secret:
+            params['apiKey'] = api_key
+            params['secret'] = api_secret
+
+        return params
+    
+    def _init_exchange(self) -> None:
+        """Initialize the synchronous exchange connection"""
+        try:
+            # Try with configured parameters
+            self.exchange = ccxt.binance(self.params)
+            logger.info("CCXT Binance exchange initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize Binance exchange: {str(e)}")
+            
+            # Try with minimal parameters as fallback
+            try:
+                minimal_params = {
+                    'timeout': 30000,
+                    'enableRateLimit': True
+                }
+                # Add proxies if configured
+                if 'proxies' in self.params:
+                    minimal_params['proxies'] = self.params['proxies']
+                
+                self.exchange = ccxt.binance(minimal_params)
+                logger.info("CCXT Binance exchange initialized with minimal parameters")
+            except Exception as e2:
+                logger.error(f"Fallback initialization also failed: {str(e2)}")
+                self.exchange = None
+    
+    async def _init_async_exchange(self) -> None:
+        """Initialize the asynchronous exchange connection (lazy initialization)"""
+        if self.async_exchange is not None:
+            return
+
+        try:
+            self.async_exchange = ccxt_async.binance(self.params)
+            logger.info("CCXT Async Binance exchange initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize Async Binance exchange: {str(e)}")
+            self.async_exchange = None
+    
+    def _measure_latency(self) -> float:
         """
-        获取当前IP地址，支持代理
+        Measure API latency to Binance
         
         Returns:
-            Optional[str]: IP地址
+            Latency in milliseconds
         """
         try:
-            proxy = None
-            if self.config and 'proxies' in self.config and 'http' in self.config['proxies']:
-                proxy = self.config['proxies']['http']
+            proxies = self._nested_get(self.config, ['proxies'])
+            test_url = "https://api.binance.com/api/v3/ping"
+            
+            start_time = time.time()
+            response = requests.get(test_url, proxies=proxies, timeout=5)
+            end_time = time.time()
+            
+            if response.status_code == 200:
+                latency = (end_time - start_time) * 1000  # Convert to ms
                 
-            response = requests.get(
-                'https://api.ipify.org', 
-                proxies={'http': proxy, 'https': proxy} if proxy else None, 
-                timeout=10
-            )
-            response.raise_for_status()
-            ip = response.text
-            logger.info(f"当前IP地址: {ip}")
-            return ip
-            
-        except Exception as e:
-            logger.error(f"获取IP地址失败: {str(e)}")
-            return None
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def fetch_balance(self) -> Optional[Dict[str, float]]:
-        """
-        获取账户总余额
-        
-        Returns:
-            Optional[Dict[str, float]]: 账户余额
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return None
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(10)
-            
-            # 获取余额
-            balance = self.exchange.fetch_balance()
-            return balance.get('total', {})
-            
-        except Exception as e:
-            logger.error(f"获取账户余额失败: {str(e)}")
-            return None
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def fetch_ohlcv(self, symbol: str = 'BTC/USDT', timeframe: str = '1m', limit: int = 100) -> pd.DataFrame:
-        """
-        获取最近的OHLCV数据
-        
-        Args:
-            symbol: 交易对
-            timeframe: 时间框架
-            limit: 获取的数据点数量
-            
-        Returns:
-            pd.DataFrame: OHLCV数据
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return pd.DataFrame()
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(5)
-            
-            # 获取OHLCV数据
-            ohlcv = self.exchange.fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=limit)
-            return self._to_dataframe(ohlcv)
-            
-        except Exception as e:
-            logger.error(f"获取OHLCV数据失败 ({symbol} {timeframe}): {str(e)}")
-            return pd.DataFrame()
-
-    async def smart_fetch_ohlcv(self, symbol: str, timeframe: str, 
-                              start: Union[str, datetime, int], 
-                              end: Union[str, datetime, int]) -> pd.DataFrame:
-        """
-        智能分页获取历史OHLCV数据，避免速率限制和超时
-        
-        Args:
-            symbol: 交易对
-            timeframe: 时间框架
-            start: 开始时间
-            end: 结束时间
-        
-        Returns:
-            pd.DataFrame: OHLCV数据
-        """
-        if not self.async_exchange:
-            logger.error("异步客户端未初始化")
-            return pd.DataFrame()
-            
-        try:
-            # 解析时间
-            start_dt = TimeUtils.parse_timestamp(start)
-            end_dt = TimeUtils.parse_timestamp(end)
-            
-            # 确保时间顺序正确
-            if start_dt > end_dt:
-                logger.warning(f"开始时间晚于结束时间，交换时间范围: {start_dt} > {end_dt}")
-                start_dt, end_dt = end_dt, start_dt
-                
-            # 计算时间框架毫秒数
-            timeframe_ms = self._timeframe_to_ms(timeframe)
-            
-            logger.info(f"开始智能获取OHLCV数据: {symbol} {timeframe} {start_dt} - {end_dt}")
-            
-            # 计算数据获取块
-            chunks = self._calculate_fetch_chunks(start_dt, end_dt, timeframe)
-            logger.info(f"将请求分为{len(chunks)}个块")
-            
-            # 存储所有获取的数据
-            all_data = []
-            successful_chunks = 0
-            
-            # 确保异步执行器已启动
-            await self.executor.start()
-            
-            # 分块获取数据
-            for i, (chunk_start, chunk_end) in enumerate(chunks):
-                logger.debug(f"获取第{i+1}/{len(chunks)}块: {chunk_start} - {chunk_end}")
-                
-                # 转换时间戳格式
-                since = int(chunk_start.timestamp() * 1000)
-                
-                # 计算该块的最佳limit值
-                limit = self._calculate_optimal_limit(chunk_start, chunk_end, timeframe)
-                
-                try:
-                    for attempt in range(self.download_max_retries):
-                        try:
-                            # 获取数据
-                            data = await self.async_exchange.fetch_ohlcv(
-                                symbol=symbol,
-                                timeframe=timeframe,
-                                since=since,
-                                limit=limit
-                            )
-                            
-                            # 如果成功获取数据，更新速率限制
-                            await self._async_update_rate_limit(5)
-                            
-                            # 过滤数据以匹配结束时间
-                            end_ts = int(end_dt.timestamp() * 1000)
-                            filtered = [d for d in data if d[0] <= end_ts]
-                            
-                            if filtered:
-                                all_data.extend(filtered)
-                                successful_chunks += 1
-                                
-                            # 可能的提前结束条件
-                            if len(data) < limit:
-                                logger.debug(f"第{i+1}块获取的数据少于请求的限制，可能达到了数据结尾")
-                                break
-                                
-                            # 成功获取，跳出重试循环
-                            break
-                            
-                        except Exception as e:
-                            if attempt < self.download_max_retries - 1:
-                                logger.warning(f"第{i+1}块数据获取失败，尝试重试({attempt+1}/{self.download_max_retries}): {str(e)}")
-                                await asyncio.sleep(self.download_retry_delay * (attempt + 1))
-                            else:
-                                logger.error(f"第{i+1}块数据获取失败，已达到最大重试次数: {str(e)}")
-                                raise
+                # Store in history
+                self.latency_history.append(latency)
+                # Keep history size limited
+                if len(self.latency_history) > self.max_latency_history:
+                    self.latency_history.pop(0)
                     
-                    # 添加请求间隔以避免速率限制
-                    if i < len(chunks) - 1:
-                        interval = self._calculate_request_interval()
-                        await asyncio.sleep(interval)
-                        
-                except Exception as e:
-                    logger.error(f"获取第{i+1}块数据时出错: {str(e)}")
-                    # 继续获取下一块，而不是完全失败
-                    continue
+                logger.info(f"Current API latency: {latency:.2f}ms")
+                return latency
+            else:
+                logger.warning(f"Latency test failed with status code: {response.status_code}")
+                return float('inf')
+        except Exception as e:
+            logger.warning(f"Latency measurement failed: {str(e)}")
+            return float('inf')
+    
+    def get_average_latency(self) -> float:
+        """
+        Get average latency from history
+        
+        Returns:
+            Average latency in milliseconds
+        """
+        if not self.latency_history:
+            # Measure now if we don't have data
+            return self._measure_latency()
             
-            # 检查是否获取了任何数据
-            if not all_data:
-                logger.warning(f"没有获取到任何数据: {symbol} {timeframe} {start_dt} - {end_dt}")
-                return pd.DataFrame()
-                
-            # 将数据转换为DataFrame
-            df = self._to_dataframe(all_data)
+        return sum(self.latency_history) / len(self.latency_history)
+    
+    def _handle_rate_limit(self) -> None:
+        """
+        Handle rate limiting for API requests
+        """
+        current_time = time.time()
+        
+        # Check if the rate limit window has reset
+        if current_time > self.rate_limit_reset:
+            self.current_requests = 0
+            self.rate_limit_reset = current_time + 60
+        
+        # Check if we're at the rate limit
+        if self.current_requests >= self.rate_limit:
+            # Calculate sleep time
+            sleep_time = max(0, self.rate_limit_reset - current_time)
+            logger.warning(f"Rate limit reached, sleeping for {sleep_time:.2f} seconds")
+            time.sleep(sleep_time)
             
-            # 去除重复的时间戳
-            if not df.empty and 'datetime' in df.columns:
-                df.drop_duplicates(subset=['datetime'], inplace=True)
-                df.sort_values('datetime', inplace=True)
-                df.reset_index(drop=True, inplace=True)
-                
-            # 统计摘要
-            total_expected = sum(self._expected_candles(s, e, timeframe) for s, e in chunks)
-            missing_rate = 1.0 - (len(df) / total_expected) if total_expected > 0 else 0
+            # Reset after sleeping
+            self.current_requests = 0
+            self.rate_limit_reset = time.time() + 60
+        
+        # Increment the request counter
+        self.current_requests += 1
+    
+    async def _async_handle_rate_limit(self) -> None:
+        """
+        Handle rate limiting for asynchronous API requests
+        """
+        current_time = time.time()
+        
+        # Check if the rate limit window has reset
+        if current_time > self.rate_limit_reset:
+            self.current_requests = 0
+            self.rate_limit_reset = current_time + 60
+        
+        # Check if we're at the rate limit
+        if self.current_requests >= self.rate_limit:
+            # Calculate sleep time
+            sleep_time = max(0, self.rate_limit_reset - current_time)
+            logger.warning(f"Async rate limit reached, sleeping for {sleep_time:.2f} seconds")
+            await asyncio.sleep(sleep_time)
             
-            logger.info(f"智能获取完成: {symbol} {timeframe} {start_dt} - {end_dt}, "
-                       f"获取了{len(df)}行数据，成功{successful_chunks}/{len(chunks)}块, "
-                       f"缺失率: {missing_rate:.2%}")
+            # Reset after sleeping
+            self.current_requests = 0
+            self.rate_limit_reset = time.time() + 60
+        
+        # Increment the request counter
+        self.current_requests += 1
+    
+    @staticmethod
+    def _process_ohlcv_data(ohlcv_data: List) -> pd.DataFrame:
+        """
+        Process OHLCV data into a DataFrame
+        
+        Args:
+            ohlcv_data: Raw OHLCV data from CCXT
+        
+        Returns:
+            Processed DataFrame
+        """
+        if not ohlcv_data:
+            return pd.DataFrame()
+        
+        try:
+            # Create DataFrame
+            df = pd.DataFrame(ohlcv_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            
+            # Convert timestamp to datetime with UTC timezone
+            df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            
+            # Set datetime as index
+            df.set_index('datetime', inplace=True)
             
             return df
-            
         except Exception as e:
-            logger.error(f"智能获取OHLCV数据失败: {str(e)}\n{traceback.format_exc()}")
-            return pd.DataFrame()
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def create_order(self, symbol: str, side: str, order_type: str, amount: float, price: Optional[float] = None) -> Dict:
-        """
-        创建市价或限价订单
-        
-        Args:
-            symbol: 交易对
-            side: 订单方向 ('buy' 或 'sell')
-            order_type: 订单类型 ('market' 或 'limit')
-            amount: 数量
-            price: 价格(限价订单必需)
-            
-        Returns:
-            Dict: 订单信息
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return {}
-            
-        if order_type not in ('market', 'limit'):
-            raise ValueError("订单类型必须是'market'或'limit'")
-            
-        if order_type == 'limit' and price is None:
-            raise ValueError("限价订单需要提供价格")
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(1)
-            
-            # 创建订单
-            order = self.exchange.create_order(
-                symbol=symbol, 
-                type=order_type, 
-                side=side, 
-                amount=amount, 
-                price=price
-            )
-            logger.info(f"订单创建成功: {order['id']}")
-            return order
-            
-        except Exception as e:
-            logger.error(f"创建订单失败: {str(e)}")
-            raise
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def fetch_open_orders(self, symbol: Optional[str] = None) -> List[Dict]:
-        """
-        获取未完成订单
-        
-        Args:
-            symbol: 可选的交易对过滤器
-            
-        Returns:
-            List[Dict]: 订单列表
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return []
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(3)
-            
-            # 获取未完成订单
-            orders = self.exchange.fetch_open_orders(symbol=symbol)
-            logger.info(f"获取未完成订单: {len(orders)}条")
-            return orders
-            
-        except Exception as e:
-            logger.error(f"获取未完成订单失败: {str(e)}")
-            raise
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def cancel_order(self, order_id: str, symbol: Optional[str] = None) -> Dict:
-        """
-        取消指定订单
-        
-        Args:
-            order_id: 订单ID
-            symbol: 交易对(某些交易所要求)
-            
-        Returns:
-            Dict: 取消订单的响应
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return {}
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(1)
-            
-            # 取消订单
-            canceled = self.exchange.cancel_order(order_id, symbol=symbol)
-            logger.info(f"订单已取消: {order_id}")
-            return canceled
-            
-        except Exception as e:
-            logger.error(f"取消订单失败: {str(e)}")
-            raise
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def fetch_trades(self, symbol: str = 'BTC/USDT', since: Optional[Union[str, int]] = None, limit: int = 100) -> List[Dict]:
-        """
-        获取最近交易记录
-        
-        Args:
-            symbol: 交易对
-            since: 开始时间
-            limit: 数量限制
-            
-        Returns:
-            List[Dict]: 交易记录列表
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return []
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(5)
-            
-            # 解析时间
-            since_ts = TimeUtils.parse_timestamp(since).timestamp() * 1000 if since else None
-            
-            # 获取交易记录
-            trades = self.exchange.fetch_my_trades(
-                symbol=symbol, 
-                since=int(since_ts) if since_ts else None, 
-                limit=limit
-            )
-            logger.info(f"获取交易记录: {len(trades)}条")
-            return trades
-            
-        except Exception as e:
-            logger.error(f"获取交易记录失败: {str(e)}")
-            raise
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def fetch_order_book(self, symbol: str = 'BTC/USDT', limit: int = 100) -> Dict:
-        """
-        获取订单簿数据
-        
-        Args:
-            symbol: 交易对
-            limit: 深度限制
-            
-        Returns:
-            Dict: 订单簿数据
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return {}
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(5)
-            
-            # 获取订单簿
-            return self.exchange.fetch_order_book(symbol=symbol, limit=limit)
-            
-        except Exception as e:
-            logger.error(f"获取订单簿失败: {str(e)}")
-            raise
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def fetch_funding_rate(self, symbol: str = 'BTC/USDT') -> Dict:
-        """
-        获取当前资金费率
-        
-        Args:
-            symbol: 交易对
-            
-        Returns:
-            Dict: 资金费率信息
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return {}
-            
-        try:
-            # 更新速率限制计数
-            self._update_rate_limit(5)
-            
-            # 获取资金费率
-            rate = self.exchange.fetch_funding_rate(symbol=symbol)
-            logger.info(f"资金费率: {rate.get('fundingRate')}")
-            return rate
-            
-        except Exception as e:
-            logger.error(f"获取资金费率失败: {str(e)}")
-            raise
-
-    @retry(max_retries=3, delay=1, exceptions=(ccxt.NetworkError,))
-    def batch_create_orders(self, orders: List[Dict[str, Any]]) -> List[Dict]:
-        """
-        批量创建订单
-        
-        Args:
-            orders: 订单参数列表
-            
-        Returns:
-            List[Dict]: 创建的订单列表
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return []
-            
-        results = []
-        for order in orders:
-            try:
-                result = self.create_order(
-                    symbol=order.get('symbol', 'BTC/USDT'),
-                    side=order.get('side', 'buy'),
-                    order_type=order.get('type', 'limit'),
-                    amount=order.get('amount', 0.001),
-                    price=order.get('price')
-                )
-                results.append(result)
-            except Exception as e:
-                logger.error(f"批量创建订单时出错: {str(e)}")
-                results.append({'error': str(e)})
-                
-        logger.info(f"批量创建了{len(results)}个订单")
-        return results
-
-    def _timeframe_to_ms(self, timeframe: str) -> int:
-        """
-        将时间框架转换为毫秒
-        
-        Args:
-            timeframe: 时间框架字符串
-            
-        Returns:
-            int: 毫秒数
-        """
-        seconds_per_unit = {'1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400, '1w': 604800}
-        if timeframe not in seconds_per_unit:
-            logger.warning(f"未知的时间框架: {timeframe}，使用默认值1m")
-            timeframe = '1m'
-        return seconds_per_unit.get(timeframe, 60) * 1000
-
-    def _calculate_optimal_limit(self, start: datetime, end: datetime, timeframe: str) -> int:
-        """
-        动态计算最佳请求数量，避免请求过多数据
-        
-        Args:
-            start: 开始时间
-            end: 结束时间
-            timeframe: 时间框架
-            
-        Returns:
-            int: 数据点数量
-        """
-        seconds_per_unit = self._timeframe_to_ms(timeframe) // 1000
-        total_seconds = (end - start).total_seconds()
-        
-        # 估算所需K线数
-        estimated_bars = int(total_seconds / seconds_per_unit)
-        
-        # 添加额外的K线以处理可能的差异
-        limit = min(1000, max(100, estimated_bars + 10))
-        
-        return limit
-
-    def _next_start_point(self, last_ts: int, timeframe_ms: int) -> datetime:
-        """
-        计算下一次请求的起始时间
-        
-        Args:
-            last_ts: 上次请求的最后时间戳
-            timeframe_ms: 时间框架毫秒数
-            
-        Returns:
-            datetime: 下一个起始时间
-        """
-        # 添加1ms以避免重复获取最后一根K线
-        return datetime.fromtimestamp((last_ts + 1) / 1000)
-
-    def _to_dataframe(self, data: List[List[Any]]) -> pd.DataFrame:
-        """
-        将OHLCV数据转换为DataFrame
-        
-        Args:
-            data: OHLCV数据列表
-            
-        Returns:
-            pd.DataFrame: 格式化的DataFrame
-        """
-        if not data:
-            return pd.DataFrame()
-            
-        try:
-            # 创建DataFrame
-            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            
-            # 转换时间戳
-            df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
-            
-            # 应用时区
-            timezone = self.config.get("default_config", "misc_config", "timezone", default="Asia/Shanghai") if self.config else "Asia/Shanghai"
-            try:
-                df['datetime'] = df['datetime'].dt.tz_localize('UTC').dt.tz_convert(timezone)
-            except:
-                logger.warning(f"时区转换失败，使用UTC时间")
-                df['datetime'] = df['datetime'].dt.tz_localize('UTC')
-            
-            # 选择最终列
-            return df[['datetime', 'open', 'high', 'low', 'close', 'volume']]
-            
-        except Exception as e:
-            logger.error(f"DataFrame转换失败: {str(e)}")
+            logger.error(f"Error processing OHLCV data: {str(e)}")
             return pd.DataFrame()
     
-    def create_order_with_direction(
-        self, 
-        symbol: str, 
-        direction: Union[str, Direction],
-        order_type: str, 
-        quantity: float, 
-        price: Optional[float] = None
-    ) -> Dict:
+    def fetch_latest_ohlcv(self, symbol: str, timeframe: str = '1h', limit: int = 100) -> pd.DataFrame:
         """
-        使用方向枚举创建订单
+        Fetch recent OHLCV data synchronously
         
         Args:
-            symbol: 交易对
-            direction: 方向枚举或字符串
-            order_type: 订单类型
-            quantity: 数量
-            price: 价格
+            symbol: Trading pair symbol (e.g., 'BTC/USDT')
+            timeframe: Timeframe (e.g., '1m', '1h', '1d')
+            limit: Number of candles to fetch
+        
+        Returns:
+            DataFrame with OHLCV data
+        """
+        # First check recent cache to avoid unnecessary API calls
+        cache_data = self._check_recent_cache(symbol, timeframe)
+        if not cache_data.empty:
+            return cache_data[:limit]  # Return the most recent entries
+        
+        if not self.exchange:
+            self._init_exchange()
+            if not self.exchange:
+                logger.error("Exchange not initialized, can't fetch data")
+                return pd.DataFrame()
+        
+        for attempt in range(self.max_retry_attempts):
+            try:
+                # Handle rate limiting
+                self._handle_rate_limit()
+                
+                # Fetch OHLCV data
+                ohlcv = self.exchange.fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=limit)
+                
+                # Convert to DataFrame
+                df = self._process_ohlcv_data(ohlcv)
+                
+                # Save to cache if successful
+                if not df.empty:
+                    self._append_to_cache(df, symbol, timeframe)
+                    return df
+                
+                logger.warning(f"Empty response on attempt {attempt+1}")
+                time.sleep(self.retry_delay)
+                
+            except Exception as e:
+                logger.error(f"Error fetching OHLCV data (attempt {attempt+1}): {str(e)}")
+                time.sleep(self.retry_delay * (attempt + 1))
+        
+        # If all attempts fail, try to return cached data even if not recent
+        return self._get_fallback_cache_data(symbol, timeframe, limit)
+    
+    def _check_recent_cache(self, symbol: str, timeframe: str) -> pd.DataFrame:
+        """
+        Check if we have recent data in cache
+        
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Timeframe
             
         Returns:
-            Dict: 订单信息
+            DataFrame with recent cached data or empty DataFrame
         """
-        # 转换方向枚举为字符串
-        if isinstance(direction, Direction):
-            side = direction.value
+        safe_symbol = symbol.replace('/', '_')
+        cache_file = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.csv")
+        
+        if not os.path.exists(cache_file):
+            return pd.DataFrame()
+            
+        try:
+            # Load the CSV file - use efficient reading with only necessary columns
+            df = pd.read_csv(cache_file, index_col=None)
+            
+            # Convert timestamp to datetime
+            if 'timestamp' in df.columns:
+                df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            elif 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'], utc=True)
+            else:
+                return pd.DataFrame()
+                
+            # Set datetime as index
+            df.set_index('datetime', inplace=True)
+            
+            # Check if cache is recent enough
+            if not df.empty:
+                last_time = df.index.max()
+                now = pd.Timestamp.now(tz='UTC')
+                
+                # For smaller timeframes, need more recent data
+                if timeframe in ['1m', '5m', '15m']:
+                    max_age = timedelta(hours=1)  # Cache valid for 1 hour
+                elif timeframe in ['30m', '1h', '2h']:
+                    max_age = timedelta(hours=6)  # Cache valid for 6 hours
+                else:
+                    max_age = timedelta(days=1)   # Cache valid for 1 day
+                
+                if now - last_time < max_age:
+                    logger.info(f"Using recent cache data for {symbol} {timeframe}")
+                    return df.sort_index()
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            logger.warning(f"Error checking recent cache: {str(e)}")
+            return pd.DataFrame()
+    
+    def _get_fallback_cache_data(self, symbol: str, timeframe: str, limit: int) -> pd.DataFrame:
+        """
+        Get fallback data from cache even if not recent
+        
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+            limit: Number of entries to return
+            
+        Returns:
+            DataFrame with cached data
+        """
+        safe_symbol = symbol.replace('/', '_')
+        cache_file = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.csv")
+        
+        if not os.path.exists(cache_file):
+            return pd.DataFrame()
+            
+        try:
+            # Load the CSV file
+            df = pd.read_csv(cache_file, index_col=None)
+            
+            # Convert timestamp to datetime
+            if 'timestamp' in df.columns:
+                df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            elif 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'], utc=True)
+            else:
+                return pd.DataFrame()
+                
+            # Set datetime as index
+            df.set_index('datetime', inplace=True)
+            
+            if not df.empty:
+                logger.warning(f"Using outdated cache data for {symbol} {timeframe} as fallback")
+                return df.sort_index().tail(limit)
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            logger.warning(f"Error getting fallback cache data: {str(e)}")
+            return pd.DataFrame()
+            
+    def _append_to_cache(self, df: pd.DataFrame, symbol: str, timeframe: str) -> None:
+        """
+        Append new data to cache, avoiding duplicates
+        
+        Args:
+            df: New data to append
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+        """
+        if df.empty:
+            return
+            
+        safe_symbol = symbol.replace('/', '_')
+        cache_file = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.csv")
+        
+        try:
+            existing_df = pd.DataFrame()
+            
+            # Load existing data if available
+            if os.path.exists(cache_file):
+                existing_df = pd.read_csv(cache_file, index_col=None)
+                
+                # Convert timestamp to datetime
+                if 'timestamp' in existing_df.columns:
+                    existing_df['datetime'] = pd.to_datetime(existing_df['timestamp'], unit='ms', utc=True)
+                elif 'datetime' in existing_df.columns:
+                    existing_df['datetime'] = pd.to_datetime(existing_df['datetime'], utc=True)
+                
+                # Set datetime as index
+                existing_df.set_index('datetime', inplace=True)
+            
+            # Combine existing and new data
+            if not existing_df.empty:
+                combined_df = pd.concat([existing_df, df])
+                # Remove duplicates efficiently
+                combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
+                # Sort by datetime
+                combined_df = combined_df.sort_index()
+            else:
+                combined_df = df
+            
+            # Save to file
+            combined_df.to_csv(cache_file)
+            logger.debug(f"Updated cache for {symbol} {timeframe}, total records: {len(combined_df)}")
+            
+        except Exception as e:
+            logger.warning(f"Error appending to cache: {str(e)}")
+    
+    @lru_cache(maxsize=128)
+    def _parse_date(self, date_input: Optional[Union[str, datetime, int, float]], default_days_ago: int = 0) -> datetime:
+        """
+        Parse various date inputs into datetime object with timezone
+        
+        Args:
+            date_input: Date input (string, datetime object, timestamp)
+            default_days_ago: Days ago to use if input is None
+            
+        Returns:
+            datetime object with UTC timezone
+        """
+        # If input is None, return relative to current time
+        if date_input is None:
+            return datetime.now(timezone.utc) - timedelta(days=default_days_ago)
+        
+        # If already a datetime object
+        if isinstance(date_input, datetime):
+            # Ensure it has timezone info
+            return date_input if date_input.tzinfo else date_input.replace(tzinfo=timezone.utc)
+        
+        # If integer or float (Unix timestamp)
+        if isinstance(date_input, (int, float)):
+            # Determine if milliseconds or seconds
+            if date_input > 1e10:  # Usually millisecond timestamps are > 1e10
+                date_input = date_input / 1000  # Convert to seconds
+            return datetime.fromtimestamp(date_input, tz=timezone.utc)
+        
+        # String handling
+        if isinstance(date_input, str):
+            try:
+                # Try automatic parsing with pandas
+                dt = pd.to_datetime(date_input, utc=True)
+                return dt.to_pydatetime()
+            except Exception as e:
+                # If parsing fails, try common formats
+                formats = [
+                    '%Y-%m-%d',            # 2023-01-31
+                    '%Y/%m/%d',            # 2023/01/31
+                    '%d-%m-%Y',            # 31-01-2023
+                    '%d/%m/%Y',            # 31/01/2023
+                    '%Y-%m-%d %H:%M:%S',   # 2023-01-31 14:30:00
+                    '%Y-%m-%dT%H:%M:%S',   # 2023-01-31T14:30:00
+                    '%Y%m%d',              # 20230131
+                ]
+                
+                for fmt in formats:
+                    try:
+                        dt = datetime.strptime(date_input, fmt)
+                        # Add UTC timezone
+                        return dt.replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        continue
+                
+                # All attempts failed
+                logger.warning(f"Could not parse date '{date_input}'. Using default.")
+                return datetime.now(timezone.utc) - timedelta(days=default_days_ago)
+        
+        # Fallback for unsupported types
+        logger.warning(f"Unsupported date type {type(date_input)}. Using default.")
+        return datetime.now(timezone.utc) - timedelta(days=default_days_ago)
+    
+    def _get_date_chunks(self, start_dt: datetime, end_dt: datetime, timeframe: str, chunk_size_days: Optional[int] = None) -> List[Tuple[datetime, datetime]]:
+        """
+        Split date range into manageable chunks for fetching
+        
+        Args:
+            start_dt: Start datetime
+            end_dt: End datetime
+            timeframe: Timeframe
+            chunk_size_days: Optional override for chunk size in days
+            
+        Returns:
+            List of (start, end) datetime tuples for each chunk
+        """
+        # Determine chunk size based on timeframe (if not overridden)
+        if chunk_size_days is None:
+            if timeframe in ['1m', '5m']:
+                # For small timeframes, use smaller chunks
+                chunk_size = timedelta(days=1)
+            elif timeframe in ['15m', '30m', '1h']:
+                # For medium timeframes, use medium chunks
+                chunk_size = timedelta(days=7)
+            else:
+                # For larger timeframes, use larger chunks
+                chunk_size = timedelta(days=30)
         else:
-            side = direction.lower()
+            chunk_size = timedelta(days=chunk_size_days)
         
-        # 格式化数量和价格精度
-        formatted_qty = self._format_quantity(symbol, quantity)
-        formatted_price = self._format_price(symbol, price) if price else None
-        
-        # 创建订单
-        return self.create_order(
-            symbol=symbol,
-            side=side,
-            order_type=order_type,
-            amount=formatted_qty,
-            price=formatted_price
-        )
-
-    def _format_price(self, symbol: str, price: float) -> float:
-        """
-        格式化价格精度
-        
-        Args:
-            symbol: 交易对
-            price: 价格
-            
-        Returns:
-            float: 格式化后的价格
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return price
-            
-        try:
-            # 获取市场信息
-            market = self.exchange.market(symbol)
-            return self.exchange.price_to_precision(symbol, price)
-        except Exception as e:
-            logger.warning(f"格式化价格精度失败: {str(e)}")
-            return price
-
-    def _format_quantity(self, symbol: str, quantity: float) -> float:
-        """
-        格式化数量精度
-        
-        Args:
-            symbol: 交易对
-            quantity: 数量
-            
-        Returns:
-            float: 格式化后的数量
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return quantity
-            
-        try:
-            # 获取市场信息
-            market = self.exchange.market(symbol)
-            return self.exchange.amount_to_precision(symbol, quantity)
-        except Exception as e:
-            logger.warning(f"格式化数量精度失败: {str(e)}")
-            return quantity
-
-    def _update_rate_limit(self, weight: int = 1) -> None:
-        """
-        更新速率限制计数
-        
-        Args:
-            weight: 请求权重
-        """
-        current_time = datetime.now()
-        
-        # 检查是否需要重置计数
-        time_diff = (current_time - self.rate_limit_last_reset).total_seconds()
-        if time_diff >= self.rate_limit_reset_interval:
-            self.rate_limit_weight = 0
-            self.rate_limit_last_reset = current_time
-            
-        # 更新权重
-        self.rate_limit_weight += weight
-        
-        # 检查是否接近限制
-        if self.rate_limit_weight > self.rate_limit_max * 0.8:
-            logger.warning(f"接近速率限制: {self.rate_limit_weight}/{self.rate_limit_max}")
-            
-        # 如果超过限制，等待
-        if self.rate_limit_weight >= self.rate_limit_max:
-            wait_time = self.rate_limit_reset_interval - time_diff
-            if wait_time > 0:
-                logger.warning(f"达到速率限制，等待{wait_time:.2f}秒")
-                time.sleep(wait_time)
-                # 重置计数
-                self.rate_limit_weight = weight
-                self.rate_limit_last_reset = datetime.now()
-
-    async def _async_update_rate_limit(self, weight: int = 1) -> None:
-        """
-        异步更新速率限制计数
-        
-        Args:
-            weight: 请求权重
-        """
-        current_time = datetime.now()
-        
-        # 检查是否需要重置计数
-        time_diff = (current_time - self.rate_limit_last_reset).total_seconds()
-        if time_diff >= self.rate_limit_reset_interval:
-            self.rate_limit_weight = 0
-            self.rate_limit_last_reset = current_time
-            
-        # 更新权重
-        self.rate_limit_weight += weight
-        
-        # 检查是否接近限制
-        if self.rate_limit_weight > self.rate_limit_max * 0.8:
-            logger.warning(f"接近速率限制: {self.rate_limit_weight}/{self.rate_limit_max}")
-            
-        # 如果超过限制，等待
-        if self.rate_limit_weight >= self.rate_limit_max:
-            wait_time = self.rate_limit_reset_interval - time_diff
-            if wait_time > 0:
-                logger.warning(f"达到速率限制，等待{wait_time:.2f}秒")
-                await asyncio.sleep(wait_time)
-                # 重置计数
-                self.rate_limit_weight = weight
-                self.rate_limit_last_reset = datetime.now()
-
-    def _calculate_fetch_chunks(self, start: datetime, end: datetime, timeframe: str) -> List[Tuple[datetime, datetime]]:
-        """
-        将时间范围分割为多个可manageable的块
-        
-        Args:
-            start: 开始时间
-            end: 结束时间
-            timeframe: 时间框架
-            
-        Returns:
-            List[Tuple]: 时间范围块列表
-        """
-        # 计算每个K线的毫秒数
-        ms_per_candle = self._timeframe_to_ms(timeframe)
-        
-        # 计算总毫秒数
-        total_ms = (end - start).total_seconds() * 1000
-        
-        # 估计总K线数
-        total_candles = int(total_ms / ms_per_candle) + 1
-        
-        # 如果总数低于阈值，直接返回整个范围
-        if total_candles <= self.download_chunk_size:
-            return [(start, end)]
-            
-        # 计算需要的块数
-        num_chunks = (total_candles + self.download_chunk_size - 1) // self.download_chunk_size
-        
-        # 计算每个块的持续时间
-        chunk_duration = timedelta(milliseconds=ms_per_candle * self.download_chunk_size)
-        
-        # 创建块列表
+        # Create chunks
         chunks = []
-        chunk_start = start
+        current_start = start_dt
         
-        for i in range(num_chunks):
-            # 计算块的结束时间
-            chunk_end = chunk_start + chunk_duration
-            
-            # 确保不超过总结束时间
-            if chunk_end > end:
-                chunk_end = end
-                
-            # 添加到列表
-            chunks.append((chunk_start, chunk_end))
-            
-            # 更新下一块的开始时间
-            chunk_start = chunk_end
-            
-            # 如果已经达到结束时间，退出循环
-            if chunk_start >= end:
-                break
-                
+        while current_start < end_dt:
+            current_end = min(current_start + chunk_size, end_dt)
+            chunks.append((current_start, current_end))
+            current_start = current_end
+        
         return chunks
-
-    def _calculate_request_interval(self) -> float:
+    
+    async def fetch_historical_ohlcv(self, 
+                                   symbol: str, 
+                                   timeframe: str = '1h',
+                                   start_date: Optional[Union[str, datetime]] = None,
+                                   end_date: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
         """
-        计算请求之间的间隔，以避免速率限制
-        
-        Returns:
-            float: 秒数
-        """
-        # 基于当前速率限制状态计算
-        percentage_used = self.rate_limit_weight / self.rate_limit_max
-        
-        if percentage_used > 0.9:
-            # 接近限制，使用更长间隔
-            return 1.5
-        elif percentage_used > 0.7:
-            # 中等使用，适中间隔
-            return 1.0
-        else:
-            # 低使用，最小间隔
-            return 0.5
-
-    def _expected_candles(self, start: datetime, end: datetime, timeframe: str) -> int:
-        """
-        计算给定时间范围内预期的K线数量
+        Fetch historical OHLCV data with optimized performance
         
         Args:
-            start: 开始时间
-            end: 结束时间
-            timeframe: 时间框架
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+            start_date: Start date/time
+            end_date: End date/time
+        
+        Returns:
+            DataFrame with historical OHLCV data
+        """
+        # Make sure exchange is initialized
+        if not self.exchange:
+            self._init_exchange()
+            if not self.exchange:
+                logger.error("Exchange initialization failed")
+                return pd.DataFrame()
+        
+        try:
+            # Process dates
+            start_dt = self._parse_date(start_date, default_days_ago=30)
+            end_dt = self._parse_date(end_date, default_days_ago=0)
+            
+            logger.info(f"Fetching historical data for {symbol} from {start_dt} to {end_dt}")
+            
+            # First check if data is in cache
+            cache_data = self._get_from_cache(symbol, timeframe, start_dt, end_dt)
+            if not cache_data.empty:
+                logger.info(f"Using cached data for {symbol} {timeframe}")
+                return cache_data
+            
+            # Get data chunks based on timeframe
+            chunks = self._get_date_chunks(start_dt, end_dt, timeframe)
+            logger.info(f"Splitting request into {len(chunks)} chunks")
+            
+            # Track progress and accumulated data
+            chunks_processed = 0
+            chunks_successful = 0
+            all_data = []
+            
+            # Measure latency before fetching to optimize timings
+            current_latency = self._measure_latency()
+            delay_between_chunks = max(0.5, min(2.0, current_latency / 1000 * 2))
+            
+            # Process each chunk
+            for i, (chunk_start, chunk_end) in enumerate(chunks):
+                try:
+                    # Handle rate limiting
+                    self._handle_rate_limit()
+                    
+                    # Convert to millisecond timestamp
+                    chunk_since = int(chunk_start.timestamp() * 1000)
+                    
+                    # Log for first chunk or every 5th chunk to reduce log noise
+                    if i == 0 or i % 5 == 0:
+                        logger.info(f"Fetching chunk {i+1}/{len(chunks)}: {chunk_start} to {chunk_end}")
+                    
+                    # Fetch the chunk
+                    ohlcv = self.exchange.fetch_ohlcv(
+                        symbol=symbol, 
+                        timeframe=timeframe, 
+                        since=chunk_since,
+                        limit=self.download_chunk_size
+                    )
+                    
+                    chunks_processed += 1
+                    
+                    # Check if we got data
+                    if not ohlcv or len(ohlcv) == 0:
+                        logger.debug(f"No data returned for chunk {i+1}")
+                        continue
+                    
+                    # Add data to accumulated list
+                    all_data.extend(ohlcv)
+                    chunks_successful += 1
+                    
+                    # Short delay between chunks, adjusted based on measured latency
+                    await asyncio.sleep(delay_between_chunks)
+                    
+                except Exception as e:
+                    logger.error(f"Error fetching chunk {i+1}: {str(e)}")
+                    await asyncio.sleep(self.retry_delay)
+            
+            # Process all data
+            if not all_data:
+                logger.warning(f"No historical data found for {symbol}")
+                return pd.DataFrame()
+            
+            # Convert to DataFrame
+            df = self._process_ohlcv_data(all_data)
+            
+            # Filter by date range more elegantly
+            if not df.empty:
+                # Use index filtering (more reliable)
+                df = df[(df.index >= start_dt) & (df.index <= end_dt)]
+            
+            logger.info(f"Downloaded {len(df)} candles for {symbol} ({chunks_successful}/{len(chunks)} chunks successful)")
+            
+            # Save to cache for future use
+            if not df.empty:
+                self._save_to_cache(df, symbol, timeframe)
+            
+            return df
+        
+        except Exception as e:
+            logger.error(f"Failed to fetch historical data for {symbol}: {str(e)}")
+            return pd.DataFrame()
+    
+    def _get_from_cache(self, symbol: str, timeframe: str, 
+                       start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
+        """
+        Get data from cache efficiently
+        
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+            start_dt: Start datetime
+            end_dt: End datetime
             
         Returns:
-            int: 预期K线数量
+            DataFrame with data from cache
         """
-        # 计算每个K线的秒数
-        seconds_per_candle = self._timeframe_to_ms(timeframe) // 1000
+        # Generate cache path
+        safe_symbol = symbol.replace('/', '_')
+        cache_file = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.csv")
         
-        # 计算总秒数
-        total_seconds = (end - start).total_seconds()
+        if not os.path.exists(cache_file):
+            return pd.DataFrame()
         
-        # 计算预期K线数
-        return int(total_seconds / seconds_per_candle) + 1
-
-    async def close(self) -> None:
-        """关闭交易所连接和资源"""
         try:
-            # 关闭异步交易所连接
+            # Use faster reading method with chunksize for large files
+            file_size = os.path.getsize(cache_file)
+            
+            # For small files, read directly
+            if file_size < 10_000_000:  # 10MB threshold
+                df = pd.read_csv(cache_file)
+            else:
+                # For large files, use chunked reading
+                chunks = []
+                for chunk in pd.read_csv(cache_file, chunksize=100000):
+                    chunks.append(chunk)
+                df = pd.concat(chunks)
+            
+            # Convert timestamp to datetime
+            if 'timestamp' in df.columns:
+                df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            elif 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'], utc=True)
+            else:
+                return pd.DataFrame()
+            
+            # Set datetime as index
+            df.set_index('datetime', inplace=True)
+            
+            # Filter by requested date range
+            filtered_df = df[(df.index >= start_dt) & (df.index <= end_dt)]
+            
+            # Determine if cache data is sufficient
+            if len(filtered_df) > 0:
+                # Check if the data covers the entire range with reasonable density
+                range_seconds = (end_dt - start_dt).total_seconds()
+                
+                if timeframe.endswith('m'):  # minutes
+                    # For minute timeframes, expect at least one candle per hour on average
+                    expected_candles = range_seconds / 3600
+                elif timeframe.endswith('h'):  # hours
+                    # For hourly timeframes, expect at least 4 candles per day
+                    expected_candles = range_seconds / 86400 * 4
+                else:  # days or larger
+                    # For daily timeframes, expect at least one candle per day
+                    expected_candles = range_seconds / 86400
+                
+                if len(filtered_df) >= min(10, expected_candles * 0.5):
+                    logger.info(f"Found {len(filtered_df)} records in cache for {symbol} {timeframe}")
+                    return filtered_df
+                else:
+                    logger.info(f"Cache data insufficient: found {len(filtered_df)}, expected ~{expected_candles}")
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            logger.warning(f"Error reading from cache: {str(e)}")
+            return pd.DataFrame()
+
+
+    def _save_to_cache(self, df: pd.DataFrame, symbol: str, timeframe: str) -> None:
+        # 修改缓存存储结构
+        def get_cache_path(ts: pd.Timestamp) -> str:
+            return os.path.join(
+                self.cache_dir,
+                timeframe,
+                symbol.replace('/', '_'),
+                f"{ts.year:04d}",
+                f"{ts.month:02d}",
+                f"{ts.timestamp():.0f}_{(ts + pd.Timedelta(hours=1)).timestamp():.0f}.parquet"
+            )
+
+        try:
+            # 按小时分片存储
+            for ts, group in df.groupby(pd.Grouper(freq='H')):
+                if group.empty:
+                    continue
+                    
+                file_path = get_cache_path(ts)
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                
+                # 使用Parquet格式
+                group.to_parquet(
+                    file_path,
+                    engine='pyarrow',
+                    compression='zstd',
+                    index=True
+                )
+                
+        except Exception as e:
+            logger.warning(f"缓存保存失败: {str(e)}")
+            
+    async def fetch_historical(self, symbol: str, timeframe: str, 
+                           start: Optional[Union[str, datetime]] = None,
+                           end: Optional[Union[str, datetime]] = None,
+                           use_cache: bool = True) -> pd.DataFrame:
+        """
+        High-level method to fetch historical data with caching
+        
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+            start: Start date/time
+            end: End date/time
+            use_cache: Whether to use cache system
+            
+        Returns:
+            DataFrame with historical data
+        """
+        # Parse dates
+        start_dt = self._parse_date(start, default_days_ago=30)
+        end_dt = self._parse_date(end, default_days_ago=0)
+        
+        logger.info(f"Fetching historical data for {symbol} {timeframe} from {start_dt} to {end_dt}")
+        
+        # Check if we should use cache
+        if use_cache:
+            cache_data = self._get_from_cache(symbol, timeframe, start_dt, end_dt)
+            if not cache_data.empty:
+                logger.info(f"Using {len(cache_data)} records from cache for {symbol} {timeframe}")
+                return cache_data
+        
+        # Get the data from exchange
+        df = await self.fetch_historical_ohlcv(symbol, timeframe, start_dt, end_dt)
+        
+        # Save to cache if successful and caching is enabled
+        if not df.empty and use_cache:
+            self._save_to_cache(df, symbol, timeframe)
+        
+        return df
+    
+    async def fetch_realtime(self, symbol: str, timeframe: str, limit: int = 100) -> pd.DataFrame:
+        """
+        Fetch real-time data with recent data from cache or API
+        
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+            limit: Number of candles to return
+            
+        Returns:
+            DataFrame with real-time data
+        """
+        # Use the synchronous fetch which is optimized and reliable
+        return self.fetch_latest_ohlcv(symbol, timeframe, limit)
+    
+    async def smart_fetch_ohlcv(self, symbol: str, timeframe: str, 
+                            start: Optional[Union[str, datetime]] = None,
+                            end: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
+        """
+        Smart fetching of OHLCV data with optimized performance and error handling
+        
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+            start: Start date/time
+            end: End date/time
+            
+        Returns:
+            DataFrame with OHLCV data
+        """
+        # Reuse the optimized fetch_historical method
+        return await self.fetch_historical(symbol, timeframe, start, end)
+    
+    def optimize_performance(self):
+        """
+        Optimize performance based on current conditions
+        """
+        # Measure current latency
+        latency = self._measure_latency()
+        
+        # Adjust chunk size based on latency
+        if latency < 100:  # Very fast connection
+            self.download_chunk_size = 1000
+            logger.info(f"Great connection speed ({latency:.2f}ms), using large chunk size: {self.download_chunk_size}")
+        elif latency < 500:  # Good connection
+            self.download_chunk_size = 500
+            logger.info(f"Good connection speed ({latency:.2f}ms), using medium chunk size: {self.download_chunk_size}")
+        else:  # Slow connection
+            self.download_chunk_size = 200
+            logger.info(f"Slow connection ({latency:.2f}ms), using small chunk size: {self.download_chunk_size}")
+        
+        # Adjust retry delay based on latency
+        self.retry_delay = max(1, min(5, latency / 200))
+    
+    def clear_cache(self, symbol: Optional[str] = None, timeframe: Optional[str] = None):
+        """
+        Clear cache data
+        
+        Args:
+            symbol: Optional specific symbol to clear
+            timeframe: Optional specific timeframe to clear
+        """
+        try:
+            if symbol and timeframe:
+                # Clear specific cache file
+                safe_symbol = symbol.replace('/', '_')
+                cache_file = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.csv")
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
+                    logger.info(f"Cleared cache for {symbol} {timeframe}")
+            elif symbol:
+                # Clear all files for a symbol
+                safe_symbol = symbol.replace('/', '_')
+                pattern = f"{safe_symbol}_"
+                for file in os.listdir(self.cache_dir):
+                    if file.startswith(pattern):
+                        os.remove(os.path.join(self.cache_dir, file))
+                logger.info(f"Cleared all cache files for {symbol}")
+            else:
+                # Clear all cache
+                for file in os.listdir(self.cache_dir):
+                    if file.endswith('.csv'):
+                        os.remove(os.path.join(self.cache_dir, file))
+                logger.info("Cleared all cache files")
+        except Exception as e:
+            logger.error(f"Error clearing cache: {str(e)}")
+    
+    async def close(self):
+        """Close exchange connections and free resources"""
+        try:
             if self.async_exchange:
                 await self.async_exchange.close()
-                logger.info("关闭了异步交易所连接")
-                
-            # 关闭异步执行器
-            await self.executor.close()
-            logger.info("Binance接口已关闭")
-            
+                self.async_exchange = None
+                logger.info("Async exchange connection closed")
         except Exception as e:
-            logger.error(f"关闭Binance接口时出错: {str(e)}")
-
-    def get_exchange_info(self) -> Dict:
-        """
-        获取交易所信息和限制
-        
-        Returns:
-            Dict: 交易所信息
-        """
-        if not self.exchange:
-            logger.error("同步客户端未初始化")
-            return {}
-            
-        try:
-            # 加载市场
-            markets = self.exchange.load_markets()
-            
-            # 准备结果
-            result = {
-                'name': self.exchange.name,
-                'versions': self.exchange.versions,
-                'timeout': self.exchange.timeout,
-                'rate_limit': self.exchange.rateLimit,
-                'markets_count': len(markets)
-            }
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"获取交易所信息失败: {str(e)}")
-            return {}
+            logger.error(f"Error closing async exchange: {str(e)}")

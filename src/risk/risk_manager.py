@@ -1,8 +1,10 @@
 # risk_manager.py
 from abc import ABC, abstractmethod
-import logging
+import pandas as pd
 from typing import Dict, List, Any, Optional, Set
 import asyncio
+
+from src.common.log_manager import LogManager
 
 class RiskValidationError(Exception):
     """风险验证失败时引发的异常"""
@@ -21,7 +23,7 @@ class BaseRiskManager(ABC):
         Args:
             config: 风险管理配置
         """
-        self._logger = logging.getLogger(self.__class__.__name__)
+        self._logger = LogManager.get_logger(f"mode.{self.__class__.__name__.lower()}")
         self._config = config or {}
         self._risk_limits = self._config.get('risk_limits', {})
         self._active_controls: Set[str] = set()
@@ -145,8 +147,8 @@ class BacktestRiskManager(BaseRiskManager):
         Returns:
             验证后的信号列表
         """
-        if not signals:
-            return []
+        if signals.empty:
+            return pd.DataFrame()
         
         valid_signals = []
         
