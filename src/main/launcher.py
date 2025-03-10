@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# src/ui/launcher.py
+# src/main/launcher.py
 
 import os
 import sys
@@ -14,8 +14,8 @@ sys.path.append(project_root)
 
 from src.common.log_manager import LogManager
 from src.common.config_manager import ConfigManager
-from src.main.CLI_runner import run_cli_mode
-from src.main.GUI_app import TradingSystemGUI
+from src.main.cli_runner import run_cli_mode
+from src.main.gui_app import TradingSystemGUI
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments for the launcher"""

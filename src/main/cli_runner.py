@@ -1,4 +1,4 @@
-# src/ui/cli_runner.py
+# src/main/cli_runner.py
 
 import os
 import sys

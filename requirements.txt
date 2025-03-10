@@ -1,61 +1,16 @@
-ccxt==4.2.21
-matplotlib~=3.8.2
-numpy~=1.26.3
-pandas==2.2.0
-pyodbc==5.0.1
-statsmodels==0.14.0
-tqdm~=4.66.1
-flask~=3.0.1
-PyMySQL~=1.1.0
-
-scipy~=1.12.0
-
-# Core Python libraries
-python-dateutil
-pyyaml
 aiofiles
-aiohttp
-asyncio
-
-# Data manipulation
+ccxt
+common
+dotenv
+matplotlib
 numpy
 pandas
-polars
-
-# Machine Learning
-scikit-learn
-torch
-tensorflow
-
-# Trading and Financial Analysis
-ccxt
-ta-lib
-pandas-ta
-
-# Logging and Configuration
-loguru
-
-# GUI
-tkinter
-
-# Testing
-pytest
-hypothesis
-
-# Visualization
-matplotlib
-plotly
-
-# Performance
-numba
-concurrent-futures
-
-# Optional - Web and Database
-sqlalchemy
-fastapi
-uvicorn
-databases
-
-# Optional - Advanced Features
-dask
-ray
+pyarrow
+pytz
+pyyaml
+requests
+scipy
+seaborn
+src
+tkcalendar
+ttkthemes

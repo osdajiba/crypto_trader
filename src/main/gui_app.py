@@ -1,4 +1,4 @@
-# src/ui/gui_app.py
+# src/main/gui_app.py
 
 import os
 import sys
