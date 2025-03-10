@@ -1,1 +1,0 @@
-2025-03-10 20:24:04,169 - trading_system - INFO - [integrity_checker.py:44] - DataIntegrityChecker初始化完成: timeframe=1h, iqr_multiplier=3.0, max_gap_factor=1.5
