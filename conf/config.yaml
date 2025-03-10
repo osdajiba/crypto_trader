@@ -14,8 +14,8 @@ proxies:
 # ========================
 api:
   binance:
-    apiKey: "apiKey"                     # Exchange API key (fallback)
-    secret: "secret"                     # Exchange API secret (fallback)
+    apiKey: "your apiKey"                     # Exchange API key (fallback)
+    secret: "your secret"                     # Exchange API secret (fallback)
     options:
       adjustForTimeDifference: true   # Auto-adjust server time difference
       recvWindow: 60000               # Order processing window (ms)

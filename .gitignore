@@ -43,16 +43,7 @@ database/
 db/
 data/
 
-# 忽略配置文件和敏感信息
-<<<<<<< HEAD
-conf/*
-!conf/config.json
-# 忽略文档和脚本文件
-docs/
-=======
-conf/bt_config
->>>>>>> dev
-
+config/bt_config.yaml
 # 忽略其他特定文件
 *.gitignore.un~
 *.gitignore~
