@@ -27,17 +27,16 @@ class TradingCore:
         self.config: ConfigManager = config
         self.logger = LogManager.get_logger(name="trading_system")
         
-        # 从配置中获取交易模式，如果提供了参数则使用参数
         self.mode = mode if mode is not None else config.get("default_config", "mode", default="backtest")
         
         self.async_exec = AsyncExecutor()
         self._running = False
-        self.trading_mode = None  # 初始化为None，而不是字符串
+        self.trading_mode = None
         
         # Create trading mode factory
         self.mode_factory = TradingModeFactory(config=self.config)
         
-        # 获取可用模式
+        # Get available pattern
         available_modes = self.mode_factory.get_available_modes()
         
         self.logger.info(
