@@ -29,7 +29,7 @@ class DataProcessor:
         rename_map = {}
         for col in df.columns:
             lower_col = col.lower()
-            if 'time' in lower_col or 'date' in lower_col:
+            if ('time' in lower_col or 'date' in lower_col) and 'timestamp' not in lower_col:
                 rename_map[col] = 'datetime'
             elif lower_col in ['o', 'open']:
                 rename_map[col] = 'open'
@@ -46,17 +46,28 @@ class DataProcessor:
             df = df.rename(columns=rename_map)
         
         # 确保必要的列存在
-        required_columns = ['datetime']
+        required_columns = ['datetime', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'start_ts', 'end_ts']
         for col in required_columns:
             if col not in df.columns:
                 raise ValueError(f"缺少必要的列: {col}")
-        
-        # 处理日期时间列
-        if not pd.api.types.is_datetime64_any_dtype(df['datetime']):
-            df['datetime'] = pd.to_datetime(df['datetime'])
+        def convert_timestamp(ts):
+            try:
+                ts_str = str(ts)
+                if len(ts_str) == 10:
+                    return int(ts) * 1000
+                elif len(ts_str) == 13:
+                    return int(ts)
+                else:
+                    return pd.NaT
+            except:
+                return pd.NaT
+
+        # 统一时间戳单位
+        df['datetime'] = df['datetime'].apply(convert_timestamp)
+        df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', errors='coerce')
         
         # 排序并去除重复
-        df = df.sort_values('datetime').reset_index(drop=True)
+        df = df.reset_index(drop=True)
         df = df.drop_duplicates(subset=['datetime'], keep='last')
         
         # 移除无效数据

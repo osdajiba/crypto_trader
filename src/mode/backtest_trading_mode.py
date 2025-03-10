@@ -22,8 +22,8 @@ class BacktestTradingMode(BaseTradingMode):
         )
         
         # Get strategy information from config
-        strategy_name = self.config.get("backtest", "strategy", default=None)
-        strategy_params = self.config.get("backtest", "strategy_parameters", default={})
+        strategy_name = self.config.get("strategy", "active", default='dual_ma')
+        strategy_params = self.config.get("strategy", "parameters", default={})
         
         # Create strategy instance
         self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)

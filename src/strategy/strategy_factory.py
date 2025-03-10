@@ -21,7 +21,7 @@ class StrategyFactory(AbstractFactory):
             config: 配置对象
         """
         super().__init__(config)
-        self.default_strategy_type = config.get("strategy", "type", default=None)
+        self.default_strategy_type = config.get("strategy", "active", default="dual_ma")
         self.default_params = config.get("strategy", "parameters", default={})
         self.executor = AsyncExecutor()  # 获取单例执行器
         
@@ -47,7 +47,7 @@ class StrategyFactory(AbstractFactory):
         })
         
         # 注册神经网络策略
-        self.register("neural_net", "src.strategy.nn.NeuralNetStrategy", {
+        self.register("neural_network", "src.strategy.nn.NeuralNetStrategy", {
             "description": "神经网络策略",
             "category": "ml",
             "parameters": ["hidden_layers", "learning_rate"],

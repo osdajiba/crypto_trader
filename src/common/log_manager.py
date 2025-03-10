@@ -8,6 +8,9 @@ import json
 from typing import Dict, Any, Optional, Union
 from datetime import datetime
 
+from src.common.config_manager import ConfigManager 
+
+
 class LogManager:
     """
     增强的日志管理器
@@ -30,78 +33,47 @@ class LogManager:
     DEFAULT_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     DETAILED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
     
-    def __new__(cls, 
-                base_dir: Optional[Union[str, Path]] = None,
-                default_level: str = 'INFO',
-                log_to_console: bool = True,
-                log_to_file: bool = True,
-                rotation_strategy: str = 'size',
-                max_file_size: int = 10_000_000,  # 10MB
-                backup_count: int = 10,
-                detailed_format: bool = False):
+    def __new__(cls, config: ConfigManager):
         """
         创建LogManager单例
         
         Args:
-            base_dir: 日志文件的基本目录，如果为None则使用'./logs'
-            default_level: 默认日志级别
-            log_to_console: 是否将日志输出到控制台
-            log_to_file: 是否将日志输出到文件
-            rotation_strategy: 日志轮替策略，'size'或'time'
-            max_file_size: 每个日志文件的最大大小（字节）
-            backup_count: 保留的备份日志文件数量
-            detailed_format: 是否使用详细的日志格式
+            config: log settings
         """
         if cls._instance is None:
+            if not config:
+                raise ValueError("Config must be provided for initial initialization")
             cls._instance = super(LogManager, cls).__new__(cls)
-            cls._instance._init(base_dir, default_level, log_to_console, log_to_file,
-                              rotation_strategy, max_file_size, backup_count, detailed_format)
+            cls._instance._init_logger(config)
         return cls._instance
     
-    def _init(self, 
-             base_dir: Optional[Union[str, Path]] = None,
-             default_level: str = 'INFO',
-             log_to_console: bool = True,
-             log_to_file: bool = True,
-             rotation_strategy: str = 'size',
-             max_file_size: int = 10_000_000,  # 10MB
-             backup_count: int = 10,
-             detailed_format: bool = False):
+    def _init_logger(self, config):
         """
         初始化日志管理器（只在第一次创建实例时调用）
         """
-        self.base_dir = Path(base_dir) if base_dir else Path('./logs')
-        self.default_level = self._get_log_level(default_level)
-        self.log_to_console = log_to_console
-        self.log_to_file = log_to_file
-        self.rotation_strategy = rotation_strategy
-        self.max_file_size = max_file_size
-        self.backup_count = backup_count
-        self.format_str = self.DETAILED_FORMAT if detailed_format else self.DEFAULT_FORMAT
+        # 从配置获取参数
+        self.base_dir = Path(config.get("logging", "base_path", default="./logs"))
+        self.default_level = self._get_log_level(config.get("logging", "level", default="INFO"))
+        self.log_to_console = config.get("logging", "handlers", "console", "enabled", default=True)
+        self.log_to_file = config.get("logging", "handlers", "file", "enabled", default=True)
         
-        # 确保日志目录存在
-        if self.log_to_file:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
+        # 日志轮转配置
+        self.rotation_strategy = config.get("logging", "rotation", "strategy", default="size")
+        self.max_file_size = int(config.get("logging", "rotation", "max_file_size", default=10 * 1024 * 1024))  # 默认10MB
+        self.backup_count = int(config.get("logging", "rotation", "backup_count", default=5))
         
-        # 跟踪已配置的日志记录器
+        # 格式配置
+        self.format_str = self.DETAILED_FORMAT if config.get("logging", "format", default=False) else self.DEFAULT_FORMAT
+        
+        # 初始化根日志记录器
         self.configured_loggers = set()
-        
-        # 配置根日志记录器
         self.setup_root_logger()
-
+        
+        # 自动创建日志目录
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+            
     def setup_logger(self, name: str, base_dir: Optional[Union[str, Path]] = None, 
                 level: Optional[Union[str, int]] = None) -> logging.Logger:
-        """
-        配置并返回日志记录器（兼容旧版API）
-        
-        Args:
-            name: 日志记录器名称
-            base_dir: 日志目录（如果提供，将更新默认目录）
-            level: 日志级别
-            
-        Returns:
-            配置的日志记录器
-        """
         # 如果提供了新的基本目录，则更新实例
         if base_dir:
             self.base_dir = Path(base_dir)
@@ -111,18 +83,6 @@ class LogManager:
         return self._get_logger_instance(name, level)
     
     def _get_log_level(self, level: Union[str, int]) -> int:
-        """
-        获取日志级别的数值
-        
-        Args:
-            level: 日志级别名称或整数
-            
-        Returns:
-            日志级别整数
-            
-        Raises:
-            ValueError: 如果日志级别无效
-        """
         if isinstance(level, int):
             return level
         
@@ -132,63 +92,50 @@ class LogManager:
         
         raise ValueError(f"Invalid log level: {level}. Valid levels are: {', '.join(self.LOG_LEVELS.keys())}")
     
-    def setup_root_logger(self) -> None:
+    def setup_root_logger(self):
         """配置根日志记录器"""
         root_logger = logging.getLogger()
         root_logger.setLevel(self.default_level)
         
-        # 移除所有现有处理器
+        # 清除现有处理器
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
-        
-        # 添加控制台处理器
+
+        # 控制台处理器
         if self.log_to_console:
             console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setFormatter(logging.Formatter(self.format_str))
             console_handler.setLevel(self.default_level)
-            console_formatter = logging.Formatter(self.format_str)
-            console_handler.setFormatter(console_formatter)
             root_logger.addHandler(console_handler)
-        
-        # 添加文件处理器
+
+        # 文件处理器
         if self.log_to_file:
-            file_handler = self.create_file_handler('root')
+            file_handler = self._create_file_handler("system")
+            file_handler.setLevel(self.default_level)
             root_logger.addHandler(file_handler)
-        
-        self.configured_loggers.add('root')
     
-    def create_file_handler(self, name: str) -> logging.Handler:
-        """
-        为指定的日志记录器创建文件处理器
+    def _create_file_handler(self, name: str) -> logging.Handler:
+        """创建文件处理器"""
+        log_file = self.base_dir / f"{name}.log"
         
-        Args:
-            name: 日志记录器名称
-            
-        Returns:
-            配置的日志处理器
-        """
-        log_filename = self.base_dir / f"{name.split('.')[-1]}.log"
-        
-        if self.rotation_strategy == 'size':
-            file_handler = RotatingFileHandler(
-                filename=log_filename,
+        if self.rotation_strategy == "size":
+            handler = RotatingFileHandler(
+                log_file,
                 maxBytes=self.max_file_size,
                 backupCount=self.backup_count,
-                encoding='utf-8'
+                encoding="utf-8"
             )
-        else:  # time
-            file_handler = TimedRotatingFileHandler(
-                filename=log_filename,
-                when='midnight',
+        else:
+            handler = TimedRotatingFileHandler(
+                log_file,
+                when="midnight",
                 interval=1,
                 backupCount=self.backup_count,
-                encoding='utf-8'
+                encoding="utf-8"
             )
-        
-        file_handler.setLevel(self.default_level)
-        file_formatter = logging.Formatter(self.format_str)
-        file_handler.setFormatter(file_formatter)
-        
-        return file_handler
+            
+        handler.setFormatter(logging.Formatter(self.format_str))
+        return handler
         
     @classmethod
     def level_from_string(cls, level_str: str) -> int:
@@ -206,19 +153,19 @@ class LogManager:
     
     @classmethod
     def get_logger(cls, name: str, level: Optional[Union[str, int]] = None) -> logging.Logger:
-        """
-        获取配置的日志记录器（类方法）
-        
-        Args:
-            name: 日志记录器名称
-            level: 可选的日志级别（默认使用默认级别）
+        """获取配置好的日志记录器"""
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
             
-        Returns:
-            配置的日志记录器
-        """
-        # 确保单例已创建
-        instance = cls()
-        return instance._get_logger_instance(name, level)
+        logger = logging.getLogger(name)
+        if name not in instance.configured_loggers:
+            logger.setLevel(instance._get_log_level(level) if level else instance.default_level)
+            if instance.log_to_file:
+                handler = instance._create_file_handler(name)
+                logger.addHandler(handler)
+            instance.configured_loggers.add(name)
+        return logger
     
     def _get_logger_instance(self, name: str, level: Optional[Union[str, int]] = None) -> logging.Logger:
         """
@@ -298,62 +245,32 @@ class LogManager:
             # 更新默认级别
             self.default_level = numeric_level
     
-    def add_json_handler(self, logger_name: str, json_file: Optional[Union[str, Path]] = None) -> None:
-        """
-        添加JSON格式的日志处理器
+    def add_json_handler(self, logger_name: str):
+        """添加JSON格式日志处理器"""
+        logger = logging.getLogger(logger_name)
+        json_file = self.base_dir / f"{logger_name}.json.log"
         
-        Args:
-            logger_name: 要添加处理器的日志记录器名称
-            json_file: JSON日志文件的路径，如果为None则在基本目录下创建
-        """
         class JsonFormatter(logging.Formatter):
             def format(self, record):
-                log_data = {
-                    'timestamp': datetime.fromtimestamp(record.created).isoformat(),
-                    'logger': record.name,
-                    'level': record.levelname,
-                    'message': record.getMessage(),
-                    'module': record.module,
-                    'function': record.funcName,
-                    'line': record.lineno
+                log_entry = {
+                    "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": record.getMessage(),
+                    "module": record.module,
+                    "line": record.lineno
                 }
-                
-                # 添加异常信息（如果有）
                 if record.exc_info:
-                    log_data['exception'] = self.formatException(record.exc_info)
-                
-                return json.dumps(log_data)
+                    log_entry["exception"] = self.formatException(record.exc_info)
+                return json.dumps(log_entry)
         
-        logger = logging.getLogger(logger_name)
-        
-        # 准备JSON日志文件路径
-        if json_file is None:
-            json_file = self.base_dir / f"{logger_name.split('.')[-1]}_json.log"
-        else:
-            json_file = Path(json_file)
-        
-        # 创建轮替处理器
-        if self.rotation_strategy == 'size':
-            handler = RotatingFileHandler(
-                filename=json_file,
-                maxBytes=self.max_file_size,
-                backupCount=self.backup_count,
-                encoding='utf-8'
-            )
-        else:  # time
-            handler = TimedRotatingFileHandler(
-                filename=json_file,
-                when='midnight',
-                interval=1,
-                backupCount=self.backup_count,
-                encoding='utf-8'
-            )
-        
-        # 设置JSON格式化器
+        handler = RotatingFileHandler(
+            json_file,
+            maxBytes=self.max_file_size,
+            backupCount=self.backup_count,
+            encoding="utf-8"
+        )
         handler.setFormatter(JsonFormatter())
-        handler.setLevel(self.default_level)
-        
-        # 添加到日志记录器
         logger.addHandler(handler)
     
     def configure_from_dict(self, config: Dict[str, Any]) -> None:

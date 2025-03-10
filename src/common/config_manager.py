@@ -1,5 +1,6 @@
 # # src/common/config_manager.py
 
+from datetime import datetime, timedelta
 import os
 import json
 import yaml
@@ -88,7 +89,7 @@ class ConfigManager:
         },
         'logging': {
             'level': 'INFO',
-            'file_path': './logs',
+            'file_path': './logs', 
             'max_file_size': 10 * 1024 * 1024,  # 10 MB
             'backup_count': 5
         },
@@ -105,18 +106,71 @@ class ConfigManager:
     }
     
     def __init__(self, config_path: Optional[Union[str, Path]] = None):
-        """
-        初始化配置管理器
-        
-        Args:
-            config_path: 配置文件路径（可选）
-        """
         self._logger = logging.getLogger(self.__class__.__name__)
         self._config = copy.deepcopy(self._DEFAULT_CONFIG)
         self._config_path = Path(config_path) if config_path else None
         
+        # 初始化运行时日期上下文
+        self._runtime_date = datetime.now().date()
+        self._init_dynamic_paths()
+        
         if self._config_path and self._config_path.exists():
             self.load()
+    
+    def _init_dynamic_paths(self):
+        """初始化动态路径并确保目录存在"""
+        # 生成日期目录格式：MMDDYYYY
+        date_str = self._runtime_date.strftime("%m%d%Y")
+        
+        # 动态更新日志路径
+        base_log_path = Path(self._config['logging']['file_path'])
+        dynamic_log_path = base_log_path / date_str
+        
+        # 保留原始路径用于后续参考
+        self._config['logging']['base_path'] = str(base_log_path)
+        self._config['logging']['file_path'] = str(dynamic_log_path)
+        
+        # 确保目录存在
+        dynamic_log_path.mkdir(parents=True, exist_ok=True)
+        
+        # 每天0点10分检查日期变更（避免午夜立即切换）
+        self._next_date_check = datetime.now() + timedelta(hours=0, minutes=10)
+    
+    def _check_date_rollover(self):
+        """检查是否需要滚动日期目录"""
+        if datetime.now() > self._next_date_check:
+            current_date = datetime.now().date()
+            if current_date != self._runtime_date:
+                self._logger.info("检测到日期变更，重新初始化路径")
+                self._runtime_date = current_date
+                self._init_dynamic_paths()
+            # 下次检查时间设置为次日0点10分
+            self._next_date_check = datetime.now().replace(
+                hour=0, minute=10, second=0
+            ) + timedelta(days=1)
+    
+    def get_log_path(self) -> Path:
+        """获取当前日志目录（带日期检查）"""
+        self._check_date_rollover()
+        return Path(self._config['logging']['file_path'])
+
+    def validate(self):
+        required_keys = [
+            ("mode", "type"),
+            ("strategy", "type"),
+            ("symbols", "list")
+        ]
+        for section, key in required_keys:
+            if not self.get(section, key):
+                raise ValueError(f"配置缺失: {section}.{key}")
+    # 修改保存方法以使用动态路径
+    def save(self, path: Optional[Union[str, Path]] = None) -> None:
+        """保存配置时自动使用原始基础路径"""
+        if not path and self._config_path:
+            # 使用原始配置路径，不带日期后缀
+            path = Path(self._config['logging']['base_path']) / "config.yaml"
+        
+        super().save(path)
     
     def load(self, path: Optional[Union[str, Path]] = None) -> None:
         """
@@ -286,42 +340,57 @@ class ConfigManager:
                 self._validate_against_schema(value, spec['children'], current_path)
     
     def get(self, *keys: str, default: Any = None) -> Any:
-            """
-            通过键路径获取配置值
-            
-            Args:
-                *keys: 配置值的键路径
-                default: 如果找不到键路径，则返回的默认值
-                
-            Returns:
-                配置值，如果找不到则返回默认值
-            """
-            config = self._config
-            
-            for key in keys:
-                if not isinstance(config, dict) or key not in config:
-                    return default
-                config = config[key]
-            
-            return config
-    
-    def set(self, value: Any, *keys: str) -> None:
         """
-        设置配置值
+        安全获取多层嵌套配置值
         
         Args:
-            value: 要设置的值
-            *keys: 配置值的键路径
+            *keys: 配置键路径
+            default: 找不到时的默认值
+            
+        Returns:
+            配置值或默认值
             
         Raises:
-            ValueError: 如果键路径无效
+            无（静默返回默认值）
+        """
+        current_level = self._config  # 初始化为整个配置字典
+        
+        for key in keys:
+            # 类型安全校验
+            if not isinstance(current_level, dict):
+                return default
+                
+            # 键存在性校验
+            if key not in current_level:
+                return default
+                
+            # 深入下一层级
+            current_level = current_level[key]
+        
+        return current_level
+    # Fix for config_manager.py set method
+
+    def set(self, *keys: str, value: Any = None) -> None:
+        """
+        Set a configuration value
+        
+        Args:
+            *keys: Configuration key path
+            value: Value to set
+            
+        Raises:
+            ValueError: If the key path is invalid
         """
         if not keys:
             raise ValueError("No keys provided")
         
+        # If value is None and there are at least 2 args, the last arg might be the value
+        if value is None and len(keys) > 1:
+            keys, value = keys[:-1], keys[-1]
+        
         config = self._config
         
-        # 遍历到最后一个键前的所有键
+        # Navigate to the last key's parent
         for key in keys[:-1]:
             if key not in config:
                 config[key] = {}
@@ -330,7 +399,7 @@ class ConfigManager:
             
             config = config[key]
         
-        # 设置最后一个键的值
+        # Set the value at the last key
         config[keys[-1]] = value
     
     def save(self, path: Optional[Union[str, Path]] = None) -> None:

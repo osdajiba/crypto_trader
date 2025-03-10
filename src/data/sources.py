@@ -9,6 +9,7 @@ import asyncio
 from datetime import datetime, timedelta
 
 from src.utils.time_utils import TimeUtils
+from src.utils.file_utils import FileUtils
 from src.common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
 from src.exchange.binance import Binance
@@ -121,7 +122,7 @@ class DataSource:
 
 class LocalSource(DataSource):
     """Local file data source, supports multiple file formats and smart partial merging"""
-    
+
     def __init__(self, config: Dict):
         """
         Initialize local data source.
@@ -130,7 +131,8 @@ class LocalSource(DataSource):
             config (Dict): Configuration dictionary with 'data_path' etc.
         """
         # Get historical data path
-        self.data_path = config.get('data', 'paths', 'historical_data_path')
+        self.data_path = self._get_validated_data_path(config)
+
         if not self.data_path:
             # Try other possible config paths
             self.data_path = config.get('data_paths', 'historical_data', default="data/historical")
@@ -155,91 +157,107 @@ class LocalSource(DataSource):
         
         # Track data status
         self.missing_symbols = set()
-        
         logger.info(f"LocalSource initialized, data path: {self.data_path}")
+
+    def _get_validated_data_path(self, config: Dict) -> str:
+        """验证并创建数据存储路径"""
+        # 从配置获取路径，带多层回退
+        path = config.get('data', 'paths', 'historical_data_path', default='db/historical')
+        
+        # 转换为绝对路径
+        abs_path = os.path.abspath(os.path.expanduser(path))
+        
+        try:
+            # 同步创建目录（在初始化时完成）
+            os.makedirs(abs_path, exist_ok=True)
+            logger.info(f"确保数据目录存在: {abs_path}")
+        except Exception as e:
+            logger.critical(f"无法创建数据目录 {abs_path}: {str(e)}")
+            raise RuntimeError(f"数据目录初始化失败: {str(e)}")
+        
+        return abs_path
 
     async def fetch_historical(self, symbol: str, timeframe: str, 
                               start: Optional[Union[str, datetime]] = None, 
                               end: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
-        """
-        Load historical data from local files
+        # 使用验证过的绝对路径
+        base_dir = os.path.join(
+            self.data_path,
+            timeframe,
+            symbol.replace('/', '_')
+        )
         
-        Args:
-            symbol: Trading pair
-            timeframe: Time interval
-            start: Start time
-            end: End time
-            
-        Returns:
-            DataFrame: OHLCV data, returns empty DataFrame if not found
-            
-        Note:
-            Empty DataFrame indicates missing data; caller can decide to fetch from exchange
-        """
-        # Ensure async executor is started
-        await self.executor.start()
-        
-        # Generate filename
-        safe_symbol = symbol.replace('/', '_')
-        
-        # Try various possible file formats
-        df = pd.DataFrame()
-        
-        for ext, reader_func in self.supported_formats.items():
-            file_name = f"{safe_symbol}_{timeframe}{ext}"
-            file_path = os.path.join(self.data_path, file_name)
-            
-            if os.path.exists(file_path):
-                try:
-                    # Use async executor to read file
-                    df = await self.executor.submit(reader_func, file_path)
-                    logger.info(f"Loaded data from local file: {file_path}")
-                    break
-                except Exception as e:
-                    logger.error(f"Failed to read {file_path}: {str(e)}")
-                    continue
-        
-        # If no files found
-        if df.empty:
-            # Record this pair as missing data
-            self.missing_symbols.add(f"{symbol}_{timeframe}")
-            logger.warning(f"Local file not found or failed to load: {safe_symbol}_{timeframe}")
-            return df
-            
-        # Ensure datetime column is correct type
-        if 'datetime' in df.columns:
-            df['datetime'] = pd.to_datetime(df['datetime'])
-        elif 'timestamp' in df.columns:
-            df['datetime'] = pd.to_datetime(df['timestamp'])
-            df.drop('timestamp', axis=1, inplace=True, errors='ignore')
-        else:
-            logger.info(f"Local file missing datetime column: {safe_symbol}_{timeframe}")
+        # 新增路径存在性检查
+        if not os.path.exists(base_dir):
+            logger.debug(f"本地数据目录不存在: {base_dir}")
             return pd.DataFrame()
         
-        # If time range specified, filter data
-        if start or end:
+        # 时间戳转换增加错误处理
+        try:
             start_dt = TimeUtils.parse_timestamp(start) if start else None
             end_dt = TimeUtils.parse_timestamp(end) if end else None
-            
-            # Apply filters
-            mask = True
-            if start_dt:
-                mask &= df['datetime'] >= start_dt
-            if end_dt:
-                mask &= df['datetime'] <= end_dt
-                
-            filtered_df = df[mask]
-            
-            # If filtered data is empty or too sparse, may need to fetch more
-            if len(filtered_df) < 10:
-                logger.warning(f"Local data insufficient in time range: {symbol} {timeframe} {start}-{end}")
-                return pd.DataFrame()  # Return empty DataFrame to trigger fetch from exchange
-                
-            df = filtered_df
+            start_ts = start_dt.timestamp() if start_dt else 0
+            end_ts = end_dt.timestamp() if end_dt else float('inf')
+        except Exception as e:
+            logger.error(f"时间参数解析失败: {str(e)}")
+            return pd.DataFrame()
         
-        logger.info(f"Loaded historical data locally: {symbol} {timeframe}, rows: {len(df)}")
-        return df
-
+        # 文件匹配逻辑优化
+        matched_files = []
+        try:
+            for root, _, files in os.walk(base_dir):
+                for file in files:
+                    if not file.endswith('.parquet'):
+                        continue
+                    try:
+                        # 文件名解析增强容错
+                        filename = os.path.splitext(file)[0]
+                        parts = filename.split('_')
+                        if len(parts) < 2:
+                            continue
+                            
+                        file_start = float(parts[0])
+                        file_end = float(parts[1])
+                        
+                        # 时间范围判断逻辑优化
+                        if (file_end >= start_ts) and (file_start <= end_ts):
+                            matched_files.append(os.path.join(root, file))
+                    except ValueError:
+                        logger.warning(f"无效文件名格式: {file}")
+                        continue
+        except Exception as e:
+            logger.error(f"遍历目录失败: {base_dir} - {str(e)}")
+            return pd.DataFrame()
+        
+        # 异步读取优化
+        if not matched_files:
+            logger.debug(f"未找到匹配文件: {base_dir}")
+            return pd.DataFrame()
+            
+        try:
+            # 使用统一文件工具类进行读取
+            dfs = await asyncio.gather(*[
+                self.executor.submit(FileUtils.async_read_parquet, f) 
+                for f in matched_files
+            ])
+            
+            combined_df = pd.concat(dfs, ignore_index=False)
+            
+            # 时间范围过滤
+            if start_dt or end_dt:
+                time_filter = True
+                if start_dt:
+                    time_filter &= (combined_df.index >= start_dt)
+                if end_dt:
+                    time_filter &= (combined_df.index <= end_dt)
+                combined_df = combined_df[time_filter]
+            
+            return combined_df.sort_index()
+            
+        except Exception as e:
+            logger.error(f"数据加载失败: {str(e)}")
+            return pd.DataFrame()
+    
     async def fetch_realtime(self, symbol: str, timeframe: str) -> pd.DataFrame:
         """
         Local source attempts to extract last record from latest data as "real-time" data

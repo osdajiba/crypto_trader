@@ -9,3 +9,53 @@ flask~=3.0.1
 PyMySQL~=1.1.0
 
 scipy~=1.12.0
+
+# Core Python libraries
+python-dateutil
+pyyaml
+aiofiles
+aiohttp
+asyncio
+
+# Data manipulation
+numpy
+pandas
+polars
+
+# Machine Learning
+scikit-learn
+torch
+tensorflow
+
+# Trading and Financial Analysis
+ccxt
+ta-lib
+pandas-ta
+
+# Logging and Configuration
+loguru
+
+# GUI
+tkinter
+
+# Testing
+pytest
+hypothesis
+
+# Visualization
+matplotlib
+plotly
+
+# Performance
+numba
+concurrent-futures
+
+# Optional - Web and Database
+sqlalchemy
+fastapi
+uvicorn
+databases
+
+# Optional - Advanced Features
+dask
+ray

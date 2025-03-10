@@ -6,6 +6,7 @@ import traceback
 from enum import Enum
 from typing import Optional, Dict, List, Union
 from datetime import datetime
+import aiofiles
 
 from src.common.log_manager import LogManager
 from src.common.data_processor import DataProcessor
@@ -65,7 +66,7 @@ class DataManager:
         self.executor = AsyncExecutor()
         
         # 数据路径配置
-        self.data_path = config.get("data", "paths", "historical_data_path") if config else "db/historical"
+        self.data_path = config.get("data", "storage", "historical") if config else "db/historical"
         if not os.path.exists(self.data_path):
             try:
                 os.makedirs(self.data_path)
@@ -307,49 +308,52 @@ class DataManager:
         return processed
 
     async def _save_to_local(self, symbol: str, timeframe: str, data: pd.DataFrame) -> bool:
-        """
-        将下载的数据保存到本地文件。
-        
-        Args:
-            symbol (str): 交易对
-            timeframe (str): 时间框架
-            data (pd.DataFrame): 要保存的数据
-            
-        Returns:
-            bool: 保存成功返回True，否则返回False
-        """
-        if data.empty:
-            logger.warning(f"尝试保存空数据: {symbol} {timeframe}")
-            return False
-            
+        # 修改文件路径生成逻辑
+        def generate_file_path(row: pd.Series) -> str:
+            ts = row.name if isinstance(row.name, pd.Timestamp) else row['datetime']
+            start_ts = ts.floor('D')  # 按天分片
+            end_ts = start_ts + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            dir_path = os.path.join(
+                self.data_path,
+                timeframe,
+                symbol.replace('/', '_'),
+                f"{start_ts.year:04d}",
+                f"{start_ts.month:02d}"
+            )
+            return os.path.join(
+                dir_path,
+                f"{start_ts.timestamp():.0f}_{end_ts.timestamp():.0f}.parquet"
+            )
+
         try:
-            # 创建文件名和路径
-            file_name = f"{symbol.replace('/', '_')}_{timeframe}.csv"
-            file_path = os.path.join(self.data_path, file_name)
+            # 新增分片保存逻辑
+            grouped = data.groupby(pd.Grouper(freq='D'))
             
-            # 转换数据类型
-            df_to_save = data.copy()
-            
-            # 将datetime列转换为字符串以确保正确保存
-            if 'datetime' in df_to_save.columns and isinstance(df_to_save['datetime'].iloc[0], datetime):
-                df_to_save['datetime'] = df_to_save['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S%z')
-            
-            # 使用异步执行器保存文件
-            def save_file():
-                df_to_save.to_csv(file_path, index=False)
-                return True
+            for day, daily_df in grouped:
+                if daily_df.empty:
+                    continue
                 
-            success = await self.executor.submit(save_file)
-            
-            if success:
-                logger.info(f"成功保存数据到本地: {file_path}, {len(data)}行")
-                return True
-            else:
-                logger.error(f"保存数据到本地失败: {file_path}")
-                return False
+                file_path = generate_file_path(daily_df.iloc[0])
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 
+                # 使用列式存储
+                daily_df = daily_df.reset_index()
+                daily_df['start_ts'] = day.timestamp()
+                daily_df['end_ts'] = (day + pd.Timedelta(days=1)).timestamp() - 1
+                
+                # 异步保存
+                async def async_save():
+                    daily_df.to_parquet(
+                        file_path,
+                        engine='pyarrow',
+                        compression='snappy',
+                        index=False
+                    )
+                await self.executor.submit(async_save)
+                
+            return True
         except Exception as e:
-            logger.error(f"保存数据到本地时出错: {str(e)}\n{traceback.format_exc()}")
+            logger.error(f"保存失败: {str(e)}")
             return False
 
     async def close(self) -> None:

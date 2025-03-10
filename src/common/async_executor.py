@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 from src.common.log_manager import LogManager
 
 T = TypeVar('T')
-logger = LogManager.get_logger(name="trading_system")
+logger = LogManager.get_logger(name="async")
+
 
 class AsyncExecutor:
     """Enhanced async executor providing streamlined task management and resource lifecycle control"""
@@ -155,7 +156,7 @@ class AsyncExecutor:
         """
         if not asyncio.iscoroutine(coro):
             raise TypeError(f"Expected coroutine, got {type(coro).__name__}")
-            
+
         try:
             # Get or create event loop
             try:
@@ -174,7 +175,7 @@ class AsyncExecutor:
             # Submit and execute
             return loop.run_until_complete(self.submit(wrapper))
         except Exception as e:
-            self._logger.error(f"Error during execution: {str(e)}", exc_info=True)
+            logger.error(f"Async task failed: {str(e)}", exc_info=True)
             raise
         finally:
             # Don't close the event loop as it might be used elsewhere

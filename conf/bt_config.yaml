@@ -1,162 +1,238 @@
 # config.yaml
+# System Configuration File
+# Version: 0.8.0
 
-# Proxy settings (will be overridden by environment variables if present)
+# ========================
+# Network Configuration
+# ========================
 proxies:
-  http: "http://127.0.0.1:7890"       # HTTP 代理地址
-  https: "http://127.0.0.1:7890"      # HTTPS 代理地址
+  http: "http://127.0.0.1:7890"       # HTTP proxy address
+  https: "http://127.0.0.1:7890"      # HTTPS proxy address
 
-# API settings (will be overridden by environment variables if present)
-api:                                  
+# ========================
+# API Configuration
+# ========================
+api:
   binance:
-    # These API credentials are fallbacks if environment variables aren't present
-    # For production, prefer using environment variables
-    apiKey: "CFTnyAyxA7dKhm51WQk7BWKnkM7WyoX4KuQBzESWwQo73UbH4q3Nbd2bsAkDiWzl"
-    secret: "7STNlR595VAzY4OY5Q3irLXNjl7gvpiVpUDibSPTXWgzTiZM10PXdt6yKz1fi3Ol"
-  timeout: 60000                      # 请求超时时间（毫秒）
-  enableRateLimit: true               # 是否启用 API 限频
+    apiKey: "HbMs2aPHQfPNh097P8SGWl7PpcjyUUk6I4WURcn6SUaTWjJ8SM8jb4tYSZgLFoBX"                     # Exchange API key (fallback)
+    secret: "vVQe126DGUw9BNwSG4gkt9E2DTz1YtiGnP3KzmVWH8AFZJ1SAEsPdOexbuwT68ck"                     # Exchange API secret (fallback)
+    options:
+      adjustForTimeDifference: true   # Auto-adjust server time difference
+      recvWindow: 60000               # Order processing window (ms)
+      defaultType: 'spot'             # Default market type
+  timeout: 60000                      # API request timeout (ms)
+  enableRateLimit: true               # Enable rate limiting
   headers:
-    Connection: "close"               # HTTP 请求头
+    Connection: "close"               # HTTP connection policy
 
-# Use environment variables for sensitive data
-use_env_vars: true                    # 是否优先使用环境变量中的凭据
+# ========================
+# Security Configuration
+# ========================
+security:
+  use_env_vars: true                  # Prioritize environment variables
+  credentials:
+    encryption: "aes-256-cbc"         # Credential encryption method
 
+# ========================
+# Core System Configuration
+# ========================
+system:
+  operational_mode: "backtest"        # backtest/live/paper
+  timezone: "UTC"                     # System timezone
+  performance:
+    max_threads: 4                    # Maximum parallel threads
+    max_memory: 1073741824            # 1GB memory limit
+    task_timeout: 300                 # Asynchronous task timeout (seconds)
+
+# ========================
+# Data Configuration
+# ========================
 data:
-  use_live_data: False                # 是否使用实时数据
-  source_type: "local"
-  paths:
-    historical_data_path: "db/historical/"        # 数据存储路径
-    order_history: "db/order_history.csv"         # 订单历史记录文件路径
-    trade_records: "db/trade_records.json"        # 交易记录文件路径
-    database: "database/trading_data.sqlite"      # 数据库文件路径
+  source:
+    live: false                       # Enable real-time data streaming
+    type: "local"                     # local/exchange data source
+  storage:
+    historical: "db/historical/"      # Historical data directory
+    orders: "db/order_history.csv"    # Order records
+    trades: "db/trade_records.json"   # Trade records
 
-log_paths:
-  backtest_log: "logs/backtest.log"               # 回测日志文件路径
-  live_trading_log: "logs/live_trading.log"       # 实时交易日志文件路径
-  data_fetch_log: "logs/data_fetch.log"           # 数据获取日志文件路径
-  error_log: "logs/error.log"                     # 错误日志文件路径
+# ========================
+# TODO: Database independent configuration
+# ========================
+database:
+  url: "sqlite:///database/trading.sqlite"  # Default SQLite connection
+  pool_size: 5                              # Connection pool size
+  timeout: 30                               # Connection timeout (seconds)
+  echo_sql: false                           # Whether to output SQL logs (for debugging)
 
-default_config:
-  trade_mode: "backtest"                          # 交易模式：backtest 或 live
-  user_config:
-    initial_cash: 100000                          # 初始资金
-    trading_pair: "BTC/USDT"                      # 交易对
-    timeframe: "1m"                               # 时间框架
-    data_limit: 100                               # 数据条数限制
-    max_position: 0.1                             # 最大头寸比例
-    stop_loss_pct: 0.02                           # 止损百分比
-    take_profit_pct: 0.05                         # 止盈百分比
-    min_order_size: 0.001                         # 最小订单量
-    slippage: 0.001                               # 滑点
-    leverage: 1                                   # 杠杆倍数
-  options: 
-      adjustForTimeDifference: true
-      recvWindow: 60000
-      defaultType: 'spot'  # Specify the market type explicitly
-  misc_config:
-    max_retries: 5                                # 最大重试次数
-    retry_delay: 2                                # 重试间隔（秒）
-    timezone: "UTC"                               # 时区设置
-    log_level: "INFO"                             # 日志级别
+# ========================
+# Configuration file validation tag (for ConfigManager)
+# ========================
+validation:
+  required:  # Required field marks
+    - "database.url"
+    - "system.performance.max_threads"
+    - "trading.capital.initial"
 
-strategy:
-  type: "dual_ma"                                  # 策略类型
+# ========================
+# Logging Configuration
+# ========================
+logging:
+  # Directory Structure
+  base_path: "./logs"                 # Root directory for all log files
+  rotation:
+    strategy: "size"                  # Rotation type: size/time
+    max_file_size: 10                 # Max size (MB) per log file 
+    backup_count: 5                   # Number of historical logs to retain
+    time_interval: "D"                # Daily rotation (D=day, H=hour)
+  level: INFO
+  detailed_format: true
 
-# Backtest Configuration
-backtest:
-  mode: full                                      # Options: full, single_pass, walk_forward
-  start_date: "2023-01-01"                        # Backtest start date
-  end_date: "2023-12-31"                          # Backtest end date
-  initial_capital: 100000                         # Initial backtest capital
-  transaction_costs:
-    commission_rate: 0.001                        # 0.1% commission
-    slippage: 0.001                               # 0.1% slippage
-  risk_parameters:
-    max_drawdown: 0.2                             # 20% maximum drawdown
-    daily_loss_limit: 0.05                        # 5% daily loss limit
-
-  symbols:
-    - "BTC/USDT"
-    - "ETH/USDT"
-  timeframe: "1h"                                 # Backtest timeframe
-
-reporting:
-  backtest_reports_dir: "reports/backtest/"
-  output_formats:
-    - csv
-    - json
-    - plot
-
-# Live Trading Configuration
-live_trading:
-
-  # Global Trading Parameters
-  trading_mode: 'spot'  # spot, margin, or futures
-  symbols: 
-    - 'BTC/USDT'
-    - 'ETH/USDT'
-  timeframe: '1m'
+  # Output Configuration
+  format: "%(asctime)s | %(levelname)-8s | %(module)-15s | %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S%z"  # ISO-8601 format
   
-  # Exchange Configuration
-  exchange:
-    name: 'binance'
+  # Log Destinations
+  handlers:
+    file:
+      enabled: true
+      compression: "gz"
+      encoding: "utf-8"
+      buffer:                         # buffer configuration
+        enabled: true
+        capacity: 1000                # Max messages in buffer
+        flush_interval: 5
+    console:
+      enabled: true                   # Enable console output
+      level: "WARNING"                # Console-specific level
+
+  async_write: true                   # Enable non-blocking log writing
+
+  # Module-specific Configuration
+  modules:
+    core:
+      level: "INFO"                   # System core logs
+      path: "system/core.log"
+    execution:
+      level: "DEBUG"                  # Order execution details
+      path: "trading/execution.log"
+    strategy:
+      level: "INFO"                   # Strategy decisions
+      path: "strategies/main.log"
+    risk:
+      level: "WARNING"                # Risk management alerts
+      path: "risk/management.log"
+    data:
+      level: "DEBUG"                  # Data pipeline operations
+      path: "data/pipeline.log"
     api:
-      apiKey: "HbMs2aPHQfPNh097P8SGWl7PpcjyUUk6I4WURcn6SUaTWjJ8SM8jb4tYSZgLFoBX"
-      secret: "vVQe126DGUw9BNwSG4gkt9E2DTz1YtiGnP3KzmVWH8AFZJ1SAEsPdOexbuwT68ck"
-      testnet: false  # Use testnet for safe testing
-    
-    # Rate Limiting and Connection
+      level: "ERROR"                  # API communication
+      path: "network/api.log"
+    errors:
+      level: "CRITICAL"               # Critical system errors
+      path: "errors/system_errors.log"
+  
+  syslog:
+    enabled: false                    # Remote syslog integration
+    host: "logs.example.com"
+    port: 514
+
+# ========================
+# Trading Configuration
+# ========================
+trading:
+  capital:
+    initial: 100000                   # Starting capital (USD)
+    min_order: 0.001                  # Minimum order size
+  instruments:
+    - "BTC/USDT"                      # Primary trading pair
+    - "ETH/USDT"                      # Secondary trading pair
+  execution:
+    slippage: 0.001                   # Default slippage allowance
+    leverage: 1                       # Trading leverage
+  limits:
+    position: 0.1                     # Max portfolio allocation
+    daily_trades: 50                  # Maximum daily trades
+    max_leverage: 10                  # Maximum leverage level
+    min_volume: 0.001                 # alo transaction
+
+# ========================
+# Risk Management
+# ========================
+risk:
+  stop_loss:
+    enabled: true
+    percentage: 0.02                  # Default stop-loss
+    max_daily: 0.05                   # Daily loss limit
+  take_profit:
+    enabled: true
+    percentage: 0.05                  # Default take-profit
+  drawdown:
+    max_portfolio: 0.2                # Maximum allowed drawdown
+    max_single_trade: 0.1             # Per-trade drawdown limit
+
+# ========================
+# Strategy Configuration
+# ========================
+strategy:
+  active: "dual_ma"
+  parameters:
+    fast_period: 50
+    slow_period: 200
+    threshold: 0.005
+  # 新增：多策略支持
+  fallback_strategy: "neural_network"  # Alternate strategy
+
+# ========================
+# Backtesting Configuration
+# ========================
+backtest:
+  mode: "full"                        # full/single_pass/walk_forward
+  period:
+    start: "2023-01-01"               # Backtest start date
+    end: "2023-12-31"                 # Backtest end date
+  costs:
+    commission: 0.001                 # Transaction fee percentage
+    slippage: 0.001                   # Simulated slippage
+  reporting:
+    formats: ["csv", "json", "html"]  # Output formats
+    metrics:                          # Performance metrics
+      - "sharpe_ratio"
+      - "max_drawdown"
+      - "annualized_return"
+
+# ========================
+# Live Trading Configuration
+# ========================
+live:
+  exchange:
+    name: "binance"
+    environment: "production"         # production/testnet
     rate_limits:
-      max_calls_per_second: 20
-      timeout: 30  # Seconds
-    
-    # Advanced Order Configuration
-    order_defaults:
-      type: 'market'  # Default order type
-      slippage_tolerance: 0.001  # 0.1% slippage tolerance
-      max_order_size: 0.1  # Max percentage of total portfolio
-  
-  # Risk Management
-  risk_management:
-    max_portfolio_risk: 0.05  # 5% max portfolio risk
-    max_single_asset_risk: 0.02  # 2% max risk per asset
-    stop_loss:
-      enabled: true
-      threshold: 0.1  # 10% stop loss
-    take_profit:
-      enabled: true
-      threshold: 0.15  # 15% take profit
-  
-  # Performance Monitoring
-  performance_tracking:
+      requests: 20                    # Max calls/second
+      timeout: 30                     # Connection timeout (s)
+  monitoring:
+    interval: 60                      # Performance snapshot interval (s)
     metrics:
-      - portfolio_value
-      - daily_return
-      - drawdown
-    snapshot_frequency: 60  # Seconds
-  
-  # Error Handling and Recovery
-  error_handling:
-    max_retries: 3
-    cooldown_period: 60  # Seconds between retry attempts
-    emergency_stop:
+      - "portfolio_value"
+      - "daily_return"
+      - "position_risk"
+  safeguards:
+    max_retries: 3                    # Error recovery attempts
+    cooldown: 60                      # Retry delay (s)
+    emergency_stop:                   # Circuit breaker
       enabled: true
-      max_daily_loss: 0.1  # 10% max daily loss before emergency stop
-  
-  # Notification System
-  notifications:
-    email:
-      enabled: false
-      recipients: 
-        - '2354889815@qq.com'
-    telegram:
-      enabled: false
-      bot_token: 'YOUR_TELEGRAM_BOT_TOKEN'
-      chat_id: 'YOUR_CHAT_ID'
-    
-  # Logging
-  logging:
-    level: 'INFO'
-    path: 'logs/live_trading/'
-    rotation:
-      max_size: '10 MB'
-      backup_count: 5
+      threshold: 0.1                  # 10% daily loss trigger
+
+# ========================
+# Notification Configuration
+# ========================
+notifications:
+  email:
+    enabled: false
+    recipients:
+      - "2354889815@qq.com"
+  telegram:
+    enabled: false
+    bot_token: "YOUR_BOT_TOKEN"
+    chat_id: "YOUR_CHAT_ID"
