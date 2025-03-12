@@ -42,6 +42,8 @@ tmp/
 database/
 db/
 data/
+*.log
+*.parquet
 
 # 忽略特定配置文件
 
