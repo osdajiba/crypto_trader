@@ -1,4 +1,4 @@
-*.iso
+so
 *.img
 *.zip
 *.tar.gz
@@ -10,7 +10,7 @@
 *.db
 *.sqlite
 
-# 忽略暂存文件和临时文件
+# 忽略临时文件
 *.tmp
 *.bak
 *.swp
@@ -18,11 +18,11 @@
 *.log
 *.lock
 
-# 忽略编译生成的文件
+# 忽略 Python 编译文件
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
-__pycache__/
 
 # 忽略 IDE 自动生成的文件
 .idea/
@@ -36,23 +36,24 @@ __pycache__/
 *.vcxproj.filters
 *.sln.docstates
 
-# 忽略日志文件和数据库文件
+# 忽略日志和数据库目录
 logs/
 tmp/
 database/
 db/
 data/
-reports/
+
+# 忽略特定配置文件
+
+config/config.yaml
+config/autosave/
 
 # 敏感文件
-src\strategy\rotation.py
-src\strategy\factors_lib.py
-src\strategy\Multi_Factors.py
+src/strategy/rotation.py
+src/strategy/factors_lib.py
+src/strategy/Multi_Factors.py
 
-# 本地config
-config/config.yaml
-config/autosave/*
-
-# 忽略其他特定文件
+# 忽略 Git 相关临时文件
 *.gitignore.un~
 *.gitignore~
+
