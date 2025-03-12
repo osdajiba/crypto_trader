@@ -42,8 +42,16 @@ tmp/
 database/
 db/
 data/
+reports/
 
-config/bt_config.yaml
+# 敏感文件
+src\strategy\rotation.py
+src\strategy\factors_lib.py
+src\strategy\Multi_Factors.py
+
+# 本地config
+config/config.yaml
+config/autosave/*
 
 # 忽略其他特定文件
 *.gitignore.un~
