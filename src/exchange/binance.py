@@ -1,5 +1,6 @@
 # src/exchange/binance.py
-
+import platform
+import socket
 import ccxt
 import ccxt.async_support as ccxt_async
 import pandas as pd
@@ -7,30 +8,68 @@ import asyncio
 import time
 import os
 import requests
+import functools
+import concurrent.futures
 from typing import Dict, List, Union, Optional, Any, Tuple
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
+from functools import lru_cache, wraps
+from src.common.config_manager import ConfigManager
 
 from src.common.log_manager import LogManager
 
 logger = LogManager.get_logger("trading_system")
+
+
+def retry_exchange_operation(max_attempts=3, delay_base=1):
+    """
+    Decorator for retrying exchange operations with exponential backoff
+    
+    Args:
+        max_attempts: Maximum number of retry attempts
+        delay_base: Base delay between retries
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except (ccxt.NetworkError, ccxt.ExchangeError) as e:
+                    logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                    last_exception = e
+                    
+                    # Exponential backoff with jitter
+                    delay = delay_base * (2 ** attempt)
+                    time.sleep(delay)
+                except Exception as e:
+                    logger.error(f"Unhandled error: {str(e)}")
+                    raise
+            
+            # If all attempts fail
+            logger.error(f"All attempts failed. Last error: {last_exception}")
+            raise last_exception
+        return wrapper
+    return decorator
+
 
 class Binance:
     """
     High-performance Binance interface with optimized data retrieval and caching
     """
     
-    def __init__(self, config: Dict = None):
+    def __init__(self, config: ConfigManager):
         """
         Initialize Binance interface with configuration
         
         Args:
             config: Configuration dictionary with API credentials and settings
         """
-        self.config = config or {}
+        
+        self.config = config
         
         # Set up cache directory
-        self.cache_dir = self.config.get('data', 'paths', 'historical_data_path', default='data/historical')
+        self.cache_dir = self._safe_get_config('data', 'paths', 'historical_data_path', default='data/historical')
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Extract configuration parameters with safe defaults
@@ -39,10 +78,12 @@ class Binance:
         # Initialize exchange objects
         self.exchange = None
         self.async_exchange = None
+        
+        # Advanced initialization with retry
         self._init_exchange()
         
         # Rate limiting configuration
-        self.rate_limit = self.config.get('api', 'rate_limits', 'max_calls_per_second', default=10) * 60
+        self.rate_limit = self._safe_get_config('api', 'rate_limits', 'max_calls_per_second', default=10) * 60
         self.current_requests = 0
         self.rate_limit_reset = time.time() + 60
         
@@ -60,67 +101,170 @@ class Binance:
         
         logger.info("Binance interface initialized successfully")
     
+    def _init_exchange(self):
+        """
+        Robust exchange initialization with comprehensive error handling and fallback
+        """
+        def check_network_connectivity():
+            """Check basic network connectivity"""
+            try:
+                # Try to ping multiple endpoints
+                endpoints = [
+                    'https://api.binance.com/api/v3/ping',
+                    'https://api1.binance.com/api/v3/ping',
+                    'https://api2.binance.com/api/v3/ping'
+                ]
+                
+                for endpoint in endpoints:
+                    try:
+                        response = requests.get(endpoint, timeout=10)
+                        if response.status_code == 200:
+                            logger.info(f"Network connectivity verified: {endpoint}")
+                            return True
+                    except Exception as e:
+                        logger.warning(f"Endpoint {endpoint} failed: {str(e)}")
+                
+                logger.error("No Binance API endpoints are reachable")
+                return False
+            except Exception as e:
+                logger.error(f"Network connectivity check failed: {str(e)}")
+                return False
+
+        # First, check network connectivity
+        if not check_network_connectivity():
+            logger.critical("No network connectivity to Binance API")
+            raise RuntimeError("Unable to establish network connection to Binance")
+
+        # Try each parameter set
+        try:
+            logger.info(f"Attempting exchange initialization")
+            
+            # Create exchange instance
+            self.exchange = ccxt.binance(self.params)
+            
+            # Attempt to load markets with timeout
+            try:
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(self.exchange.load_markets)
+                    market_data = future.result(timeout=30)
+                
+                # Additional verification
+                if not market_data:
+                    logger.warning(f"No markets loaded in strategy")
+                    self.exchange = None
+                
+                logger.info(f"Successfully initialized exchange with strategy")
+                return
+            
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Market loading timed out in strategy")
+                self.exchange = None
+            
+            except Exception as market_error:
+                logger.warning(f"Market loading failed in strategy: {str(market_error)}")
+                self.exchange = None
+        
+        except (ccxt.NetworkError, ccxt.ExchangeError) as init_error:
+            logger.warning(f"Exchange initialization failed in strategy: {str(init_error)}")
+            self.exchange = None
+        
+        except Exception as unexpected_error:
+            logger.error(f"Unexpected error in strategy: {str(unexpected_error)}")
+            self.exchange = None
+
+        # If all strategies fail
+        error_msg = "Failed to initialize Binance exchange after all attempts. " \
+                    "Check network, API credentials, and proxy settings."
+        logger.critical(error_msg)
+        
+        # Optionally, you can add more diagnostic information
+        import platform
+        import socket
+        
+        logger.info(f"System Information:")
+        logger.info(f"OS: {platform.platform()}")
+        logger.info(f"Python Version: {platform.python_version()}")
+        try:
+            logger.info(f"Hostname: {socket.gethostname()}")
+            logger.info(f"IP Address: {socket.gethostbyname(socket.gethostname())}")
+        except Exception:
+            pass
+
+        raise RuntimeError(error_msg)
+
+    def _safe_get_config(self, *keys, default=None):
+        """
+        Safely retrieve a value from nested dictionaries
+        
+        Args:
+            *keys: The keys to navigate through
+            default: Default value if key doesn't exist
+            
+        Returns:
+            Value or default
+        """
+        current = self.config
+        for key in keys:
+            if isinstance(current, dict) and key in current:
+                current = current[key]
+            else:
+                return default
+        return current
+    
     def _build_params(self) -> Dict:
         """
-        Build CCXT parameters from configuration
-
+        Build CCXT parameters from configuration with enhanced security
+        
         Returns:
         Dictionary of CCXT parameters
         """
-        # Extract API credentials safely
-        api_key = self.config.get('api', 'binance', 'apiKey')
-        api_secret = self.config.get('api', 'binance', 'secret')
 
-        # Basic parameters
         params = {
-            'timeout': self.config.get('api', 'timeout', default=30000),
-            'enableRateLimit': self.config.get('api', 'enableRateLimit', default=True),
+            'apiKey': self._safe_get_config('api', 'binance', 'apiKey', default=''),
+            'secret': self._safe_get_config('api', 'binance', 'secret', default=''),
+            'timeout': self._safe_get_config('api', 'timeout', default=30000),
+            'enableRateLimit': self._safe_get_config('api', 'enableRateLimit', default=True),
             'options': {
-            'adjustForTimeDifference': self.config.get(
-            'default_config', 'options', 'adjustForTimeDifference', default=True),
-            'recvWindow': self.config.get(
-            'default_config', 'options', 'recvWindow', default=60000),
-            'defaultType': self.config.get(
-            'default_config', 'options', 'defaultType', default='spot')
+                'adjustForTimeDifference': self._safe_get_config(
+                    'default_config', 'options', 'adjustForTimeDifference', default=True),
+                'recvWindow': self._safe_get_config(
+                    'default_config', 'options', 'recvWindow', default=60000),
+                'defaultType': self._safe_get_config(
+                    'default_config', 'options', 'defaultType', default='spot')
             },
             'proxies': {
-                'http': self.config.get('proxies', 'http'),
-                'https': self.config.get('proxies', 'https')                
+                'http': self._safe_get_config('proxies', 'http', default="http://127.0.0.1:7890"), 
+                'https': self._safe_get_config('proxies', 'https', default="http://127.0.0.1:7890")
             }
         }
 
-        # Add API credentials if provided
-        if api_key and api_secret:
-            params['apiKey'] = api_key
-            params['secret'] = api_secret
-
         return params
     
-    def _init_exchange(self) -> None:
-        """Initialize the synchronous exchange connection"""
+    def _validate_proxy(self, proxy: str) -> bool:
+        """
+        Validate proxy configuration
+        
+        Args:
+            proxy: Proxy URL to validate
+        
+        Returns:
+            Boolean indicating proxy validity
+        """
         try:
-            # Try with configured parameters
-            self.exchange = ccxt.binance(self.params)
-            logger.info("CCXT Binance exchange initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize Binance exchange: {str(e)}")
+            # Basic proxy URL validation
+            if not proxy.startswith(('http://', 'https://')):
+                logger.warning(f"Invalid proxy format: {proxy}")
+                return False
             
-            # Try with minimal parameters as fallback
-            try:
-                minimal_params = {
-                    'timeout': 30000,
-                    'enableRateLimit': True
-                }
-                # Add proxies if configured
-                if 'proxies' in self.params:
-                    minimal_params['proxies'] = self.params['proxies']
-                
-                self.exchange = ccxt.binance(minimal_params)
-                logger.info("CCXT Binance exchange initialized with minimal parameters")
-            except Exception as e2:
-                logger.error(f"Fallback initialization also failed: {str(e2)}")
-                self.exchange = None
-    
+            # Optional: Add actual proxy connectivity test
+            requests.get('https://api.binance.com/api/v3/ping', 
+                         proxies={'http': proxy, 'https': proxy}, 
+                         timeout=5)
+            return True
+        except Exception as e:
+            logger.warning(f"Proxy validation failed: {str(e)}")
+            return False
+
     async def _init_async_exchange(self) -> None:
         """Initialize the asynchronous exchange connection (lazy initialization)"""
         if self.async_exchange is not None:
@@ -141,7 +285,15 @@ class Binance:
             Latency in milliseconds
         """
         try:
-            proxies = self._nested_get(self.config, ['proxies'])
+            proxies = {}
+            http_proxy = self._safe_get_config('proxies', 'http')
+            https_proxy = self._safe_get_config('proxies', 'https')
+            
+            if http_proxy:
+                proxies['http'] = http_proxy
+            if https_proxy:
+                proxies['https'] = https_proxy
+                
             test_url = "https://api.binance.com/api/v3/ping"
             
             start_time = time.time()
@@ -203,7 +355,7 @@ class Binance:
         
         # Increment the request counter
         self.current_requests += 1
-    
+
     async def _async_handle_rate_limit(self) -> None:
         """
         Handle rate limiting for asynchronous API requests
@@ -249,6 +401,9 @@ class Binance:
             
             # Convert timestamp to datetime with UTC timezone
             df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+            
+            # Sort by timestamp to ensure data is in chronological order
+            df = df.sort_values('timestamp')
             
             # Set datetime as index
             df.set_index('datetime', inplace=True)
@@ -552,12 +707,12 @@ class Binance:
             current_start = current_end
         
         return chunks
-    
+
     async def fetch_historical_ohlcv(self, 
-                                   symbol: str, 
-                                   timeframe: str = '1h',
-                                   start_date: Optional[Union[str, datetime]] = None,
-                                   end_date: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
+                                symbol: str, 
+                                timeframe: str = '1h',
+                                start_date: Optional[Union[str, datetime]] = None,
+                                end_date: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
         """
         Fetch historical OHLCV data with optimized performance
         
@@ -603,44 +758,81 @@ class Binance:
             current_latency = self._measure_latency()
             delay_between_chunks = max(0.5, min(2.0, current_latency / 1000 * 2))
             
-            # Process each chunk
+            # Pre-check if the exchange is properly loaded and markets are available
+            try:
+                if not hasattr(self.exchange, 'markets') or not self.exchange.markets:
+                    logger.info("Loading markets before fetching OHLCV data")
+                    self.exchange.load_markets()
+            except Exception as e:
+                logger.warning(f"Failed to load markets: {str(e)}. Continuing anyway...")
+            
+            # Process each chunk with improved error handling
             for i, (chunk_start, chunk_end) in enumerate(chunks):
-                try:
-                    # Handle rate limiting
-                    self._handle_rate_limit()
-                    
-                    # Convert to millisecond timestamp
-                    chunk_since = int(chunk_start.timestamp() * 1000)
-                    
-                    # Log for first chunk or every 5th chunk to reduce log noise
-                    if i == 0 or i % 5 == 0:
-                        logger.info(f"Fetching chunk {i+1}/{len(chunks)}: {chunk_start} to {chunk_end}")
-                    
-                    # Fetch the chunk
-                    ohlcv = self.exchange.fetch_ohlcv(
-                        symbol=symbol, 
-                        timeframe=timeframe, 
-                        since=chunk_since,
-                        limit=self.download_chunk_size
-                    )
-                    
-                    chunks_processed += 1
-                    
-                    # Check if we got data
-                    if not ohlcv or len(ohlcv) == 0:
-                        logger.debug(f"No data returned for chunk {i+1}")
-                        continue
-                    
-                    # Add data to accumulated list
-                    all_data.extend(ohlcv)
-                    chunks_successful += 1
-                    
-                    # Short delay between chunks, adjusted based on measured latency
-                    await asyncio.sleep(delay_between_chunks)
-                    
-                except Exception as e:
-                    logger.error(f"Error fetching chunk {i+1}: {str(e)}")
-                    await asyncio.sleep(self.retry_delay)
+                for retry in range(self.max_retry_attempts):
+                    try:
+                        # Handle rate limiting
+                        await self._async_handle_rate_limit()
+                        
+                        # Convert to millisecond timestamp
+                        chunk_since = int(chunk_start.timestamp() * 1000)
+                        
+                        # Log for first chunk or every 5th chunk to reduce log noise
+                        if i == 0 or i % 5 == 0:
+                            logger.info(f"Fetching chunk {i+1}/{len(chunks)}: {chunk_start} to {chunk_end}")
+                        
+                        # Fetch the chunk with more explicit parameters
+                        self.async_exchange = self._init_async_exchange()
+                        ohlcv = await self.async_exchange.fetch_ohlcv(
+                            symbol=symbol, 
+                            timeframe=timeframe, 
+                            since=chunk_since,
+                            limit=self.download_chunk_size,
+                            params={"endTime": int(chunk_end.timestamp() * 1000)}
+                        )
+                        
+                        chunks_processed += 1
+                        
+                        # Check if we got data
+                        if not ohlcv or len(ohlcv) == 0:
+                            logger.debug(f"No data returned for chunk {i+1}")
+                            break  # No need to retry, just move to next chunk
+                        
+                        # Add data to accumulated list
+                        all_data.extend(ohlcv)
+                        chunks_successful += 1
+                        
+                        # Short delay between chunks, adjusted based on measured latency
+                        await asyncio.sleep(delay_between_chunks)
+                        
+                        # Successful fetch, break retry loop
+                        break
+                        
+                    except ccxt.RateLimitExceeded as e:
+                        logger.warning(f"Rate limit exceeded on chunk {i+1} (attempt {retry+1}): {str(e)}")
+                        # Exponential backoff for rate limit errors
+                        await asyncio.sleep(self.retry_delay * (2 ** retry))
+                        
+                    except ccxt.NetworkError as e:
+                        logger.warning(f"Network error on chunk {i+1} (attempt {retry+1}): {str(e)}")
+                        await asyncio.sleep(self.retry_delay)
+                        
+                    except Exception as e:
+                        error_message = str(e)
+                        logger.error(f"Error fetching chunk {i+1} (attempt {retry+1}): {error_message}")
+                        
+                        # Specific handling for common error types
+                        if "exchangeInfo" in error_message:
+                            logger.info("Attempting to refresh exchange info...")
+                            try:
+                                self.exchange.load_markets(reload=True)
+                                logger.info("Successfully refreshed exchange info")
+                            except Exception as refresh_error:
+                                logger.warning(f"Failed to refresh exchange info: {str(refresh_error)}")
+                        
+                        # Wait before retry with progressive backoff
+                        await asyncio.sleep(self.retry_delay * (retry + 1))
+                
+                # If we've tried all retries for this chunk, continue to the next chunk
             
             # Process all data
             if not all_data:
@@ -666,7 +858,7 @@ class Binance:
         except Exception as e:
             logger.error(f"Failed to fetch historical data for {symbol}: {str(e)}")
             return pd.DataFrame()
-    
+
     def _get_from_cache(self, symbol: str, timeframe: str, 
                        start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
         """
@@ -713,6 +905,9 @@ class Binance:
             # Set datetime as index
             df.set_index('datetime', inplace=True)
             
+            # Sort to ensure order is correct
+            df = df.sort_index()
+            
             # Filter by requested date range
             filtered_df = df[(df.index >= start_dt) & (df.index <= end_dt)]
             
@@ -742,40 +937,34 @@ class Binance:
         except Exception as e:
             logger.warning(f"Error reading from cache: {str(e)}")
             return pd.DataFrame()
-
-
+    
     def _save_to_cache(self, df: pd.DataFrame, symbol: str, timeframe: str) -> None:
-        # 修改缓存存储结构
-        def get_cache_path(ts: pd.Timestamp) -> str:
-            return os.path.join(
-                self.cache_dir,
-                timeframe,
-                symbol.replace('/', '_'),
-                f"{ts.year:04d}",
-                f"{ts.month:02d}",
-                f"{ts.timestamp():.0f}_{(ts + pd.Timedelta(hours=1)).timestamp():.0f}.parquet"
-            )
-
+        """
+        Save data to cache
+        
+        Args:
+            df: DataFrame to save
+            symbol: Trading pair symbol
+            timeframe: Timeframe
+        """
         try:
-            # 按小时分片存储
-            for ts, group in df.groupby(pd.Grouper(freq='H')):
-                if group.empty:
-                    continue
-                    
-                file_path = get_cache_path(ts)
-                os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                
-                # 使用Parquet格式
-                group.to_parquet(
-                    file_path,
-                    engine='pyarrow',
-                    compression='zstd',
-                    index=True
-                )
-                
-        except Exception as e:
-            logger.warning(f"缓存保存失败: {str(e)}")
+            # Ensure DataFrame is sorted
+            df = df.sort_index()
             
+            # Create cache path
+            safe_symbol = symbol.replace('/', '_')
+            cache_file = os.path.join(self.cache_dir, f"{safe_symbol}_{timeframe}.csv")
+            
+            # Create parent directory if it doesn't exist
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            
+            # Save to CSV
+            df.to_csv(cache_file)
+            logger.info(f"Saved {len(df)} records to cache for {symbol} {timeframe}")
+            
+        except Exception as e:
+            logger.warning(f"Error saving to cache: {str(e)}")
+    
     async def fetch_historical(self, symbol: str, timeframe: str, 
                            start: Optional[Union[str, datetime]] = None,
                            end: Optional[Union[str, datetime]] = None,

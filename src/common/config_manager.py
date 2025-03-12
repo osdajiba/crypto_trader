@@ -1,4 +1,4 @@
-# # src/common/config_manager.py
+# src/common/config_manager.py
 
 from datetime import datetime, timedelta
 import os
@@ -11,28 +11,28 @@ import copy
 from abc import ABC, abstractmethod
 
 class ConfigValidationError(Exception):
-    """配置验证错误异常"""
+    """Configuration validation error exception"""
     pass
 
 class ConfigLoadError(Exception):
-    """配置加载错误异常"""
+    """Configuration loading error exception"""
     pass
 
 class ConfigBackend(ABC):
-    """配置后端抽象基类"""
+    """Abstract base class for configuration backends"""
     
     @abstractmethod
     def load(self, path: Path) -> Dict[str, Any]:
-        """从指定路径加载配置"""
+        """Load configuration from specified path"""
         pass
     
     @abstractmethod
     def save(self, config: Dict[str, Any], path: Path) -> None:
-        """将配置保存到指定路径"""
+        """Save configuration to specified path"""
         pass
 
 class JsonConfigBackend(ConfigBackend):
-    """JSON配置后端"""
+    """JSON configuration backend"""
     
     def load(self, path: Path) -> Dict[str, Any]:
         try:
@@ -51,7 +51,7 @@ class JsonConfigBackend(ConfigBackend):
             raise ConfigLoadError(f"Error saving config to {path}: {str(e)}")
 
 class YamlConfigBackend(ConfigBackend):
-    """YAML配置后端"""
+    """YAML configuration backend"""
     
     def load(self, path: Path) -> Dict[str, Any]:
         try:
@@ -71,31 +71,84 @@ class YamlConfigBackend(ConfigBackend):
 
 class ConfigManager:
     """
-    增强的配置管理器，具有严格验证和一致的默认处理
-    将加载逻辑与重试和验证逻辑分离
+    Enhanced configuration manager with strict validation and consistent default handling
+    Decoupled loading logic with retry and validation mechanisms
     """
     
     _DEFAULT_CONFIG = {
         'api': {
             'base_url': 'https://api.example.com',
-            'timeout': 30,
+            'timeout': 60000,                    # Updated to match YAML (in milliseconds)
             'retry_attempts': 3,
-            'retry_delay': 1.0
+            'retry_delay': 1.0,                  # In seconds, matches YAML
+            'enable_rate_limit': True,           # Added from YAML
+            'binance': {                         # Added exchange-specific settings
+                'api_key': '',
+                'secret': 'YOUR_SECRET_KEY',
+                'options': {
+                    'adjust_time_diff': True,
+                    'recv_window': 60000,        # In milliseconds
+                    'default_type': 'spot'
+                }
+            },
+            'headers': {
+                'connection': 'close'
+            }
         },
         'data': {
-            'cache_dir': './cache',
-            'max_cache_size': 1024 * 1024 * 100,  # 100 MB
-            'retention_days': 30
+            'source': {
+                'live': False,
+                'type': 'local'
+            },
+            'storage': {
+                'historical': 'data/historical/',
+                'orders': 'data/order_history.csv',
+                'trades': 'data/trade_records.json'
+            },
+            'cache': {
+                'dir': './cache',                # Matches original key 'cache_dir'
+                'max_size': 104857600,           # Updated to 100 MB (100 * 1024 * 1024 bytes)
+                'retention_days': 30
+            }
         },
         'logging': {
+            'base_path': './logs',               # Updated from 'file_path' to match YAML
             'level': 'INFO',
-            'file_path': './logs', 
-            'max_file_size': 10 * 1024 * 1024,  # 10 MB
-            'backup_count': 5
+            'async_write': True,                 # Added from YAML
+            'format': '%(asctime)s | %(levelname)-8s | %(module)-15s | %(message)s',
+            'date_format': '%Y-%m-%d %H:%M:%S%z',  # ISO-8601 format from YAML
+            'detailed_format': True,             # Added from YAML
+            'rotation': {
+                'strategy': 'size',
+                'max_file_size': 10485760,       # Updated to 10 MB (10 * 1024 * 1024 bytes)
+                'backup_count': 5,
+                'time_interval': 'D'             # Added for completeness, though strategy is size-based
+            },
+            'handlers': {
+                'console': {
+                    'enabled': True,
+                    'level': 'WARNING'
+                },
+                'file': {
+                    'enabled': True,
+                    'compression': 'gz',
+                    'encoding': 'utf-8',
+                    'buffer': {
+                        'enabled': True,
+                        'capacity': 1000,
+                        'flush_interval': 5      # In seconds
+                    }
+                }
+            }
         },
         'system': {
-            'max_threads': 4,
-            'max_memory': 1024 * 1024 * 1024  # 1 GB
+            'operational_mode': 'backtest',      # Added from YAML
+            'timezone': 'UTC',                   # Added from YAML
+            'performance': {                     # Nested under 'performance' in YAML
+                'max_threads': 4,
+                'max_memory': 1073741824,        # Updated to 1 GB (1 * 1024 * 1024 * 1024 bytes)
+                'task_timeout': 300              # In seconds
+            }
         }
     }
     
@@ -110,47 +163,24 @@ class ConfigManager:
         self._config = copy.deepcopy(self._DEFAULT_CONFIG)
         self._config_path = Path(config_path) if config_path else None
         
-        # 初始化运行时日期上下文
+        # Initialize runtime date context
         self._runtime_date = datetime.now().date()
-        self._init_dynamic_paths()
-        
-        if self._config_path and self._config_path.exists():
-            self.load()
-    
-    def _init_dynamic_paths(self):
-        """初始化动态路径并确保目录存在"""
-        # 生成日期目录格式：MMDDYYYY
-        date_str = self._runtime_date.strftime("%m%d%Y")
-        
-        # 动态更新日志路径
-        base_log_path = Path(self._config['logging']['file_path'])
-        dynamic_log_path = base_log_path / date_str
-        
-        # 保留原始路径用于后续参考
-        self._config['logging']['base_path'] = str(base_log_path)
-        self._config['logging']['file_path'] = str(dynamic_log_path)
-        
-        # 确保目录存在
-        dynamic_log_path.mkdir(parents=True, exist_ok=True)
-        
-        # 每天0点10分检查日期变更（避免午夜立即切换）
-        self._next_date_check = datetime.now() + timedelta(hours=0, minutes=10)
+        self.load()
     
     def _check_date_rollover(self):
-        """检查是否需要滚动日期目录"""
+        """Check if date directory needs rotation"""
         if datetime.now() > self._next_date_check:
             current_date = datetime.now().date()
             if current_date != self._runtime_date:
-                self._logger.info("检测到日期变更，重新初始化路径")
+                self._logger.info("Date change detected, reinitializing paths")
                 self._runtime_date = current_date
-                self._init_dynamic_paths()
-            # 下次检查时间设置为次日0点10分
+            # Schedule next check for next day 00:10
             self._next_date_check = datetime.now().replace(
                 hour=0, minute=10, second=0
             ) + timedelta(days=1)
     
     def get_log_path(self) -> Path:
-        """获取当前日志目录（带日期检查）"""
+        """Get current log directory (with date check)"""
         self._check_date_rollover()
         return Path(self._config['logging']['file_path'])
 
@@ -162,26 +192,18 @@ class ConfigManager:
         ]
         for section, key in required_keys:
             if not self.get(section, key):
-                raise ValueError(f"配置缺失: {section}.{key}")
-    # 修改保存方法以使用动态路径
-    def save(self, path: Optional[Union[str, Path]] = None) -> None:
-        """保存配置时自动使用原始基础路径"""
-        if not path and self._config_path:
-            # 使用原始配置路径，不带日期后缀
-            path = Path(self._config['logging']['base_path']) / "config.yaml"
-        
-        super().save(path)
+                raise ValueError(f"Missing configuration: {section}.{key}")
     
     def load(self, path: Optional[Union[str, Path]] = None) -> None:
         """
-        从文件加载配置
+        Load configuration from file
         
         Args:
-            path: 配置文件路径（可选，如果未提供则使用初始化时的路径）
+            path: Configuration file path (optional, uses initialized path if not provided)
             
         Raises:
-            ConfigLoadError: 如果配置无法加载
-            ConfigValidationError: 如果配置无效
+            ConfigLoadError: If configuration cannot be loaded
+            ConfigValidationError: If configuration is invalid
         """
         if path:
             self._config_path = Path(path)
@@ -192,7 +214,7 @@ class ConfigManager:
         if not self._config_path.exists():
             raise ConfigLoadError(f"Configuration file not found: {self._config_path}")
         
-        # 根据文件扩展名确定适当的后端
+        # Determine backend based on file extension
         extension = self._config_path.suffix.lower()
         backend = self._BACKENDS.get(extension)
         
@@ -206,17 +228,16 @@ class ConfigManager:
             self._validate_config_structure()
             self._logger.info(f"Configuration loaded from {self._config_path}")
         except ConfigLoadError:
-            # 重新抛出加载错误
             raise
         except Exception as e:
             raise ConfigLoadError(f"Error processing configuration from {self._config_path}: {str(e)}")
     
     def _merge_config(self, loaded_config: Dict[str, Any]) -> None:
         """
-        将加载的配置与默认值合并，保留结构
+        Merge loaded configuration with defaults while preserving structure
         
         Args:
-            loaded_config: 要合并的加载配置
+            loaded_config: Loaded configuration to merge
         """
         def deep_merge(target, source):
             for key, value in source.items():
@@ -225,23 +246,22 @@ class ConfigManager:
                 else:
                     target[key] = value
         
-        # 从默认值的新副本开始
+        # Start with fresh default copy
         merged_config = copy.deepcopy(self._DEFAULT_CONFIG)
         
-        # 深度合并加载的配置
+        # Deep merge configurations
         deep_merge(merged_config, loaded_config)
         
-        # 用合并结果替换当前配置
+        # Update current config
         self._config = merged_config
     
     def _validate_config_structure(self) -> None:
         """
-        改进的配置验证，具有严格的架构检查
+        Enhanced configuration validation with strict schema checking
         
         Raises:
-            ConfigValidationError: 如果配置不符合预期架构
+            ConfigValidationError: If configuration doesn't match expected schema
         """
-        # 定义完整的配置架构，包含类型和要求信息
         schema = {
             'api': {
                 'required': True,
@@ -286,30 +306,27 @@ class ConfigManager:
     
     def _validate_against_schema(self, config: Dict[str, Any], schema: Dict[str, Any], path: str = "") -> None:
         """
-        根据提供的架构验证配置
+        Validate configuration against schema
         
         Args:
-            config: 要验证的配置
-            schema: 要验证的架构
-            path: 配置结构中的当前路径，用于错误报告
+            config: Configuration to validate
+            schema: Schema to validate against
+            path: Current path in configuration structure for error reporting
             
         Raises:
-            ConfigValidationError: 如果配置不符合架构
+            ConfigValidationError: If configuration doesn't match schema
         """
         for key, spec in schema.items():
             current_path = f"{path}.{key}" if path else key
             
-            # 检查是否存在必需的键
             if spec.get('required', False) and key not in config:
                 raise ConfigValidationError(f"Missing required configuration key: {current_path}")
             
-            # 如果键不存在且不是必需的，则跳过验证
             if key not in config:
                 continue
             
             value = config[key]
             
-            # 验证类型
             expected_type = spec.get('type')
             if expected_type and not isinstance(value, expected_type):
                 type_names = [t.__name__ for t in (expected_type if isinstance(expected_type, tuple) else (expected_type,))]
@@ -317,80 +334,67 @@ class ConfigManager:
                     f"Invalid type for {current_path}: expected {' or '.join(type_names)}, got {type(value).__name__}"
                 )
             
-            # 验证最小值
             if 'min' in spec and value < spec['min']:
                 raise ConfigValidationError(
                     f"Value for {current_path} is too small: minimum is {spec['min']}, got {value}"
                 )
             
-            # 验证最大值
             if 'max' in spec and value > spec['max']:
                 raise ConfigValidationError(
                     f"Value for {current_path} is too large: maximum is {spec['max']}, got {value}"
                 )
             
-            # 验证值是否在允许的集合中
             if 'values' in spec and value not in spec['values']:
                 raise ConfigValidationError(
                     f"Invalid value for {current_path}: must be one of {spec['values']}, got {value}"
                 )
             
-            # 递归验证嵌套字典
             if isinstance(value, dict) and 'children' in spec:
                 self._validate_against_schema(value, spec['children'], current_path)
     
     def get(self, *keys: str, default: Any = None) -> Any:
         """
-        安全获取多层嵌套配置值
+        Safely retrieve nested configuration values
         
         Args:
-            *keys: 配置键路径
-            default: 找不到时的默认值
+            *keys: Configuration key path
+            default: Default value if not found
             
         Returns:
-            配置值或默认值
-            
-        Raises:
-            无（静默返回默认值）
+            Configuration value or default
         """
-        current_level = self._config  # 初始化为整个配置字典
+        current_level = self._config
         
         for key in keys:
-            # 类型安全校验
             if not isinstance(current_level, dict):
                 return default
                 
-            # 键存在性校验
             if key not in current_level:
                 return default
                 
-            # 深入下一层级
             current_level = current_level[key]
         
         return current_level
-    # Fix for config_manager.py set method
-
+    
     def set(self, *keys: str, value: Any = None) -> None:
         """
-        Set a configuration value
+        Set configuration value
         
         Args:
             *keys: Configuration key path
             value: Value to set
             
         Raises:
-            ValueError: If the key path is invalid
+            ValueError: If key path is invalid
         """
         if not keys:
             raise ValueError("No keys provided")
         
-        # If value is None and there are at least 2 args, the last arg might be the value
         if value is None and len(keys) > 1:
             keys, value = keys[:-1], keys[-1]
         
         config = self._config
         
-        # Navigate to the last key's parent
         for key in keys[:-1]:
             if key not in config:
                 config[key] = {}
@@ -399,18 +403,17 @@ class ConfigManager:
             
             config = config[key]
         
-        # Set the value at the last key
         config[keys[-1]] = value
     
     def save(self, path: Optional[Union[str, Path]] = None) -> None:
         """
-        将配置保存到文件
+        Save configuration to file
         
         Args:
-            path: 保存配置的路径（可选，如果未提供则使用当前路径）
+            path: Path to save configuration (optional, uses current path if not provided)
             
         Raises:
-            ConfigLoadError: 如果配置无法保存
+            ConfigLoadError: If configuration cannot be saved
         """
         if path:
             save_path = Path(path)
@@ -419,10 +422,8 @@ class ConfigManager:
         else:
             raise ConfigLoadError("No configuration path specified for saving")
         
-        # 创建父目录（如果不存在）
         save_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # 根据文件扩展名确定适当的后端
         extension = save_path.suffix.lower()
         backend = self._BACKENDS.get(extension)
         
@@ -438,26 +439,26 @@ class ConfigManager:
     
     def get_all(self) -> Dict[str, Any]:
         """
-        获取整个配置的深拷贝
+        Get deep copy of entire configuration
         
         Returns:
-            配置的深拷贝
+            Deep copy of configuration
         """
         return copy.deepcopy(self._config)
     
     def update(self, new_config: Dict[str, Any]) -> None:
         """
-        使用新配置更新当前配置
+        Update configuration with new values
         
         Args:
-            new_config: 更新配置的新值
+            new_config: New configuration values
             
         Raises:
-            ConfigValidationError: 如果更新后的配置无效
+            ConfigValidationError: If updated configuration is invalid
         """
         self._merge_config(new_config)
         self._validate_config_structure()
     
     def reset(self) -> None:
-        """重置为默认配置"""
+        """Reset to default configuration"""
         self._config = copy.deepcopy(self._DEFAULT_CONFIG)

@@ -6,6 +6,8 @@ from datetime import datetime
 
 from src.mode.base_trading_mode import BaseTradingMode
 from src.execution.execution_engine import ExecutionEngine
+from src.risk.risk_manager import BacktestRiskManager
+from src.backtest.performance_monitor import PerformanceMonitor
 
 
 class BacktestTradingMode(BaseTradingMode):
@@ -21,12 +23,25 @@ class BacktestTradingMode(BaseTradingMode):
             mode="backtest"
         )
         
+        # Initialize risk manager
+        if not self.risk_manager or not isinstance(self.risk_manager, BacktestRiskManager):
+            self.risk_manager = BacktestRiskManager(config=self.config)
+            await self.risk_manager.initialize()
+        
         # Get strategy information from config
         strategy_name = self.config.get("strategy", "active", default='dual_ma')
         strategy_params = self.config.get("strategy", "parameters", default={})
         
         # Create strategy instance
         self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
+        
+        # Initialize performance monitoring
+        if not self.performance_monitor:
+            initial_capital = self.config.get("trading", "capital", "initial", default=100000)
+            self.performance_monitor = PerformanceMonitor(
+                config=self.config,
+                initial_balance=initial_capital
+            )
         
         # Mark as initialization complete
         self._running = True
@@ -41,8 +56,23 @@ class BacktestTradingMode(BaseTradingMode):
             timeframe: Time period
         """
         # Initialize backtest parameters from config
-        self.start_date = self.config.get("backtest", "start_date")
-        self.end_date = self.config.get("backtest", "end_date")
+        self.start_date = self.config.get("backtest", "period", "start", default=None)
+        self.end_date = self.config.get("backtest", "period", "end", default=None)
+        
+        # If not specified in backtest section, try trading section
+        if not self.start_date:
+            self.start_date = self.config.get("trading", "backtest_start", default=None)
+        
+        if not self.end_date:
+            self.end_date = self.config.get("trading", "backtest_end", default=None)
+        
+        # If still None, use reasonable defaults (last 30 days)
+        if not self.start_date:
+            end = datetime.now()
+            start = end.replace(day=1)  # Start of current month
+            self.start_date = start.strftime("%Y-%m-%d")
+            self.end_date = end.strftime("%Y-%m-%d")
+            self.logger.info(f"Using default date range: {self.start_date} to {self.end_date}")
         
         # Load historical data
         self.historical_data = await self._load_historical_data(symbols, timeframe)
@@ -52,6 +82,10 @@ class BacktestTradingMode(BaseTradingMode):
         # Get timestamps from historical data
         self.timestamps = self._get_combined_timestamps(self.historical_data)
         self.logger.info(f"Backtest contains {len(self.timestamps)} time periods")
+        
+        # Set execution engine's historical data
+        if self.execution_engine:
+            self.execution_engine.set_historical_data(self.historical_data)
     
     async def _load_historical_data(self, symbols: List[str], timeframe: str) -> Dict[str, pd.DataFrame]:
         """
@@ -99,9 +133,13 @@ class BacktestTradingMode(BaseTradingMode):
         all_timestamps = []
         
         for df in data_map.values():
+            # Use 'datetime' column if available, otherwise try index
             if 'datetime' in df.columns:
                 all_timestamps.extend(df['datetime'].tolist())
+            elif isinstance(df.index, pd.DatetimeIndex):
+                all_timestamps.extend(df.index.tolist())
         
+        # Sort timestamps and remove duplicates
         return sorted(set(all_timestamps))
     
     def _get_data_at_timestamp(self, timestamp) -> Dict[str, pd.DataFrame]:
@@ -117,10 +155,20 @@ class BacktestTradingMode(BaseTradingMode):
         result = {}
         
         for symbol, df in self.historical_data.items():
+            # Get data at the specific timestamp
             if 'datetime' in df.columns:
                 data_at_timestamp = df[df['datetime'] == timestamp]
                 if not data_at_timestamp.empty:
                     result[symbol] = data_at_timestamp
+            elif isinstance(df.index, pd.DatetimeIndex):
+                try:
+                    # Try to get exact timestamp match from index
+                    data_at_timestamp = df.loc[[timestamp]]
+                    if not data_at_timestamp.empty:
+                        result[symbol] = data_at_timestamp
+                except KeyError:
+                    # No exact match - try the nearest timestamp if needed
+                    pass
         
         return result
     
@@ -138,22 +186,46 @@ class BacktestTradingMode(BaseTradingMode):
         try:
             # Main backtest loop
             for i, timestamp in enumerate(self.timestamps):
-                if i % 100 == 0:  # Log progress periodically
+                if i % 100 == 0 or i == 0:  # Log progress periodically
                     self.logger.info(f"Backtest progress: {i}/{len(self.timestamps)}")
                 
                 # Get data for current timestamp
                 current_data = self._get_data_at_timestamp(timestamp)
                 
-                # Process this data point
-                await self._process_market_data(current_data)
+                # Update current timestamp
+                self.state['timestamp'] = timestamp
                 
-                # Check if should continue
+                # Process this data point
+                trades = await self._process_market_data(current_data)
+                
+                # Update performance monitor with current state
+                if trades and self.performance_monitor:
+                    for trade in trades:
+                        self.performance_monitor.record_trade(
+                            timestamp=trade.get('timestamp', timestamp),
+                            symbol=trade.get('symbol', ''),
+                            direction=trade.get('action', ''),
+                            entry_price=trade.get('price', 0),
+                            exit_price=trade.get('price', 0),
+                            quantity=trade.get('quantity', 0),
+                            commission=trade.get('commission', 0)
+                        )
+                
+                # Update equity curve
+                current_balance = self._calculate_equity()
+                if self.performance_monitor:
+                    self.performance_monitor.update_equity_curve(timestamp, current_balance)
+                
+                # Check risk breach status
                 if not self._should_continue():
                     self.logger.info("Stopping backtest due to risk breach or user request")
                     break
             
-            # Return default report structure
-            return {}
+            # Generate report
+            self.performance_monitor.calculate_performance_metrics()
+            report = self.performance_monitor.generate_detailed_report()
+            
+            return report
             
         except Exception as e:
             self.logger.error(f"Backtest execution error: {e}", exc_info=True)
@@ -168,13 +240,13 @@ class BacktestTradingMode(BaseTradingMode):
         """
         # Add backtest parameters
         report['backtest_params'] = {
-            'symbols': self.config.get("backtest", "symbols", default=[]),
-            'timeframe': self.config.get("backtest", "timeframe", default=""),
+            'symbols': self.config.get("trading", "instruments", default=[]),
+            'timeframe': self.config.get("data", "default_timeframe", default="1h"),
             'start_date': self.start_date,
             'end_date': self.end_date,
             'transaction_costs': {
-                'commission_rate': self.config.get("backtest", "transaction_costs", "commission_rate", default=0.001),
-                'slippage': self.config.get("backtest", "transaction_costs", "slippage", default=0.001)
+                'commission_rate': self.config.get("trading", "execution", "commission", default=0.001),
+                'slippage': self.config.get("trading", "execution", "slippage", default=0.001)
             }
         }
         
@@ -191,6 +263,9 @@ class BacktestTradingMode(BaseTradingMode):
         
         if hasattr(self, 'execution_engine') and self.execution_engine:
             await self.execution_engine.close()
+        
+        if hasattr(self, 'performance_monitor') and self.performance_monitor:
+            await self.performance_monitor.close()
         
         self._running = False
         self.logger.info("Backtest mode shutdown complete")

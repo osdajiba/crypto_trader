@@ -3,7 +3,7 @@
 from enum import Enum
 
 class TradingMode(Enum):
-    """集中定义交易模式类型"""
+    """Centralize the definition of transaction mode types"""
     BACKTEST = "backtest"
     PAPER = "paper"
     LIVE = "live"

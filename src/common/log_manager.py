@@ -2,25 +2,27 @@
 
 import logging
 import sys
+import os
 from pathlib import Path
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 import json
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from datetime import datetime
 
-from src.common.config_manager import ConfigManager 
+from src.common.config_manager import ConfigManager
 
 
 class LogManager:
     """
-    增强的日志管理器
-    支持灵活的日志轮替策略和一致的日志级别处理
-    实现为单例模式
+    Enhanced Log Manager
+    Supports flexible log rotation and consistent log level handling
+    Implemented as a singleton
+    Provides standard logging-like interface for easier integration
     """
     
     _instance = None
     
-    # 定义标准日志级别
+    # Standard log levels
     LOG_LEVELS = {
         'DEBUG': logging.DEBUG,
         'INFO': logging.INFO,
@@ -29,16 +31,16 @@ class LogManager:
         'CRITICAL': logging.CRITICAL
     }
     
-    # 默认格式化器
+    # Default formatters
     DEFAULT_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     DETAILED_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
     
-    def __new__(cls, config: ConfigManager):
+    def __new__(cls, config: Optional[ConfigManager] = None):
         """
-        创建LogManager单例
+        Create LogManager singleton
         
         Args:
-            config: log settings
+            config: Log configuration settings
         """
         if cls._instance is None:
             if not config:
@@ -49,40 +51,71 @@ class LogManager:
     
     def _init_logger(self, config):
         """
-        初始化日志管理器（只在第一次创建实例时调用）
+        Initialize logger (called only on first instance creation)
         """
-        # 从配置获取参数
+        # Store config reference for later use
+        self.config = config
+        
+        # Get settings from configuration
         self.base_dir = Path(config.get("logging", "base_path", default="./logs"))
         self.default_level = self._get_log_level(config.get("logging", "level", default="INFO"))
         self.log_to_console = config.get("logging", "handlers", "console", "enabled", default=True)
         self.log_to_file = config.get("logging", "handlers", "file", "enabled", default=True)
         
-        # 日志轮转配置
+        # Log rotation configuration
         self.rotation_strategy = config.get("logging", "rotation", "strategy", default="size")
-        self.max_file_size = int(config.get("logging", "rotation", "max_file_size", default=10 * 1024 * 1024))  # 默认10MB
+        self.max_file_size = int(config.get("logging", "rotation", "max_file_size", default=10)) * 1024 * 1024  # Default 10MB
         self.backup_count = int(config.get("logging", "rotation", "backup_count", default=5))
         
-        # 格式配置
-        self.format_str = self.DETAILED_FORMAT if config.get("logging", "format", default=False) else self.DEFAULT_FORMAT
+        # Format configuration
+        use_detailed = config.get("logging", "detailed_format", default=False)
+        format_from_config = config.get("logging", "format", default=None)
         
-        # 初始化根日志记录器
+        if format_from_config:
+            self.format_str = format_from_config
+        else:
+            self.format_str = self.DETAILED_FORMAT if use_detailed else self.DEFAULT_FORMAT
+        
+        # Initialize root logger
         self.configured_loggers = set()
-        self.setup_root_logger()
         
-        # 自动创建日志目录
+        # Ensure log directory exists
         self.base_dir.mkdir(parents=True, exist_ok=True)
-            
+        
+        # Setup root logger
+        self.setup_root_logger()
+    
     def setup_logger(self, name: str, base_dir: Optional[Union[str, Path]] = None, 
-                level: Optional[Union[str, int]] = None) -> logging.Logger:
-        # 如果提供了新的基本目录，则更新实例
+                   level: Optional[Union[str, int]] = None) -> logging.Logger:
+        """
+        Set up and configure a logger
+        
+        Args:
+            name: Logger name
+            base_dir: Optional new base directory
+            level: Optional log level
+            
+        Returns:
+            Configured logger
+        """
+        # Update base directory if provided
         if base_dir:
             self.base_dir = Path(base_dir)
             self.base_dir.mkdir(parents=True, exist_ok=True)
         
-        # 使用新的 API 获取日志记录器
+        # Get logger instance
         return self._get_logger_instance(name, level)
     
     def _get_log_level(self, level: Union[str, int]) -> int:
+        """
+        Convert string log level to numeric value
+        
+        Args:
+            level: String or integer log level
+            
+        Returns:
+            Numeric log level
+        """
         if isinstance(level, int):
             return level
         
@@ -93,31 +126,57 @@ class LogManager:
         raise ValueError(f"Invalid log level: {level}. Valid levels are: {', '.join(self.LOG_LEVELS.keys())}")
     
     def setup_root_logger(self):
-        """配置根日志记录器"""
+        """Configure the root logger"""
         root_logger = logging.getLogger()
         root_logger.setLevel(self.default_level)
         
-        # 清除现有处理器
+        # Clear existing handlers
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
 
-        # 控制台处理器
+        # Console handler
         if self.log_to_console:
             console_handler = logging.StreamHandler(sys.stdout)
             console_handler.setFormatter(logging.Formatter(self.format_str))
             console_handler.setLevel(self.default_level)
             root_logger.addHandler(console_handler)
 
-        # 文件处理器
+        # File handler
         if self.log_to_file:
             file_handler = self._create_file_handler("system")
             file_handler.setLevel(self.default_level)
             root_logger.addHandler(file_handler)
     
     def _create_file_handler(self, name: str) -> logging.Handler:
-        """创建文件处理器"""
-        log_file = self.base_dir / f"{name}.log"
+        """
+        Create a file handler for logging
         
+        Args:
+            name: Logger name to create file for
+            
+        Returns:
+            Configured log handler
+        """
+        # Determine log file path
+        module_path = None
+        
+        # Check if we have module-specific path configuration
+        modules_config = self.config.get("logging", "modules", default={})
+        if modules_config and name in modules_config:
+            module_path = modules_config[name].get("path", None)
+        
+        # Set the log file path
+        if module_path:
+            # Use the configured path
+            log_file = self.base_dir / module_path
+        else:
+            # Default to logger name with .log extension
+            log_file = self.base_dir / f"{name}.log"
+        
+        # Ensure parent directory exists
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Create appropriate handler based on rotation strategy
         if self.rotation_strategy == "size":
             handler = RotatingFileHandler(
                 log_file,
@@ -136,67 +195,54 @@ class LogManager:
             
         handler.setFormatter(logging.Formatter(self.format_str))
         return handler
-        
-    @classmethod
-    def level_from_string(cls, level_str: str) -> int:
-        """
-        将日志级别字符串转换为日志级别整数（兼容旧版API）
-        
-        Args:
-            level_str: 日志级别字符串
-            
-        Returns:
-            日志级别整数
-        """
-        instance = cls()
-        return instance._get_log_level(level_str)
     
     @classmethod
     def get_logger(cls, name: str, level: Optional[Union[str, int]] = None) -> logging.Logger:
-        """获取配置好的日志记录器"""
+        """
+        Get a configured logger
+        
+        Args:
+            name: Logger name
+            level: Optional log level
+            
+        Returns:
+            Configured logger
+        """
         instance = cls._instance
         if not instance:
             raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
             
-        logger = logging.getLogger(name)
-        if name not in instance.configured_loggers:
-            logger.setLevel(instance._get_log_level(level) if level else instance.default_level)
-            if instance.log_to_file:
-                handler = instance._create_file_handler(name)
-                logger.addHandler(handler)
-            instance.configured_loggers.add(name)
-        return logger
+        return instance._get_logger_instance(name, level)
     
     def _get_logger_instance(self, name: str, level: Optional[Union[str, int]] = None) -> logging.Logger:
         """
-        获取配置的日志记录器（实例方法）
+        Get a configured logger (instance method)
         
         Args:
-            name: 日志记录器名称
-            level: 可选的日志级别（默认使用默认级别）
+            name: Logger name
+            level: Optional log level
             
         Returns:
-            配置的日志记录器
+            Configured logger
         """
         logger = logging.getLogger(name)
         
-        # 如果已经配置过，只更新级别
+        # If already configured, just update level if needed
         if name in self.configured_loggers:
             if level is not None:
                 logger.setLevel(self._get_log_level(level))
             return logger
         
-        # 设置日志级别
+        # Set log level
         logger_level = self._get_log_level(level) if level is not None else self.default_level
         logger.setLevel(logger_level)
         
-        # 添加文件处理器（如果启用）
+        # Add file handler if enabled
         if self.log_to_file:
-            module_name = name.split('.')[-1]
-            file_handler = self.create_file_handler(module_name)
+            file_handler = self._create_file_handler(name)
             logger.addHandler(file_handler)
         
-        # 标记为已配置
+        # Mark as configured
         self.configured_loggers.add(name)
         
         return logger
@@ -204,51 +250,66 @@ class LogManager:
     @classmethod
     def set_level(cls, level: Union[str, int], logger_name: Optional[str] = None) -> None:
         """
-        设置一个或所有日志记录器的日志级别（类方法）
+        Set log level for one or all loggers (class method)
         
         Args:
-            level: 要设置的日志级别
-            logger_name: 要更新的特定日志记录器名称，如果为None则更新所有日志记录器
+            level: Log level to set
+            logger_name: Specific logger to update (all if None)
         """
-        # 确保单例已创建
-        instance = cls()
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
+            
         instance._set_level_instance(level, logger_name)
     
     def _set_level_instance(self, level: Union[str, int], logger_name: Optional[str] = None) -> None:
         """
-        设置一个或所有日志记录器的日志级别（实例方法）
+        Set log level for one or all loggers (instance method)
         
         Args:
-            level: 要设置的日志级别
-            logger_name: 要更新的特定日志记录器名称，如果为None则更新所有日志记录器
+            level: Log level to set
+            logger_name: Specific logger to update (all if None)
         """
         numeric_level = self._get_log_level(level)
         
         if logger_name is not None:
-            # 更新单个日志记录器
+            # Update a single logger
             logger = logging.getLogger(logger_name)
             logger.setLevel(numeric_level)
             
-            # 更新此日志记录器的所有处理器
+            # Update all handlers for this logger
             for handler in logger.handlers:
                 handler.setLevel(numeric_level)
         else:
-            # 更新所有已配置的日志记录器
+            # Update all configured loggers
             for name in self.configured_loggers:
                 logger = logging.getLogger(name if name != 'root' else '')
                 logger.setLevel(numeric_level)
                 
-                # 更新所有处理器
+                # Update all handlers
                 for handler in logger.handlers:
                     handler.setLevel(numeric_level)
             
-            # 更新默认级别
+            # Update default level
             self.default_level = numeric_level
     
-    def add_json_handler(self, logger_name: str):
-        """添加JSON格式日志处理器"""
+    def add_json_handler(self, logger_name: str, json_file: Optional[str] = None):
+        """
+        Add JSON format log handler
+        
+        Args:
+            logger_name: Logger name to add handler to
+            json_file: Optional JSON file path (default: logger_name.json.log)
+        """
         logger = logging.getLogger(logger_name)
-        json_file = self.base_dir / f"{logger_name}.json.log"
+        
+        if json_file:
+            json_path = Path(json_file)
+        else:
+            json_path = self.base_dir / f"{logger_name}.json.log"
+        
+        # Ensure parent directory exists
+        json_path.parent.mkdir(parents=True, exist_ok=True)
         
         class JsonFormatter(logging.Formatter):
             def format(self, record):
@@ -265,7 +326,7 @@ class LogManager:
                 return json.dumps(log_entry)
         
         handler = RotatingFileHandler(
-            json_file,
+            json_path,
             maxBytes=self.max_file_size,
             backupCount=self.backup_count,
             encoding="utf-8"
@@ -275,12 +336,12 @@ class LogManager:
     
     def configure_from_dict(self, config: Dict[str, Any]) -> None:
         """
-        从配置字典配置日志管理器
+        Configure log manager from a dictionary
         
         Args:
-            config: 包含日志配置的字典
+            config: Dictionary with log configuration
         """
-        # 更新基本配置
+        # Update basic configuration
         if 'base_dir' in config:
             self.base_dir = Path(config['base_dir'])
             self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -306,16 +367,268 @@ class LogManager:
         if 'detailed_format' in config:
             self.format_str = self.DETAILED_FORMAT if config['detailed_format'] else self.DEFAULT_FORMAT
         
-        # 重新配置根日志记录器
+        # Reconfigure root logger
         self.setup_root_logger()
         
-        # 配置特定的日志记录器
+        # Configure specific loggers
         if 'loggers' in config and isinstance(config['loggers'], dict):
             for logger_name, logger_config in config['loggers'].items():
                 level = logger_config.get('level', self.default_level)
                 logger = self.get_logger(logger_name, level)
                 
-                # 添加JSON处理器（如果配置了）
+                # Add JSON handler if configured
                 if logger_config.get('json_output'):
                     json_file = logger_config.get('json_file')
                     self.add_json_handler(logger_name, json_file)
+    
+    # ---- Standard logging-like interface methods ----
+    
+    def setLevel(self, level: Union[str, int], logger_name: Optional[str] = None) -> None:
+        """
+        Set log level for a logger (standard logging-like interface)
+        
+        Args:
+            level: Log level to set
+            logger_name: Specific logger to update (root if None)
+        """
+        self._set_level_instance(level, logger_name)
+    
+    @classmethod
+    def addHandler(cls, handler: logging.Handler, logger_name: str = None) -> None:
+        """
+        Add a handler to a specific logger
+        
+        Args:
+            handler: The handler to add
+            logger_name: Name of the logger to add handler to (root if None)
+        """
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
+            
+        instance._add_handler_instance(handler, logger_name)
+    
+    def _add_handler_instance(self, handler: logging.Handler, logger_name: str = None) -> None:
+        """
+        Add a handler to a specific logger (instance method)
+        
+        Args:
+            handler: The handler to add
+            logger_name: Name of the logger to add handler to (root if None)
+        """
+        logger = logging.getLogger(logger_name if logger_name else '')
+        logger.addHandler(handler)
+        
+        # If this is a new logger, track it
+        if logger_name and logger_name not in self.configured_loggers:
+            self.configured_loggers.add(logger_name)
+    
+    @classmethod
+    def removeHandler(cls, handler: logging.Handler, logger_name: str = None) -> None:
+        """
+        Remove a handler from a specific logger
+        
+        Args:
+            handler: The handler to remove
+            logger_name: Name of the logger to remove handler from (root if None)
+        """
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
+            
+        instance._remove_handler_instance(handler, logger_name)
+    
+    def _remove_handler_instance(self, handler: logging.Handler, logger_name: str = None) -> None:
+        """
+        Remove a handler from a specific logger (instance method)
+        
+        Args:
+            handler: The handler to remove
+            logger_name: Name of the logger to remove handler from (root if None)
+        """
+        logger = logging.getLogger(logger_name if logger_name else '')
+        if handler in logger.handlers:
+            logger.removeHandler(handler)
+    
+    @classmethod
+    def getHandlers(cls, logger_name: str = None) -> List[logging.Handler]:
+        """
+        Get all handlers for a specific logger
+        
+        Args:
+            logger_name: Name of the logger to get handlers from (root if None)
+            
+        Returns:
+            List of handlers attached to the logger
+        """
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
+            
+        return instance._get_handlers_instance(logger_name)
+    
+    def _get_handlers_instance(self, logger_name: str = None) -> List[logging.Handler]:
+        """
+        Get all handlers for a specific logger (instance method)
+        
+        Args:
+            logger_name: Name of the logger to get handlers from (root if None)
+            
+        Returns:
+            List of handlers attached to the logger
+        """
+        logger = logging.getLogger(logger_name if logger_name else '')
+        return logger.handlers
+    
+    @classmethod
+    def clearHandlers(cls, logger_name: str = None) -> None:
+        """
+        Remove all handlers from a specific logger
+        
+        Args:
+            logger_name: Name of the logger to clear handlers from (root if None)
+        """
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
+            
+        instance._clear_handlers_instance(logger_name)
+    
+    def _clear_handlers_instance(self, logger_name: str = None) -> None:
+        """
+        Remove all handlers from a specific logger (instance method)
+        
+        Args:
+            logger_name: Name of the logger to clear handlers from (root if None)
+        """
+        logger = logging.getLogger(logger_name if logger_name else '')
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+    
+    @classmethod
+    def createConsoleHandler(cls, level: Union[str, int] = None, formatter: logging.Formatter = None) -> logging.Handler:
+        """
+        Create a console handler with optional level and formatter
+        
+        Args:
+            level: Log level for the handler
+            formatter: Formatter for the handler
+            
+        Returns:
+            Configured console handler
+        """
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
+            
+        return instance._create_console_handler(level, formatter)
+    
+    def _create_console_handler(self, level: Union[str, int] = None, formatter: logging.Formatter = None) -> logging.Handler:
+        """
+        Create a console handler with optional level and formatter (instance method)
+        
+        Args:
+            level: Log level for the handler
+            formatter: Formatter for the handler
+            
+        Returns:
+            Configured console handler
+        """
+        handler = logging.StreamHandler(sys.stdout)
+        
+        if level is not None:
+            numeric_level = self._get_log_level(level)
+            handler.setLevel(numeric_level)
+        else:
+            handler.setLevel(self.default_level)
+            
+        if formatter is not None:
+            handler.setFormatter(formatter)
+        else:
+            handler.setFormatter(logging.Formatter(self.format_str))
+            
+        return handler
+    
+    @classmethod
+    def createFileHandler(cls, filename: str, level: Union[str, int] = None, 
+                         formatter: logging.Formatter = None, 
+                         rotate: bool = True, max_bytes: int = None, 
+                         backup_count: int = None) -> logging.Handler:
+        """
+        Create a file handler with optional level, formatter and rotation settings
+        
+        Args:
+            filename: Path to log file
+            level: Log level for the handler
+            formatter: Formatter for the handler
+            rotate: Whether to use rotating file handler
+            max_bytes: Maximum file size before rotation (for RotatingFileHandler)
+            backup_count: Number of backup files to keep
+            
+        Returns:
+            Configured file handler
+        """
+        instance = cls._instance
+        if not instance:
+            raise RuntimeError("LogManager not initialized. Call LogManager(config) first.")
+            
+        return instance._create_custom_file_handler(filename, level, formatter, rotate, max_bytes, backup_count)
+    
+    def _create_custom_file_handler(self, filename: str, level: Union[str, int] = None, 
+                                  formatter: logging.Formatter = None, 
+                                  rotate: bool = True, max_bytes: int = None, 
+                                  backup_count: int = None) -> logging.Handler:
+        """
+        Create a file handler with optional level, formatter and rotation settings (instance method)
+        
+        Args:
+            filename: Path to log file
+            level: Log level for the handler
+            formatter: Formatter for the handler
+            rotate: Whether to use rotating file handler
+            max_bytes: Maximum file size before rotation (for RotatingFileHandler)
+            backup_count: Number of backup files to keep
+            
+        Returns:
+            Configured file handler
+        """
+        log_path = Path(filename)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Configure rotation settings
+        _max_bytes = max_bytes if max_bytes is not None else self.max_file_size
+        _backup_count = backup_count if backup_count is not None else self.backup_count
+        
+        # Create appropriate handler
+        if rotate and self.rotation_strategy == 'size':
+            handler = RotatingFileHandler(
+                log_path,
+                maxBytes=_max_bytes,
+                backupCount=_backup_count,
+                encoding="utf-8"
+            )
+        elif rotate and self.rotation_strategy == 'time':
+            handler = TimedRotatingFileHandler(
+                log_path,
+                when="midnight",
+                interval=1,
+                backupCount=_backup_count,
+                encoding="utf-8"
+            )
+        else:
+            handler = logging.FileHandler(log_path, encoding="utf-8")
+            
+        # Set level
+        if level is not None:
+            numeric_level = self._get_log_level(level)
+            handler.setLevel(numeric_level)
+        else:
+            handler.setLevel(self.default_level)
+            
+        # Set formatter
+        if formatter is not None:
+            handler.setFormatter(formatter)
+        else:
+            handler.setFormatter(logging.Formatter(self.format_str))
+            
+        return handler

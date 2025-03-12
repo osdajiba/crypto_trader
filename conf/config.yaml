@@ -1,238 +1,282 @@
-# config.yaml
-# System Configuration File
-# Version: 0.8.0
+# ========================================================================
+# TRADING SYSTEM CONFIGURATION
+# Version: 1.0.0                                        Updated: 2025-03-11
+# ========================================================================
 
-# ========================
-# Network Configuration
-# ========================
-proxies:
-  http: "http://127.0.0.1:7890"       # HTTP proxy address
-  https: "http://127.0.0.1:7890"      # HTTPS proxy address
-
-# ========================
-# API Configuration
-# ========================
-api:
-  binance:
-    apiKey: "your apiKey"                     # Exchange API key (fallback)
-    secret: "your secret"                     # Exchange API secret (fallback)
-    options:
-      adjustForTimeDifference: true   # Auto-adjust server time difference
-      recvWindow: 60000               # Order processing window (ms)
-      defaultType: 'spot'             # Default market type
-  timeout: 60000                      # API request timeout (ms)
-  enableRateLimit: true               # Enable rate limiting
-  headers:
-    Connection: "close"               # HTTP connection policy
-
-# ========================
-# Security Configuration
-# ========================
-security:
-  use_env_vars: true                  # Prioritize environment variables
-  credentials:
-    encryption: "aes-256-cbc"         # Credential encryption method
-
-# ========================
-# Core System Configuration
-# ========================
+# -----------------------------
+# SYSTEM SETTINGS
+# -----------------------------
 system:
-  operational_mode: "backtest"        # backtest/live/paper
-  timezone: "UTC"                     # System timezone
+  operational_mode: backtest           # Options: backtest/live/paper
+  timezone: UTC                        # System timezone
+  
   performance:
-    max_threads: 4                    # Maximum parallel threads
-    max_memory: 1073741824            # 1GB memory limit
-    task_timeout: 300                 # Asynchronous task timeout (seconds)
+    max_threads: 4                     # Maximum worker threads
+    max_memory: 1073741824             # Memory limit (1GB)
+    task_timeout: 300                  # Task timeout in seconds
 
-# ========================
-# Data Configuration
-# ========================
+# -----------------------------
+# NETWORK CONFIGURATION
+# -----------------------------
+proxies:
+  http: http://127.0.0.1:7890          # HTTP proxy
+  https: https://127.0.0.1:7890         # HTTPS proxy
+
+# -----------------------------
+# API SETTINGS
+# -----------------------------
+api:
+  base_url: https://api.example.com    # API base URL
+  timeout: 60000                       # Timeout in milliseconds
+  retry_attempts: 3                    # Number of retry attempts
+  retry_delay: 1.0                     # Delay between retries (seconds)
+  enable_rate_limit: true              # Enable API rate limiting
+  
+  # Exchange-specific settings
+  binance:
+    api_key: "YOUR_API_KEY"            # Exchange API key
+    secret: "YOUR_SECRET_KEY"          # Exchange API secret
+    options:
+      adjust_time_diff: true           # Auto-adjust time difference
+      recv_window: 60000               # Processing window (ms)
+      default_type: spot               # Market type
+
+  # HTTP headers
+  headers:
+    connection: close                  # Connection handling
+
+# -----------------------------
+# SECURITY SETTINGS
+# -----------------------------
+security:
+  use_env_vars: true                   # Use environment variables for secrets
+  credentials:
+    encryption: aes-256-cbc            # Encryption algorithm
+
+# -----------------------------
+# DATABASE CONFIGURATION
+# -----------------------------
+database:
+  url: sqlite:///database/trading.sqlite  # Database connection string
+  pool_size: 5                            # Connection pool size
+  timeout: 30                             # Connection timeout (seconds)
+  echo_sql: false                         # Log SQL statements (debug)
+
+# -----------------------------
+# DATA MANAGEMENT
+# -----------------------------
 data:
   source:
-    live: false                       # Enable real-time data streaming
-    type: "local"                     # local/exchange data source
-  storage:
-    historical: "db/historical/"      # Historical data directory
-    orders: "db/order_history.csv"    # Order records
-    trades: "db/trade_records.json"   # Trade records
-
-# ========================
-# TODO: Database independent configuration
-# ========================
-database:
-  url: "sqlite:///database/trading.sqlite"  # Default SQLite connection
-  pool_size: 5                              # Connection pool size
-  timeout: 30                               # Connection timeout (seconds)
-  echo_sql: false                           # Whether to output SQL logs (for debugging)
-
-# ========================
-# Configuration file validation tag (for ConfigManager)
-# ========================
-validation:
-  required:  # Required field marks
-    - "database.url"
-    - "system.performance.max_threads"
-    - "trading.capital.initial"
-
-# ========================
-# Logging Configuration
-# ========================
-logging:
-  # Directory Structure
-  base_path: "./logs"                 # Root directory for all log files
-  rotation:
-    strategy: "size"                  # Rotation type: size/time
-    max_file_size: 10                 # Max size (MB) per log file 
-    backup_count: 5                   # Number of historical logs to retain
-    time_interval: "D"                # Daily rotation (D=day, H=hour)
-  level: INFO
-  detailed_format: true
-
-  # Output Configuration
-  format: "%(asctime)s | %(levelname)-8s | %(module)-15s | %(message)s"
-  date_format: "%Y-%m-%d %H:%M:%S%z"  # ISO-8601 format
+    live: false                        # Enable real-time data
+    type: local                        # Data source: local/exchange
   
-  # Log Destinations
+  storage:
+    historical: data/historical/       # Historical data path
+    orders: data/order_history.csv     # Order history file
+    trades: data/trade_records.json    # Trade records file
+  
+  cache:
+    dir: ./cache                       # Cache directory
+    max_size: 104857600                # Max cache size (100MB)
+    retention_days: 30                 # Data retention period
+
+# -----------------------------
+# LOGGING CONFIGURATION
+# -----------------------------
+logging:
+  base_path: ./logs                    # Log root directory
+  level: INFO                          # Default log level
+  async_write: true                    # Non-blocking logging
+  
+  # Formatting
+  format: "%(asctime)s | %(levelname)-8s | %(module)-15s | %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S%z"   # ISO-8601 timestamp format
+  detailed_format: true                # Include file and line numbers
+  
+  # Log rotation
+  rotation:
+    strategy: size                     # size or time based rotation
+    max_file_size: 10                  # Max size in MB
+    backup_count: 5                    # Number of backups to keep
+    time_interval: D                   # D=day, H=hour (for time rotation)
+  
+  # Output destinations
   handlers:
-    file:
-      enabled: true
-      compression: "gz"
-      encoding: "utf-8"
-      buffer:                         # buffer configuration
-        enabled: true
-        capacity: 1000                # Max messages in buffer
-        flush_interval: 5
     console:
-      enabled: true                   # Enable console output
-      level: "WARNING"                # Console-specific level
-
-  async_write: true                   # Enable non-blocking log writing
-
-  # Module-specific Configuration
+      enabled: true                    # Enable console output
+      level: WARNING                   # Console-specific level
+    
+    file:
+      enabled: true                    # Enable file output
+      compression: gz                  # Compress rotated logs
+      encoding: utf-8                  # File encoding
+      
+      buffer:
+        enabled: true                  # Buffer log messages
+        capacity: 1000                 # Buffer size
+        flush_interval: 5              # Flush interval (seconds)
+  
+  # Remote logging
+  syslog:
+    enabled: false                     # Enable syslog
+    host: logs.example.com             # Syslog server
+    port: 514                          # Syslog port
+  
+  # Module-specific log settings
   modules:
     core:
-      level: "INFO"                   # System core logs
-      path: "system/core.log"
+      level: INFO                      # System core logs
+      path: system/core.log
+    
     execution:
-      level: "DEBUG"                  # Order execution details
-      path: "trading/execution.log"
+      level: DEBUG                     # Order execution logs
+      path: trading/execution.log
+    
     strategy:
-      level: "INFO"                   # Strategy decisions
-      path: "strategies/main.log"
+      level: INFO                      # Strategy decision logs
+      path: strategies/main.log
+    
     risk:
-      level: "WARNING"                # Risk management alerts
-      path: "risk/management.log"
+      level: WARNING                   # Risk management logs
+      path: risk/management.log
+    
     data:
-      level: "DEBUG"                  # Data pipeline operations
-      path: "data/pipeline.log"
+      level: DEBUG                     # Data pipeline logs
+      path: data/pipeline.log
+    
     api:
-      level: "ERROR"                  # API communication
-      path: "network/api.log"
+      level: ERROR                     # API communication logs
+      path: network/api.log
+    
     errors:
-      level: "CRITICAL"               # Critical system errors
-      path: "errors/system_errors.log"
-  
-  syslog:
-    enabled: false                    # Remote syslog integration
-    host: "logs.example.com"
-    port: 514
+      level: CRITICAL                  # Critical error logs
+      path: errors/system_errors.log
 
-# ========================
-# Trading Configuration
-# ========================
+# -----------------------------
+# TRADING CONFIGURATION
+# -----------------------------
 trading:
   capital:
-    initial: 100000                   # Starting capital (USD)
-    min_order: 0.001                  # Minimum order size
-  instruments:
-    - "BTC/USDT"                      # Primary trading pair
-    - "ETH/USDT"                      # Secondary trading pair
+    initial: 100000                    # Starting capital (USD)
+    min_order: 0.001                   # Minimum order size
+  
+  instruments:                         # Trading pairs
+    - BTC/USDT                         # Primary pair
+    - ETH/USDT                         # Secondary pair
+  
   execution:
-    slippage: 0.001                   # Default slippage allowance
-    leverage: 1                       # Trading leverage
+    slippage: 0.001                    # Slippage assumption
+    leverage: 1                        # Trading leverage
+  
   limits:
-    position: 0.1                     # Max portfolio allocation
-    daily_trades: 50                  # Maximum daily trades
-    max_leverage: 10                  # Maximum leverage level
-    min_volume: 0.001                 # alo transaction
+    position: 0.1                      # Max position size (% of portfolio)
+    daily_trades: 50                   # Max trades per day
+    max_leverage: 10                   # Maximum allowed leverage
+    min_volume: 0.001                  # Minimum order volume
 
-# ========================
-# Risk Management
-# ========================
+# -----------------------------
+# RISK MANAGEMENT
+# -----------------------------
 risk:
   stop_loss:
-    enabled: true
-    percentage: 0.02                  # Default stop-loss
-    max_daily: 0.05                   # Daily loss limit
+    enabled: true                      # Enable stop-loss
+    percentage: 0.02                   # 2% stop-loss
+    max_daily: 0.05                    # 5% max daily loss
+  
   take_profit:
-    enabled: true
-    percentage: 0.05                  # Default take-profit
+    enabled: true                      # Enable take-profit
+    percentage: 0.05                   # 5% take-profit target
+  
   drawdown:
-    max_portfolio: 0.2                # Maximum allowed drawdown
-    max_single_trade: 0.1             # Per-trade drawdown limit
+    max_portfolio: 0.2                 # 20% max portfolio drawdown
+    max_single_trade: 0.1              # 10% max single trade drawdown
 
-# ========================
-# Strategy Configuration
-# ========================
+# -----------------------------
+# STRATEGY CONFIGURATION
+# -----------------------------
 strategy:
-  active: "dual_ma"
-  parameters:
-    fast_period: 50
-    slow_period: 200
-    threshold: 0.005
-  # 新增：多策略支持
-  fallback_strategy: "neural_network"  # Alternate strategy
+  active: dual_ma                      # Active strategy name
+  timeframe: 1h                        # Strategy timeframe
+  
+  parameters:                          # Strategy parameters
+    fast_period: 50                    # Fast MA period
+    slow_period: 200                   # Slow MA period
+    threshold: 0.005                   # Signal threshold
+  
+  fallback_strategy: neural_network    # Alternate strategy
 
-# ========================
-# Backtesting Configuration
-# ========================
+# -----------------------------
+# BACKTESTING CONFIGURATION
+# -----------------------------
 backtest:
-  mode: "full"                        # full/single_pass/walk_forward
+  mode: full                           # full/single_pass/walk_forward
+  
   period:
-    start: "2023-01-01"               # Backtest start date
-    end: "2023-12-31"                 # Backtest end date
+    start: 2023-01-01                  # Backtest start date
+    end: 2023-12-31                    # Backtest end date
+  
   costs:
-    commission: 0.001                 # Transaction fee percentage
-    slippage: 0.001                   # Simulated slippage
+    commission: 0.001                  # Transaction fee (0.1%)
+    slippage: 0.001                    # Simulated slippage (0.1%)
+  
   reporting:
-    formats: ["csv", "json", "html"]  # Output formats
-    metrics:                          # Performance metrics
-      - "sharpe_ratio"
-      - "max_drawdown"
-      - "annualized_return"
+    formats:                           # Output formats
+      - csv
+      - json
+      - html
+    
+    metrics:                           # Performance metrics
+      - sharpe_ratio
+      - max_drawdown
+      - annualized_return
 
-# ========================
-# Live Trading Configuration
-# ========================
+# -----------------------------
+# LIVE TRADING CONFIGURATION
+# -----------------------------
 live:
   exchange:
-    name: "binance"
-    environment: "production"         # production/testnet
+    name: binance                      # Exchange name
+    environment: production            # production/testnet
+    
     rate_limits:
-      requests: 20                    # Max calls/second
-      timeout: 30                     # Connection timeout (s)
+      requests: 20                     # Max API calls per second
+      timeout: 30                      # Connection timeout
+  
   monitoring:
-    interval: 60                      # Performance snapshot interval (s)
-    metrics:
-      - "portfolio_value"
-      - "daily_return"
-      - "position_risk"
+    interval: 60                       # Monitoring interval (seconds)
+    
+    metrics:                           # Live metrics to track
+      - portfolio_value
+      - daily_return
+      - position_risk
+  
   safeguards:
-    max_retries: 3                    # Error recovery attempts
-    cooldown: 60                      # Retry delay (s)
-    emergency_stop:                   # Circuit breaker
-      enabled: true
-      threshold: 0.1                  # 10% daily loss trigger
+    max_retries: 3                     # Error recovery attempts
+    cooldown: 60                       # Cooldown period (seconds)
+    
+    emergency_stop:                    # Circuit breaker
+      enabled: true                    # Enable emergency stop
+      threshold: 0.1                   # Trigger at 10% daily loss
 
-# ========================
-# Notification Configuration
-# ========================
+# -----------------------------
+# NOTIFICATIONS
+# -----------------------------
 notifications:
   email:
-    enabled: false
+    enabled: false                     # Enable email notifications
     recipients:
-      - "2354889815@qq.com"
+      - your.email@example.com         # Email recipients
+  
   telegram:
-    enabled: false
-    bot_token: "YOUR_BOT_TOKEN"
-    chat_id: "YOUR_CHAT_ID"
+    enabled: false                     # Enable Telegram notifications
+    bot_token: YOUR_BOT_TOKEN          # Telegram bot token
+    chat_id: YOUR_CHAT_ID              # Telegram chat ID
+
+# -----------------------------
+# VALIDATION SETTINGS
+# -----------------------------
+validation:
+  required:                            # Required configuration keys
+    - database.url
+    - system.performance.max_threads
+    - trading.capital.initial

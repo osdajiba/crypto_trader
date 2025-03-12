@@ -2,74 +2,70 @@
 
 from typing import Dict, List, Any
 import pandas as pd
-from datetime import datetime
 
 from src.backtest.base_backtest_engine import BacktestEngine
 from src.execution.execution_engine import ExecutionEngine
+from src.risk.risk_manager import BacktestRiskManager
+from src.backtest.performance_monitor import PerformanceMonitor
 
 
 class OHLCVBacktestEngine(BacktestEngine):
-    """基于OHLCV数据的回测引擎实现"""
+    """OHLCV data-based backtesting engine implementation"""
     
     async def _initialize_backtest(self, symbols: List[str], timeframe: str) -> None:
         """
-        初始化OHLCV回测
+        Initialize OHLCV backtest
         
         Args:
-            symbols: 交易品种列表
-            timeframe: 时间周期
+            symbols: List of trading symbols
+            timeframe: Timeframe
         """
-        # 保存回测参数
+        # Save backtest parameters
         self.symbols = symbols
         self.timeframe = timeframe
         
-        # 获取初始资金等配置参数
-        self.initial_capital = self.config.get("backtest", "initial_capital", default=100000)
-        self.commission_rate = self.config.get("backtest", "transaction_costs", "commission_rate", default=0.001)
-        self.slippage = self.config.get("backtest", "transaction_costs", "slippage", default=0.001)
-        
-        # 初始化回测状态
-        self.state = {
-            'timestamp': None,
-            'cash': self.initial_capital,
-            'positions': {},
-            'trades': [],
-            'equity_curve': [],
-            'market_prices': {},
-            'current_equity': self.initial_capital,
-            'peak_equity': self.initial_capital,
-            'max_drawdown': 0.0
-        }
-        
-        # 初始化执行引擎
+        # Initialize component references
         self.execution_engine = ExecutionEngine(
             config=self.config,
             mode="backtest"
         )
         
-        # 初始化策略
+        self.risk_manager = BacktestRiskManager(config=self.config)
+        await self.risk_manager.initialize()
+        
+        self.performance_monitor = PerformanceMonitor(
+            config=self.config,
+            initial_balance=self.initial_capital
+        )
+        
+        # Initialize strategy
         await self.strategy.initialize()
         
-        self.logger.info(f"初始化OHLCV回测 | 初始资金: {self.initial_capital}")
+        self.logger.info(f"Initializing OHLCV backtest | Initial capital: {self.initial_capital}")
     
     async def _load_historical_data(self, symbols: List[str], timeframe: str) -> Dict[str, pd.DataFrame]:
         """
-        加载OHLCV历史数据
+        Load OHLCV historical data
         
         Args:
-            symbols: 交易品种列表
-            timeframe: 时间周期
+            symbols: List of trading symbols
+            timeframe: Timeframe
             
         Returns:
-            Dict[str, pd.DataFrame]: 历史数据
+            Dict[str, pd.DataFrame]: Historical data
         """
         data_map = {}
         
-        # 设置回测时间范围
-        start_date = self.config.get("backtest", "start_date")
-        end_date = self.config.get("backtest", "end_date")
+        # Set backtest date range
+        start_date = self.config.get("backtest", "period", "start", default=None)
+        if not start_date:
+            start_date = self.config.get("backtest", "start_date", default=None)
+            
+        end_date = self.config.get("backtest", "period", "end", default=None)
+        if not end_date:
+            end_date = self.config.get("backtest", "end_date", default=None)
         
-        # 加载每个品种的历史数据
+        # Load historical data for each symbol
         for symbol in symbols:
             try:
                 data = await self.data_manager.get_historical_data(
@@ -81,44 +77,46 @@ class OHLCVBacktestEngine(BacktestEngine):
                 
                 if not data.empty:
                     data_map[symbol] = data
-                    self.logger.info(f"已加载 {symbol} 历史数据: {len(data)} 条记录")
+                    self.logger.info(f"Loaded {symbol} historical data: {len(data)} records")
                 else:
-                    self.logger.warning(f"{symbol} 无历史数据")
+                    self.logger.warning(f"No historical data found for {symbol}")
                 
             except Exception as e:
-                self.logger.error(f"加载 {symbol} 历史数据失败: {e}")
+                self.logger.error(f"Failed to load {symbol} historical data: {e}")
         
         return data_map
     
     def _get_time_points(self, data: Dict[str, pd.DataFrame]) -> List[Any]:
         """
-        获取所有时间点
+        Get all time points
         
         Args:
-            data: 历史数据
+            data: Historical data
             
         Returns:
-            List[Any]: 排序后的唯一时间点
+            List[Any]: Sorted unique time points
         """
         all_timestamps = []
         
         for df in data.values():
             if 'datetime' in df.columns:
                 all_timestamps.extend(df['datetime'].tolist())
+            elif isinstance(df.index, pd.DatetimeIndex):
+                all_timestamps.extend(df.index.tolist())
         
-        # 返回排序后的唯一时间戳
+        # Return sorted unique timestamps
         return sorted(set(all_timestamps))
     
     def _get_data_at_time_point(self, data: Dict[str, pd.DataFrame], time_point: Any) -> Dict[str, pd.DataFrame]:
         """
-        获取指定时间点的数据
+        Get data at specified time point
         
         Args:
-            data: 历史数据
-            time_point: 时间点
+            data: Historical data
+            time_point: Time point
             
         Returns:
-            Dict[str, pd.DataFrame]: 指定时间点的数据
+            Dict[str, pd.DataFrame]: Data at time point
         """
         result = {}
         
@@ -127,72 +125,58 @@ class OHLCVBacktestEngine(BacktestEngine):
                 data_at_time = df[df['datetime'] == time_point]
                 if not data_at_time.empty:
                     result[symbol] = data_at_time
+            elif isinstance(df.index, pd.DatetimeIndex):
+                try:
+                    # Try to get exact timestamp match from index
+                    data_at_time = df.loc[[time_point]]
+                    if not data_at_time.empty:
+                        result[symbol] = data_at_time
+                except KeyError:
+                    # No exact match - try the nearest timestamp if needed
+                    pass
         
         return result
     
     async def _process_data_point(self, time_point: Any, data: Dict[str, pd.DataFrame]) -> None:
         """
-        处理单个时间点的数据
+        Process single time point data
         
         Args:
-            time_point: 时间点
-            data: 时间点数据
+            time_point: Time point
+            data: Time point data
         """
-        # 更新当前时间点
+        # Update current timestamp
         self.state['timestamp'] = time_point
         
-        # 更新市场价格
+        # Update market prices
         self._update_market_prices(data)
         
-        # 处理每个交易品种
+        # Process each symbol
         for symbol, symbol_data in data.items():
-            # 生成信号
+            # Generate signals
             signals = await self.strategy.process_data(symbol_data, symbol)
             
-            # 验证信号
-            valid_signals = await self.execution_engine.validate_signals(signals)
+            # Validate signals
+            valid_signals = await self.risk_manager.validate_signals(signals)
             
-            # 执行有效信号
+            # Execute valid signals
             if not valid_signals.empty:
                 executed_trades = self._execute_trades(valid_signals, data)
                 
-                # 记录交易
+                # Record trades
                 if executed_trades:
                     self.state['trades'].extend(executed_trades)
-        
-        # 计算当前权益
-        equity = self._calculate_equity()
-        
-        # 更新权益曲线
-        self.state['equity_curve'].append({
-            'timestamp': time_point,
-            'equity': equity
-        })
-        
-        # 更新最大回撤
-        self._update_drawdown(equity)
-    
-    def _update_market_prices(self, data: Dict[str, pd.DataFrame]) -> None:
-        """
-        更新市场价格
-        
-        Args:
-            data: 当前时间点数据
-        """
-        for symbol, df in data.items():
-            if not df.empty and 'close' in df.columns:
-                self.state['market_prices'][symbol] = df['close'].iloc[0]
     
     def _execute_trades(self, signals: pd.DataFrame, current_data: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
         """
-        执行交易信号
+        Execute trading signals
         
         Args:
-            signals: 交易信号
-            current_data: 当前市场数据
+            signals: Trading signals
+            current_data: Current market data
             
         Returns:
-            List[Dict[str, Any]]: 执行的交易列表
+            List[Dict[str, Any]]: List of executed trades
         """
         executed_trades = []
         
@@ -200,64 +184,84 @@ class OHLCVBacktestEngine(BacktestEngine):
             symbol = signal['symbol']
             action = signal['action'].lower()
             
-            # 只处理buy/sell信号
+            # Only process buy/sell signals
             if action not in ['buy', 'sell']:
                 continue
             
-            # 获取当前价格
+            # Get current price
             if symbol not in current_data or current_data[symbol].empty:
                 continue
                 
             current_price = current_data[symbol]['close'].iloc[0]
             
-            # 计算执行价格(考虑滑点)
+            # Calculate execution price (considering slippage)
             execution_price = current_price * (1 + self.slippage) if action == 'buy' else current_price * (1 - self.slippage)
             
-            # 计算交易数量
+            # Calculate quantity
             if 'quantity' in signal:
                 quantity = signal['quantity']
             else:
-                # 计算仓位大小(基于风险参数)
-                risk_per_trade = self.config.get("backtest", "risk_parameters", "risk_per_trade", default=0.01)
-                max_position = self.config.get("backtest", "transaction_costs", "max_position", default=0.1)
-                quantity = min((self.state['cash'] * risk_per_trade) / execution_price, 
-                              self.state['cash'] * max_position / execution_price)
+                # Calculate position size (based on risk parameters)
+                risk_per_trade = self.config.get("risk", "risk_per_trade", default=0.01)
+                max_position = self.config.get("trading", "limits", "position", default=0.1)
+                
+                # Calculate based on portfolio value
+                portfolio_value = self._calculate_equity()
+                max_trade_value = portfolio_value * max_position
+                risk_adjusted_value = portfolio_value * risk_per_trade
+                
+                # Use the smaller of the two values
+                trade_value = min(max_trade_value, risk_adjusted_value)
+                quantity = trade_value / execution_price
             
-            # 验证交易
+            # Validate trade
             if action == 'buy':
-                # 检查资金是否足够
+                # Check available cash
                 total_cost = quantity * execution_price * (1 + self.commission_rate)
                 if total_cost > self.state['cash']:
                     quantity = self.state['cash'] / (execution_price * (1 + self.commission_rate))
                     if quantity <= 0:
                         continue
             elif action == 'sell':
-                # 检查是否有足够的持仓
-                current_position = self.state['positions'].get(symbol, 0)
+                # Check available position
+                current_position = self.state['positions'].get(symbol, {}).get('quantity', 0)
                 if current_position <= 0:
                     continue
                 quantity = min(quantity, current_position)
             
-            # 执行交易
+            # Execute trade
             commission_cost = quantity * execution_price * self.commission_rate
             
             if action == 'buy':
+                # Update cash
                 self.state['cash'] -= (quantity * execution_price + commission_cost)
                 
+                # Create or update position
                 if symbol not in self.state['positions']:
-                    self.state['positions'][symbol] = 0
+                    self.state['positions'][symbol] = {
+                        'quantity': 0,
+                        'avg_price': 0
+                    }
                 
-                self.state['positions'][symbol] += quantity
+                position = self.state['positions'][symbol]
+                total_qty = position['quantity'] + quantity
+                avg_price = ((position['quantity'] * position['avg_price']) + (quantity * execution_price)) / total_qty if total_qty > 0 else 0
+                
+                position['quantity'] = total_qty
+                position['avg_price'] = avg_price
                 
             else:  # sell
+                # Update cash
                 self.state['cash'] += (quantity * execution_price - commission_cost)
                 
-                self.state['positions'][symbol] -= quantity
+                # Update position
+                position = self.state['positions'][symbol]
+                position['quantity'] -= quantity
                 
-                if self.state['positions'][symbol] <= 0:
+                if position['quantity'] <= 0:
                     del self.state['positions'][symbol]
             
-            # 记录交易
+            # Record trade
             trade = {
                 'timestamp': current_data[symbol]['datetime'].iloc[0],
                 'symbol': symbol,
@@ -270,95 +274,139 @@ class OHLCVBacktestEngine(BacktestEngine):
             }
             
             executed_trades.append(trade)
+            
+            # Record trade in performance monitor
+            if self.performance_monitor:
+                # For performance monitor, we use dummy prices depending on action
+                if action == 'buy':
+                    self.performance_monitor.record_trade(
+                        timestamp=self.state['timestamp'],
+                        symbol=symbol,
+                        direction=action,
+                        entry_price=execution_price,
+                        exit_price=execution_price,  # Dummy for buy
+                        quantity=quantity,
+                        commission=commission_cost
+                    )
+                else:  # sell
+                    # For sell, we use the position average price as the entry
+                    if symbol in self.state['positions']:
+                        entry_price = self.state['positions'][symbol]['avg_price']
+                    else:
+                        # Position already closed
+                        entry_price = execution_price * 0.9  # Placeholder
+                        
+                    self.performance_monitor.record_trade(
+                        timestamp=self.state['timestamp'],
+                        symbol=symbol,
+                        direction=action,
+                        entry_price=entry_price,
+                        exit_price=execution_price,
+                        quantity=quantity,
+                        commission=commission_cost
+                    )
         
         return executed_trades
     
-    def _calculate_equity(self) -> float:
-        """
-        计算当前权益
+    async def _close_positions(self) -> None:
+        """Close all open positions at the end of backtest"""
+        for symbol, position in list(self.state['positions'].items()):
+            # Check if we have a current price
+            if symbol not in self.state['market_prices']:
+                continue
+                
+            current_price = self.state['market_prices'][symbol]
+            quantity = position['quantity']
+            
+            # Calculate commission
+            commission = quantity * current_price * self.commission_rate
+            
+            # Update cash
+            self.state['cash'] += (quantity * current_price - commission)
+            
+            # Record trade
+            trade = {
+                'timestamp': self.state['timestamp'],
+                'symbol': symbol,
+                'action': 'sell',
+                'quantity': quantity,
+                'price': current_price,
+                'commission': commission,
+                'slippage': 0,
+                'cash_after': self.state['cash'],
+                'note': 'position_close'
+            }
+            
+            self.state['trades'].append(trade)
+            self.logger.info(f"Closed position: {quantity} {symbol} at {current_price}")
+            
+            # Record in performance monitor
+            if self.performance_monitor:
+                self.performance_monitor.record_trade(
+                    timestamp=self.state['timestamp'],
+                    symbol=symbol,
+                    direction='sell',
+                    entry_price=position['avg_price'],
+                    exit_price=current_price,
+                    quantity=quantity,
+                    commission=commission
+                )
         
-        Returns:
-            float: 当前权益值
-        """
-        equity = self.state['cash']
-        
-        # 加上持仓价值
-        for symbol, quantity in self.state['positions'].items():
-            if symbol in self.state['market_prices']:
-                price = self.state['market_prices'][symbol]
-                equity += quantity * price
-        
-        return equity
-    
-    def _update_drawdown(self, equity: float) -> None:
-        """
-        更新最大回撤
-        
-        Args:
-            equity: 当前权益
-        """
-        # 更新峰值
-        if equity > self.state['peak_equity']:
-            self.state['peak_equity'] = equity
-        
-        # 计算当前回撤
-        if self.state['peak_equity'] > 0:
-            drawdown = (self.state['peak_equity'] - equity) / self.state['peak_equity']
-            self.state['max_drawdown'] = max(self.state['max_drawdown'], drawdown)
+        # Clear positions
+        self.state['positions'] = {}
     
     def _generate_backtest_report(self) -> Dict[str, Any]:
         """
-        生成回测报告
+        Generate backtest report
         
         Returns:
-            Dict[str, Any]: 回测报告
+            Dict[str, Any]: Backtest report
         """
         final_equity = self._calculate_equity()
         
-        # 计算性能指标
+        # Calculate performance metrics
         total_return = final_equity - self.initial_capital
         total_return_pct = (total_return / self.initial_capital) * 100 if self.initial_capital > 0 else 0
         
-        # 计算交易统计
+        # Calculate trade statistics
         trades = self.state['trades']
         buy_trades = len([t for t in trades if t['action'] == 'buy'])
         sell_trades = len([t for t in trades if t['action'] == 'sell'])
         
-        # 计算夏普比率
-        equity_curve = pd.DataFrame(self.state['equity_curve'])
-        sharpe_ratio = 0
+        # Get advanced metrics from performance monitor
+        performance_metrics = {}
+        if self.performance_monitor:
+            self.performance_monitor.calculate_performance_metrics()
+            performance_report = self.performance_monitor.generate_detailed_report()
+            performance_metrics = performance_report.get('performance_metrics', {})
         
-        if not equity_curve.empty and 'equity' in equity_curve.columns:
-            # 计算每日收益率
-            equity_curve['return'] = equity_curve['equity'].pct_change()
-            
-            # 计算夏普比率(假设无风险收益率为0)
-            if not equity_curve['return'].empty and equity_curve['return'].std() > 0:
-                sharpe_ratio = (equity_curve['return'].mean() / equity_curve['return'].std()) * (252 ** 0.5)
-        
-        # 组合报告
+        # Compile report
         report = {
             'initial_capital': self.initial_capital,
             'final_equity': final_equity,
             'total_return': total_return,
             'total_return_pct': total_return_pct,
             'max_drawdown_pct': self.state['max_drawdown'] * 100,
-            'sharpe_ratio': sharpe_ratio,
+            'sharpe_ratio': performance_metrics.get('sharpe_ratio', 0),
+            'sortino_ratio': performance_metrics.get('sortino_ratio', 0),
+            'win_rate': performance_metrics.get('win_rate', 0) * 100 if isinstance(performance_metrics.get('win_rate', 0), float) else 0,
+            'profit_factor': performance_metrics.get('profit_factor', 0),
             'total_trades': len(trades),
             'buy_trades': buy_trades,
             'sell_trades': sell_trades,
             'backtest_params': {
                 'symbols': self.symbols,
                 'timeframe': self.timeframe,
-                'start_date': self.config.get("backtest", "start_date", default=""),
-                'end_date': self.config.get("backtest", "end_date", default=""),
+                'start_date': self.config.get("backtest", "period", "start", default=""),
+                'end_date': self.config.get("backtest", "period", "end", default=""),
                 'commission_rate': self.commission_rate,
                 'slippage': self.slippage
             },
             'strategy': self.strategy.__class__.__name__,
             'open_positions': self.state['positions'],
             'remaining_cash': self.state['cash'],
-            'trades': trades
+            'trades': trades,
+            'engine_type': 'ohlcv'
         }
         
         return report

@@ -11,7 +11,7 @@ from datetime import datetime
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.data.data_manager import DataManager
+from src.datasource.data_manager import DataManager
 from src.strategy.strategy_factory import StrategyFactory
 from src.risk.risk_manager_factory import RiskManagerFactory
 from src.risk.risk_manager import BaseRiskManager

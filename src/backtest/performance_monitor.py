@@ -5,6 +5,7 @@ import numpy as np
 from typing import Dict, Optional, Any
 import scipy.stats as stats
 from dataclasses import dataclass
+
 from src.common.log_manager import LogManager
 
 @dataclass
@@ -484,3 +485,133 @@ class PerformanceMonitor:
                 'daily_return': 0,
                 'max_drawdown': 0
             }
+            
+    def export_report(self, format='json', output_dir='reports'):
+        """
+        Export performance report to file in specified format
+        
+        Args:
+            format (str): Export format ('json', 'csv', or 'xlsx')
+            output_dir (str): Directory to save the exported report
+        """
+        import os
+        import json
+        import pandas as pd
+        from datetime import datetime
+        
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate timestamp for filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Generate comprehensive report
+        report = self.generate_detailed_report()
+        
+        try:
+            if format.lower() == 'json':
+                # Export to JSON
+                file_path = os.path.join(output_dir, f'performance_report_{timestamp}.json')
+                
+                # Convert NumPy arrays and Timestamps to Python types
+                cleaned_report = self._clean_report_for_json(report)
+                
+                with open(file_path, 'w') as f:
+                    json.dump(cleaned_report, f, indent=4)
+                
+                self.logger.info(f"Performance report exported to JSON: {file_path}")
+                
+            elif format.lower() == 'csv':
+                # Export summary metrics
+                summary_file = os.path.join(output_dir, f'performance_summary_{timestamp}.csv')
+                pd.DataFrame([report['summary']]).to_csv(summary_file, index=False)
+                
+                # Export performance metrics
+                metrics_file = os.path.join(output_dir, f'performance_metrics_{timestamp}.csv')
+                pd.DataFrame([report['performance_metrics']]).to_csv(metrics_file, index=False)
+                
+                # Export trade log if available
+                if report['trade_log']:
+                    trade_log_file = os.path.join(output_dir, f'trade_log_{timestamp}.csv')
+                    pd.DataFrame(report['trade_log']).to_csv(trade_log_file, index=False)
+                
+                # Export equity curve
+                equity_file = os.path.join(output_dir, f'equity_curve_{timestamp}.csv')
+                equity_df = pd.DataFrame({
+                    'timestamp': report['equity_curve']['timestamps'],
+                    'balance': report['equity_curve']['balance'],
+                    'daily_return': report['equity_curve']['daily_return'],
+                    'cumulative_return': report['equity_curve']['cumulative_return']
+                })
+                equity_df.to_csv(equity_file, index=False)
+                
+                self.logger.info(f"Performance reports exported to CSV in: {output_dir}")
+                
+            elif format.lower() == 'xlsx':
+                # Export all data to a single Excel file with multiple sheets
+                file_path = os.path.join(output_dir, f'performance_report_{timestamp}.xlsx')
+                
+                with pd.ExcelWriter(file_path) as writer:
+                    # Summary sheet
+                    pd.DataFrame([report['summary']]).to_excel(writer, sheet_name='Summary', index=False)
+                    
+                    # Metrics sheet
+                    pd.DataFrame([report['performance_metrics']]).to_excel(writer, sheet_name='Metrics', index=False)
+                    
+                    # Trade log sheet
+                    if report['trade_log']:
+                        pd.DataFrame(report['trade_log']).to_excel(writer, sheet_name='Trade_Log', index=False)
+                    
+                    # Equity curve sheet
+                    equity_df = pd.DataFrame({
+                        'timestamp': report['equity_curve']['timestamps'],
+                        'balance': report['equity_curve']['balance'],
+                        'daily_return': report['equity_curve']['daily_return'],
+                        'cumulative_return': report['equity_curve']['cumulative_return']
+                    })
+                    equity_df.to_excel(writer, sheet_name='Equity_Curve', index=False)
+                
+                self.logger.info(f"Performance report exported to Excel: {file_path}")
+                
+            else:
+                self.logger.error(f"Unsupported export format: {format}")
+                
+        except Exception as e:
+            self.logger.error(f"Error exporting performance report: {e}")
+
+    def _clean_report_for_json(self, report):
+        """
+        Clean report data for JSON serialization by converting
+        NumPy types and timestamps to standard Python types
+        
+        Args:
+            report (Dict): Report dictionary with potential NumPy/Pandas types
+            
+        Returns:
+            Dict: Report with all values converted to JSON-serializable types
+        """
+        import numpy as np
+        import pandas as pd
+        from datetime import datetime
+        
+        def convert_value(value):
+            # Convert NumPy types to Python types
+            if isinstance(value, np.integer):
+                return int(value)
+            elif isinstance(value, np.floating):
+                return float(value)
+            elif isinstance(value, np.ndarray):
+                return [convert_value(v) for v in value]
+            elif isinstance(value, pd.Timestamp):
+                return value.isoformat()
+            elif isinstance(value, np.datetime64):
+                return pd.Timestamp(value).isoformat()
+            elif isinstance(value, dict):
+                return {k: convert_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [convert_value(v) for v in value]
+            else:
+                return value
+        
+        # Return a cleaned copy of the report
+        return convert_value(report)

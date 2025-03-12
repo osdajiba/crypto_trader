@@ -6,26 +6,26 @@ from typing import List
 
 
 class DataProcessor:
-    """集中数据预处理功能"""
+    """Centralized data preprocessing functionalities"""
     
     @staticmethod
     def clean_ohlcv(data: pd.DataFrame) -> pd.DataFrame:
         """
-        标准化OHLCV数据清理
+        Standardize and clean OHLCV data
         
         Args:
-            data: 原始OHLCV数据
+            data: Raw OHLCV data
             
         Returns:
-            pd.DataFrame: 清理后的数据
+            pd.DataFrame: Cleaned data
         """
         if data.empty:
             return data
         
-        # 创建副本避免修改原始数据
+        # Create copy to avoid modifying original data
         df = data.copy()
         
-        # 标准化列名
+        # Standardize column names
         rename_map = {}
         for col in df.columns:
             lower_col = col.lower()
@@ -45,11 +45,11 @@ class DataProcessor:
         if rename_map:
             df = df.rename(columns=rename_map)
         
-        # 确保必要的列存在
+        # Ensure required columns exist
         required_columns = ['datetime', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'start_ts', 'end_ts']
         for col in required_columns:
             if col not in df.columns:
-                raise ValueError(f"缺少必要的列: {col}")
+                raise ValueError(f"Missing required column: {col}")
         def convert_timestamp(ts):
             try:
                 ts_str = str(ts)
@@ -62,23 +62,23 @@ class DataProcessor:
             except:
                 return pd.NaT
 
-        # 统一时间戳单位
+        # Standardize timestamp units
         df['datetime'] = df['datetime'].apply(convert_timestamp)
         df['datetime'] = pd.to_datetime(df['datetime'], unit='ms', errors='coerce')
         
-        # 排序并去除重复
+        # Sort and remove duplicates
         df = df.reset_index(drop=True)
         df = df.drop_duplicates(subset=['datetime'], keep='last')
         
-        # 移除无效数据
+        # Remove invalid data
         numeric_columns = ['open', 'high', 'low', 'close', 'volume']
         present_numeric_columns = [col for col in numeric_columns if col in df.columns]
         
         if present_numeric_columns:
-            # 移除包含NaN的行
+            # Remove rows with NaN
             df = df.dropna(subset=present_numeric_columns)
             
-            # 确保数值列为浮点型
+            # Ensure numeric columns are float type
             for col in present_numeric_columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
         
@@ -87,27 +87,27 @@ class DataProcessor:
     @staticmethod
     def resample_ohlcv(data: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
-        重采样OHLCV数据到指定的时间周期
+        Resample OHLCV data to specified timeframe
         
         Args:
-            data: 原始OHLCV数据
-            timeframe: 目标时间周期 (例如 '1m', '1h', '1d')
+            data: Raw OHLCV data
+            timeframe: Target timeframe (e.g., '1m', '1h', '1d')
             
         Returns:
-            pd.DataFrame: 重采样后的数据
+            pd.DataFrame: Resampled data
         """
         if data.empty:
             return data
         
         if 'datetime' not in data.columns:
-            raise ValueError("数据必须包含'datetime'列")
+            raise ValueError("Data must contain 'datetime' column")
         
-        # 确保datetime是索引
+        # Ensure datetime is the index
         df = data.copy()
         if df.index.name != 'datetime':
             df = df.set_index('datetime')
         
-        # 将字符串时间周期转换为pandas周期字符串
+        # Map timeframe to pandas frequency strings
         time_map = {
             '1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min',
             '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H', '12h': '12H',
@@ -116,7 +116,7 @@ class DataProcessor:
         
         pandas_timeframe = time_map.get(timeframe, timeframe)
         
-        # 执行重采样
+        # Perform resampling
         resampled = df.resample(pandas_timeframe).agg({
             'open': 'first',
             'high': 'max',
@@ -125,7 +125,7 @@ class DataProcessor:
             'volume': 'sum'
         })
         
-        # 重置索引
+        # Reset index
         resampled = resampled.reset_index()
         
         return resampled
@@ -133,32 +133,32 @@ class DataProcessor:
     @staticmethod
     def fill_missing_periods(data: pd.DataFrame, timeframe: str, start=None, end=None) -> pd.DataFrame:
         """
-        填充缺失的时间周期
+        Fill missing time periods in data
         
         Args:
-            data: 原始数据
-            timeframe: 时间周期
-            start: 开始时间 (可选)
-            end: 结束时间 (可选)
+            data: Input data
+            timeframe: Time frequency
+            start: Start time (optional)
+            end: End time (optional)
             
         Returns:
-            pd.DataFrame: 填充后的数据
+            pd.DataFrame: Filled data
         """
         if data.empty:
             return data
         
         if 'datetime' not in data.columns:
-            raise ValueError("数据必须包含'datetime'列")
+            raise ValueError("Data must contain 'datetime' column")
         
-        # 确保datetime是正确的类型
+        # Ensure datetime is properly typed
         df = data.copy()
         if not pd.api.types.is_datetime64_any_dtype(df['datetime']):
             df['datetime'] = pd.to_datetime(df['datetime'])
         
-        # 设置索引
+        # Set index
         df = df.set_index('datetime')
         
-        # 确定开始和结束时间
+        # Determine start and end times
         start_time = start if start is not None else df.index.min()
         end_time = end if end is not None else df.index.max()
         
@@ -167,7 +167,7 @@ class DataProcessor:
         if not isinstance(end_time, pd.Timestamp):
             end_time = pd.to_datetime(end_time)
         
-        # 创建完整的时间序列
+        # Create complete time sequence
         time_map = {
             '1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min',
             '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H', '12h': '12H',
@@ -177,19 +177,19 @@ class DataProcessor:
         pandas_timeframe = time_map.get(timeframe, timeframe)
         full_index = pd.date_range(start=start_time, end=end_time, freq=pandas_timeframe)
         
-        # 重新索引数据
+        # Reindex data
         filled_df = df.reindex(full_index)
         
-        # 向前填充数据 (OHLC)
+        # Forward fill OHLC data
         for col in ['open', 'high', 'low', 'close']:
             if col in filled_df.columns:
                 filled_df[col] = filled_df[col].ffill()
         
-        # 将缺失的成交量设为0
+        # Set missing volume to 0
         if 'volume' in filled_df.columns:
             filled_df['volume'] = filled_df['volume'].fillna(0)
         
-        # 重置索引
+        # Reset index
         filled_df = filled_df.reset_index().rename(columns={'index': 'datetime'})
         
         return filled_df
@@ -198,61 +198,61 @@ class DataProcessor:
     def merge_dataframes(main_df: pd.DataFrame, other_df: pd.DataFrame, on: str = 'datetime', 
                          suffixes: tuple = ('', '_right')) -> pd.DataFrame:
         """
-        合并两个数据框，处理重复列
+        Merge two dataframes with duplicate column handling
         
         Args:
-            main_df: 主数据框
-            other_df: 要合并的数据框
-            on: 合并列名
-            suffixes: 后缀元组
+            main_df: Primary dataframe
+            other_df: Secondary dataframe to merge
+            on: Merge key column
+            suffixes: Suffix tuple
             
         Returns:
-            pd.DataFrame: 合并后的数据框
+            pd.DataFrame: Merged dataframe
         """
         if main_df.empty:
             return other_df.copy()
         if other_df.empty:
             return main_df.copy()
         
-        # 处理时间列
+        # Process datetime columns
         for df in [main_df, other_df]:
             if on in df.columns and not pd.api.types.is_datetime64_any_dtype(df[on]):
                 df[on] = pd.to_datetime(df[on])
         
-        # 执行合并
+        # Perform merge
         merged = pd.merge(main_df, other_df, on=on, how='outer', suffixes=suffixes)
         
-        # 整理列名
+        # Clean column names
         return merged
     
     @staticmethod
     def detect_outliers(data: pd.DataFrame, columns: List[str] = None, method: str = 'iqr', 
                       threshold: float = 1.5) -> pd.DataFrame:
         """
-        检测并标记异常值
+        Detect and flag outliers
         
         Args:
-            data: 输入数据
-            columns: 要检查的列
-            method: 检测方法 ('iqr' 或 'zscore')
-            threshold: 异常值阈值
+            data: Input data
+            columns: Columns to check
+            method: Detection method ('iqr' or 'zscore')
+            threshold: Outlier threshold
             
         Returns:
-            pd.DataFrame: 带有异常值标记的数据
+            pd.DataFrame: Data with outlier flags
         """
         if data.empty:
             return data
         
-        # 如果没有指定列，使用所有数值列
+        # Use all numeric columns if none specified
         if columns is None:
             columns = data.select_dtypes(include=np.number).columns.tolist()
         else:
-            # 仅保留数据中存在的列
+            # Keep only existing columns
             columns = [col for col in columns if col in data.columns]
         
         df = data.copy()
         
-        # 为每列创建标志
+        # Create flags for each column
         for col in columns:
             outlier_col = f"{col}_is_outlier"
             
@@ -267,16 +267,16 @@ class DataProcessor:
             elif method == 'zscore':
                 mean = df[col].mean()
                 std = df[col].std()
-                if std == 0:  # 避免除零错误
+                if std == 0:  # Avoid division by zero
                     df[outlier_col] = False
                 else:
                     z_scores = (df[col] - mean) / std
                     df[outlier_col] = abs(z_scores) > threshold
             
             else:
-                raise ValueError(f"不支持的方法: {method}")
+                raise ValueError(f"Unsupported method: {method}")
         
-        # 添加全局异常标志
+        # Add global outlier flag
         outlier_cols = [col for col in df.columns if col.endswith('_is_outlier')]
         if outlier_cols:
             df['is_outlier'] = df[outlier_cols].any(axis=1)

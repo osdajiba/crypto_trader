@@ -1,0 +1,26 @@
+{
+    "summary": {
+        "initial_balance": 100000,
+        "final_balance": 100000,
+        "total_return_pct": 0
+    },
+    "performance_metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "total_profit": 0.0,
+        "total_loss": 0.0,
+        "commission_paid": 0.0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "sortino_ratio": 0.0
+    },
+    "trade_log": [],
+    "equity_curve": {
+        "timestamps": [],
+        "balance": [],
+        "daily_return": [],
+        "cumulative_return": []
+    }
+}

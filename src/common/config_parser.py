@@ -125,14 +125,3 @@ class ConfigParser:
             else:
                 return default
         return result
-
-# Example usage
-if __name__ == '__main__':
-    config_file = Path(__file__).parent.parent.parent / 'conf/bt_config.yaml'
-    parser = ConfigParser(config_file)
-    
-    print("Available strategies:", parser.get_available_strategies())
-    print("Available timeframes:", parser.get_available_timeframes())
-    print("Available symbols:", parser.get_available_symbols())
-    print("Default date range:", parser.get_default_dates())
-    print("Max threads:", parser.get_config_value('system', 'performance', 'max_threads', default=4))

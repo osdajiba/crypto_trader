@@ -5,7 +5,7 @@ import asyncio
 from typing import Optional, Callable, Any, Dict, TypeVar, Generic, Coroutine, List
 import logging
 from contextlib import asynccontextmanager
-from src.common.log_manager import LogManager
+from .log_manager import LogManager
 
 T = TypeVar('T')
 logger = LogManager.get_logger(name="async")
@@ -26,11 +26,12 @@ class AsyncExecutor:
     
     def _init_executor(self):
         """Initialize executor resources"""
-        self._logger = logging.getLogger(self.__class__.__name__)
+        self._logger = LogManager.get_logger(self.__class__.__name__)
         self._tasks: Dict[str, asyncio.Task] = {}
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._running = False
         self._shutdown_event = asyncio.Event()
+        self._in_cleanup = False  # Flag to prevent recursion during cleanup
     
     async def __aenter__(self):
         """Support for async context manager pattern"""
@@ -220,42 +221,42 @@ class AsyncExecutor:
             self._logger.debug("AsyncExecutor is already closed")
             return
 
+        # Prevent recursive calls
+        if self._in_cleanup:
+            self._logger.debug("Already in cleanup process, skipping")
+            return
+            
+        self._in_cleanup = True
         self._logger.debug("Closing AsyncExecutor...")
         
         # Set shutdown flag
         self._running = False
         
         try:
-            try:
-                # Cancel all running tasks
-                for task_id, task in list(self._tasks.items()):
-                    if not task.done():
-                        task.cancel()
-                        self._logger.debug(f"Task {task_id} cancelled during shutdown")
-                
-                # Wait for tasks to complete or be cancelled
-                pending_tasks = [t for t in self._tasks.values() if not t.done()]
-                if pending_tasks:
-                    try:
-                        await asyncio.gather(*pending_tasks, return_exceptions=True)
-                    except asyncio.CancelledError:
-                        self._logger.debug("Task cancellation in progress")
-                
-                self._logger.debug("AsyncExecutor closed successfully")
-            except asyncio.CancelledError:
-                self._logger.debug("Executor closing was itself cancelled")
+            # Get task snapshot to avoid modification during iteration
+            tasks_to_cancel = list(self._tasks.items())
+            
+            # Cancel each task individually
+            for task_id, task in tasks_to_cancel:
+                if not task.done():
+                    self._logger.debug(f"Cancelling task {task_id}")
+                    task.cancel()
+            
+            # Wait for a short period for tasks to cancel
+            if tasks_to_cancel:
+                try:
+                    await asyncio.sleep(0.2)
+                except asyncio.CancelledError:
+                    pass
+            
+            # Clear task registry
+            self._tasks.clear()
+            self._logger.debug("AsyncExecutor closed successfully")
+            
         except Exception as e:
             self._logger.error(f"Error while closing AsyncExecutor: {str(e)}")
         finally:
-            # Clear task registry
-            self._tasks.clear()
-            
-            try:
-                # Final brief wait to ensure resources are released
-                await asyncio.sleep(0.1)
-            except asyncio.CancelledError:
-                # Ignore cancellation errors during shutdown
-                pass
+            self._in_cleanup = False
     
     @property
     def task_count(self) -> int:
