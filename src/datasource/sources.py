@@ -15,6 +15,7 @@ from src.common.log_manager import LogManager
 from src.common.config_manager import ConfigManager
 from src.common.async_executor import AsyncExecutor
 from src.exchange.binance import Binance
+from src.utils.file_utils import ParquetFileManager
 
 logger = LogManager.get_logger("trading_system")
 
@@ -123,9 +124,8 @@ class DataSource:
             
         return ranges
     
-    
 class LocalSource(DataSource):
-    """Local file data source, supports daily file format for efficient storage and retrieval"""
+    """Local file data source, supporting timestamp-based parquet files"""
 
     def __init__(self, config: ConfigManager):
         """
@@ -163,287 +163,6 @@ class LocalSource(DataSource):
         self.missing_symbols = set()
         logger.info(f"LocalSource initialized, data path: {self.data_path}")
 
-    def _get_validated_data_path(self, config: Dict) -> str:
-        """Validate and create data storage path"""
-        # Obtained from the configuration path, with multiple layers of rollback
-        path = config.get('data', 'paths', 'historical_data_path', default='data/historical')
-        abs_path = os.path.abspath(os.path.expanduser(path))
-        
-        try:
-            # Create a directory synchronously (at initialization)
-            os.makedirs(abs_path, exist_ok=True)
-            logger.info(f"Ensuring data directory exists: {abs_path}")
-        except Exception as e:
-            logger.critical(f"Cannot create data directory {abs_path}: {str(e)}")
-            raise RuntimeError(f"Data directory initialization failed: {str(e)}")
-        
-        return abs_path
-
-    async def fetch_historical(self, symbol: str, timeframe: str, 
-                              start: Optional[Union[str, datetime]] = None, 
-                              end: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
-        """
-        Fetch historical data from local storage using daily files
-        
-        Args:
-            symbol: Trading pair
-            timeframe: Time interval
-            start: Start time
-            end: End time
-            
-        Returns:
-            DataFrame: OHLCV data
-        """
-        # Use verified absolute paths
-        base_dir = os.path.join(
-            self.data_path,
-            timeframe,
-            symbol.replace('/', '_')
-        )
-        logger.info(f"Fetching historical data from local database: {symbol} {timeframe} {start} - {end}")
-
-        if not os.path.exists(base_dir):
-            logger.debug(f"The local data directory does not exist: {base_dir}")
-            self.missing_symbols.add(f"{symbol}_{timeframe}")
-            return pd.DataFrame()
-        
-        try:
-            # Parse time parameters
-            start_dt = TimeUtils.parse_timestamp(start) if start else None
-            end_dt = TimeUtils.parse_timestamp(end) if end else datetime.now()
-            
-            # If no start time, default to 30 days before end
-            if not start_dt:
-                start_dt = end_dt - timedelta(days=30)
-                
-            # Get list of days between start and end
-            days_list = []
-            current_day = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_day = end_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-            
-            while current_day <= end_day:
-                days_list.append(current_day)
-                current_day += timedelta(days=1)
-                
-            # Find all daily files that match our date range
-            matched_files = []
-            
-            for day in days_list:
-                # Format: 1h-YYYY-MM-DD.parquet
-                year_dir = os.path.join(base_dir, str(day.year))
-                month_dir = os.path.join(year_dir, f"{day.month:02d}")
-                file_pattern = f"{timeframe}-{day.year}-{day.month:02d}-{day.day:02d}.parquet"
-                file_path = os.path.join(month_dir, file_pattern)
-                
-                if os.path.exists(file_path):
-                    matched_files.append(file_path)
-                else:
-                    # Fall back to legacy format if available
-                    legacy_files = self._find_legacy_files(base_dir, day)
-                    if legacy_files:
-                        matched_files.extend(legacy_files)
-                    else:
-                        logger.debug(f"Daily file not found: {file_path}")
-        except Exception as e:
-            logger.error(f"Failed to determine date range: {str(e)}")
-            return pd.DataFrame()
-        
-        if not matched_files:
-            logger.debug(f"No matching daily files found for {symbol} {timeframe} between {start_dt} and {end_dt}")
-            return pd.DataFrame()
-            
-        try:
-            # Use the executor to read files concurrently
-            dfs = await asyncio.gather(*[
-                self.executor.submit(FileUtils.async_read_parquet, f) 
-                for f in matched_files
-            ])
-            
-            # Filter out empty DataFrames
-            dfs = [df for df in dfs if not df.empty]
-            
-            if not dfs:
-                logger.warning(f"All files were empty for {symbol} {timeframe}")
-                return pd.DataFrame()
-                
-            # Combine all DataFrames
-            combined_df = pd.concat(dfs, ignore_index=False)
-            
-            # Check index type before comparison
-            if not pd.api.types.is_datetime64_any_dtype(combined_df.index):
-                # If index is not datetime, convert it
-                combined_df.index = pd.to_datetime(combined_df.index, utc=True)
-                
-            # Now apply time range filtering
-            time_filter = pd.Series(True, index=combined_df.index)
-            if start_dt:
-                time_filter &= (combined_df.index >= start_dt)
-            if end_dt:
-                time_filter &= (combined_df.index <= end_dt)
-            filtered_df = combined_df[time_filter]
-
-            # Sort by index
-            sorted_df = filtered_df.sort_index()
-
-            
-            logger.info(f"Retrieved {len(sorted_df)} rows for {symbol} {timeframe} from {len(matched_files)} files")
-            return sorted_df
-            
-        except Exception as e:
-            logger.error(f"Data loading failure: {str(e)}")
-            traceback.print_exc()
-            return pd.DataFrame()
-
-    def _find_legacy_files(self, base_dir: str, day: datetime) -> List[str]:
-        """Find legacy format files for a given day"""
-        try:
-            # Calculate day boundaries in timestamp format
-            day_start = int(day.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-            day_end = int(day.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp())
-            
-            matched_files = []
-            
-            # Scan directory for legacy files
-            for root, _, files in os.walk(base_dir):
-                for file in files:
-                    if not file.endswith('.parquet'):
-                        continue
-                        
-                    try:
-                        # Legacy format: start_ts_end_ts.parquet
-                        filename = os.path.splitext(file)[0]
-                        parts = filename.split('_')
-                        if len(parts) < 2:
-                            continue
-                            
-                        file_start = int(float(parts[0]))
-                        file_end = int(float(parts[1]))
-                        
-                        # Check if file overlaps with the day
-                        if (file_end >= day_start) and (file_start <= day_end):
-                            matched_files.append(os.path.join(root, file))
-                            
-                    except (ValueError, IndexError):
-                        continue
-                        
-            return matched_files
-            
-        except Exception as e:
-            logger.error(f"Error finding legacy files: {str(e)}")
-            return []
-    
-    async def update_data(self, symbol: str, timeframe: str, data: pd.DataFrame) -> bool:
-        """
-        Update local data storage with new data using daily file format
-        
-        Args:
-            symbol: Trading pair
-            timeframe: Time interval 
-            data: New data to store
-            
-        Returns:
-            bool: Success status
-        """
-        if data.empty:
-            logger.warning(f"Attempted to update with empty data: {symbol} {timeframe}")
-            return False
-            
-        try:
-            # Ensure 'datetime' column exists and is datetime type
-            if 'datetime' not in data.columns:
-                if isinstance(data.index, pd.DatetimeIndex):
-                    # Copy index to datetime column
-                    data = data.reset_index()
-                else:
-                    # Try to convert timestamp to datetime
-                    if 'timestamp' in data.columns:
-                        data['datetime'] = pd.to_datetime(data['timestamp'], unit='ms')
-                    else:
-                        logger.error(f"Cannot update data: no datetime or timestamp column in data")
-                        return False
-            
-            # Convert datetime column to pandas datetime if needed
-            if not pd.api.types.is_datetime64_any_dtype(data['datetime']):
-                data['datetime'] = pd.to_datetime(data['datetime'])
-            
-            # Group data by day
-            data['date'] = data['datetime'].dt.date
-            grouped = data.groupby('date')
-            
-            # Prepare base directory
-            base_dir = os.path.join(
-                self.data_path,
-                timeframe,
-                symbol.replace('/', '_')
-            )
-            
-            success_count = 0
-            for date, group_df in grouped:
-                # Create date-based directory structure
-                year = date.year
-                month = date.month
-                
-                year_dir = os.path.join(base_dir, str(year))
-                month_dir = os.path.join(year_dir, f"{month:02d}")
-                
-                # Create directories if they don't exist
-                os.makedirs(month_dir, exist_ok=True)
-                
-                # Create filename: 1h-2025-02-09.parquet
-                filename = f"{timeframe}-{year}-{month:02d}-{date.day:02d}.parquet"
-                file_path = os.path.join(month_dir, filename)
-                
-                # Drop the date column we added for grouping
-                daily_df = group_df.drop(columns=['date'])
-                
-                # Check if file already exists
-                if os.path.exists(file_path):
-                    # Read existing file
-                    existing_df = pd.read_parquet(file_path)
-                    
-                    # Ensure 'datetime' column is datetime type in existing data
-                    if 'datetime' in existing_df.columns and not pd.api.types.is_datetime64_any_dtype(existing_df['datetime']):
-                        existing_df['datetime'] = pd.to_datetime(existing_df['datetime'])
-                    
-                    # Set datetime as index if it's not already
-                    if not isinstance(existing_df.index, pd.DatetimeIndex) and 'datetime' in existing_df.columns:
-                        existing_df.set_index('datetime', inplace=True)
-                    
-                    # Set datetime as index for new data if it's not already
-                    daily_df_copy = daily_df.copy()
-                    if not isinstance(daily_df_copy.index, pd.DatetimeIndex) and 'datetime' in daily_df_copy.columns:
-                        daily_df_copy.set_index('datetime', inplace=True)
-                    
-                    # Combine existing and new data
-                    combined_df = pd.concat([existing_df, daily_df_copy])
-                    
-                    # Remove duplicates, keeping latest data
-                    combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
-                    
-                    # Sort by datetime
-                    combined_df = combined_df.sort_index()
-                    
-                    # Reset index to have datetime as a column
-                    if isinstance(combined_df.index, pd.DatetimeIndex):
-                        combined_df = combined_df.reset_index()
-                    
-                    # Save to file
-                    combined_df.to_parquet(file_path, index=False)
-                    logger.info(f"Updated existing file: {file_path} with {len(daily_df)} new records")
-                else:
-                    # Save new file
-                    daily_df.to_parquet(file_path, index=False)
-                    logger.info(f"Created new file: {file_path} with {len(daily_df)} records")
-                
-                success_count += 1
-            
-            logger.info(f"Data update complete for {symbol} {timeframe}: updated {success_count} daily files")
-            return success_count > 0
-            
-        except Exception as e:
-            logger.error(f"Failed to update local data: {str(e)}\n{traceback.format_exc()}")
-            return False
-    
     async def fetch_realtime(self, symbol: str, timeframe: str) -> pd.DataFrame:
         """
         Local source attempts to extract last record from latest data as "real-time" data
@@ -607,7 +326,110 @@ class LocalSource(DataSource):
         except Exception as e:
             logger.error(f"Data migration failed: {str(e)}\n{traceback.format_exc()}")
             return False
+
+    def _get_validated_data_path(self, config: Dict) -> str:
+        """Validate and create data storage path"""
+        # Obtained from the configuration path, with multiple layers of rollback
+        path = config.get('data', 'paths', 'historical_data_path', default='data/historical')
+        abs_path = os.path.abspath(os.path.expanduser(path))
         
+        try:
+            # Create a directory synchronously (at initialization)
+            os.makedirs(abs_path, exist_ok=True)
+            logger.info(f"Ensuring data directory exists: {abs_path}")
+        except Exception as e:
+            logger.critical(f"Cannot create data directory {abs_path}: {str(e)}")
+            raise RuntimeError(f"Data directory initialization failed: {str(e)}")
+        
+        return abs_path
+
+    async def fetch_historical(self, symbol: str, timeframe: str, 
+                            start: Optional[Union[str, datetime]] = None, 
+                            end: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
+        """
+        Fetch historical data from local storage using timestamp-based Parquet files
+        
+        Args:
+            symbol: Trading pair
+            timeframe: Time interval
+            start: Start time
+            end: End time
+            
+        Returns:
+            DataFrame: OHLCV data
+        """
+        
+        logger.info(f"Fetching historical data from local database: {symbol} {timeframe} {start} - {end}")
+
+        try:
+            # Parse time parameters
+            start_dt = TimeUtils.parse_timestamp(start) if start else None
+            end_dt = TimeUtils.parse_timestamp(end) if end else datetime.now()
+            
+            # If no start time, default to 30 days before end
+            if not start_dt:
+                start_dt = end_dt - timedelta(days=30)
+            
+            # Find files matching the date range
+            file_paths = ParquetFileManager.find_files_in_date_range(
+                self.data_path, timeframe, symbol, start_dt, end_dt
+            )
+            
+            if not file_paths:
+                logger.debug(f"No matching files found for {symbol} {timeframe} between {start_dt} and {end_dt}")
+                self.missing_symbols.add(f"{symbol}_{timeframe}")
+                return pd.DataFrame()
+            
+            # Load and combine files
+            df = await ParquetFileManager.load_and_combine_files(
+                file_paths,
+                date_filter=(start_dt, end_dt),
+                drop_duplicates=True
+            )
+            
+            if df.empty:
+                logger.warning(f"No data found for {symbol} {timeframe} in the specified date range")
+                return df
+            
+            # Set datetime as index if not already
+            if 'datetime' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+                df.set_index('datetime', inplace=True)
+            
+            logger.info(f"Retrieved {len(df)} rows for {symbol} {timeframe} from {len(file_paths)} files")
+            return df
+            
+        except Exception as e:
+            logger.error(f"Data loading failure: {str(e)}")
+            traceback.print_exc()
+            return pd.DataFrame()
+
+    async def update_data(self, symbol: str, timeframe: str, data: pd.DataFrame) -> bool:
+        """
+        Update local data storage with new data using timestamp-based file format
+        
+        Args:
+            symbol: Trading pair
+            timeframe: Time interval 
+            data: New data to store
+            
+        Returns:
+            bool: Success status
+        """
+        from src.utils.file_utils import ParquetFileManager
+        
+        if data.empty:
+            logger.warning(f"Attempted to update with empty data: {symbol} {timeframe}")
+            return False
+        
+        # Save data using the simplified ParquetFileManager
+        success = await ParquetFileManager.save_dataframe(
+            df=data,
+            base_path=self.data_path,
+            timeframe=timeframe,
+            symbol=symbol
+        )
+        
+        return success
     
 class ExchangeSource(DataSource):
     """Exchange data source, supports smart pagination for large historical datasets"""

@@ -27,6 +27,8 @@ try:
     from src.common.config_parser import ConfigParser
     from src.common.async_executor import AsyncExecutor
     from src.core.core import TradingCore
+    from src.datasource.download_data import run_downloads, scan_and_migrate
+
 except ImportError as e:
     print(f"Error importing required modules: {e}")
     print("Please ensure all dependencies are installed.")
@@ -2451,10 +2453,7 @@ class TradingSystemGUI:
             # Get the logger
             logger = self.log_manager.get_logger("data_download")
             logger.info(f"Starting data download: {symbols}, {timeframes}, {start_date} to {end_date}")
-            
-            # Import the download function
-            from src.datasource.download_data import run_downloads
-            
+                        
             # Run the download process
             config_path = self.config_var.get()
             results = asyncio.run(run_downloads(
@@ -2549,8 +2548,6 @@ class TradingSystemGUI:
             
             # Import the migration function
             try:
-                from src.datasource.migrate_data import scan_and_migrate
-                
                 # Run the migration process
                 config_path = self.config_var.get()
                 asyncio.run(scan_and_migrate(

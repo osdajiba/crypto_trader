@@ -781,8 +781,11 @@ class Binance:
                             logger.info(f"Fetching chunk {i+1}/{len(chunks)}: {chunk_start} to {chunk_end}")
                         
                         # Fetch the chunk with more explicit parameters
-                        self.async_exchange = self._init_async_exchange()
-                        ohlcv = await self.async_exchange.fetch_ohlcv(
+                        if not self.async_exchange:
+                            await self._init_async_exchange()
+                        exchange = self.async_exchange if self.async_exchange else self.exchange
+                        
+                        ohlcv = await exchange.fetch_ohlcv(
                             symbol=symbol, 
                             timeframe=timeframe, 
                             since=chunk_since,

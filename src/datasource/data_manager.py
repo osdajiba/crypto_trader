@@ -227,7 +227,7 @@ class DataManager:
         except Exception as e:
             self.logger.error(f"Error fetching historical data: {e}", exc_info=True)
             return pd.DataFrame()
-    
+
     async def _fetch_paginated_data(
         self, 
         source: Any, 
@@ -237,7 +237,7 @@ class DataManager:
         end_dt: datetime
     ) -> pd.DataFrame:
         """
-        Fetch data in pages and combine
+        Fetch data in pages and combine, optimized for Parquet files
         
         Args:
             source: Data source to use
@@ -249,7 +249,7 @@ class DataManager:
         Returns:
             pd.DataFrame: Combined data from all pages
         """
-        # Calculate time ranges for pagination
+        # Calculate time ranges for pagination - optimized for timestamp-based files
         time_chunks = self._calculate_time_chunks(timeframe, start_dt, end_dt, self.page_size)
         
         if not time_chunks:
@@ -302,20 +302,18 @@ class DataManager:
             
         combined_data = pd.concat(all_chunks, ignore_index=True)
         
-        # Remove duplicates
-        timestamp_col = None
-        for col in ['datetime', 'timestamp', 'date', 'time']:
-            if col in combined_data.columns:
-                timestamp_col = col
-                break
-                
-        if timestamp_col:
+        # Ensure datetime column exists and is properly formatted
+        if 'timestamp' in combined_data.columns and 'datetime' not in combined_data.columns:
+            combined_data['datetime'] = pd.to_datetime(combined_data['timestamp'], unit='ms')
+        
+        # Sort by datetime and remove duplicates
+        if 'datetime' in combined_data.columns:
             # Sort by timestamp
-            combined_data = combined_data.sort_values(by=timestamp_col)
+            combined_data = combined_data.sort_values(by='datetime')
             
             # Remove duplicates keeping last occurrence
             before_count = len(combined_data)
-            combined_data = combined_data.drop_duplicates(subset=[timestamp_col], keep='last')
+            combined_data = combined_data.drop_duplicates(subset=['datetime'], keep='last')
             after_count = len(combined_data)
             
             if before_count > after_count:
@@ -323,7 +321,7 @@ class DataManager:
         
         self.logger.info(f"Successfully fetched and combined {len(combined_data)} records from {len(all_chunks)}/{len(time_chunks)} pages")
         return combined_data
-    
+
     def _calculate_time_chunks(
         self, 
         timeframe: str, 
