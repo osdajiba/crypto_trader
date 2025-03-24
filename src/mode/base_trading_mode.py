@@ -1,21 +1,23 @@
 # src/mode/base_trading_mode.py
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
 import asyncio
 import pandas as pd
 import json
 import os
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Optional, Any, Type, List
+from pathlib import Path
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
+from src.common.abstract_factory import AbstractFactory, register_factory_class
+from src.common.enums import TradingMode
 from src.datasource.data_manager import DataManager
-from src.strategy.strategy_factory import StrategyFactory
-from src.risk.risk_manager_factory import RiskManagerFactory
-from src.risk.risk_manager import BaseRiskManager
+from src.risk.base_risk_manager import RiskManagerFactory
 from src.backtest.performance_monitor import PerformanceMonitor
+from src.strategy.base_strategy import StrategyFactory
 
 
 class BaseTradingMode(ABC):
@@ -26,7 +28,7 @@ class BaseTradingMode(ABC):
         config: ConfigManager,
         data_manager: Optional[DataManager] = None,
         strategy_factory: Optional[StrategyFactory] = None,
-        risk_manager: Optional[BaseRiskManager] = None,
+        risk_manager: Optional[RiskManagerFactory] = None,
         performance_monitor: Optional[PerformanceMonitor] = None
     ):
         """
@@ -80,7 +82,7 @@ class BaseTradingMode(ABC):
         """Create strategy factory"""
         return StrategyFactory(config=self.config)
     
-    def _create_risk_manager(self) -> BaseRiskManager:
+    def _create_risk_manager(self) -> RiskManagerFactory:
         """Create risk manager"""
         return RiskManagerFactory.create_risk_manager(self.mode_name, self.config)
         
@@ -624,3 +626,145 @@ class BaseTradingMode(ABC):
         3. Clean up any mode-specific resources
         """
         pass
+
+class TradingModeFactory(AbstractFactory):
+    """Optimized factory for trading modes"""
+    
+    def __init__(self, config):
+        """
+        Initialize trading mode factory
+        
+        Args:
+            config: Configuration object
+        """
+        super().__init__(config)
+        
+        # Register built-in trading modes
+        self._register_default_modes()
+        
+        # Auto-discover additional trading modes
+        self._discover_trading_modes()
+    
+    def _register_default_modes(self):
+        """Register default trading modes"""
+        self.register(TradingMode.BACKTEST.value, "src.mode.backtest_trading_mode.BacktestTradingMode", {
+            "description": "Historical data backtesting",
+            "features": ["historical_data", "performance_analysis"]
+        })
+        self.register(TradingMode.PAPER.value, "src.mode.paper_trading_mode.PaperTradingMode", {
+            "description": "Paper trading (uses real market data without real funds)",
+            "features": ["real_time_data", "virtual_execution"]
+        })
+        self.register(TradingMode.LIVE.value, "src.mode.live_trading_mode.LiveTradingMode", {
+            "description": "Live trading (uses real funds on exchange)",
+            "features": ["real_time_data", "real_execution", "risk_management"]
+        })
+    
+    def _discover_trading_modes(self):
+        """Auto-discover trading mode modules"""
+        try:
+            mode_dir = "src.mode"
+            self.discover_registrable_classes(BaseTradingMode, mode_dir, "trading_mode_factory")
+        except Exception as e:
+            self.logger.error(f"Error auto-discovering trading modes: {e}")
+    
+    async def _get_concrete_class(self, name: str) -> Type[BaseTradingMode]:
+        """
+        Get trading mode class
+        
+        Args:
+            name: Trading mode name
+            
+        Returns:
+            Type[BaseTradingMode]: Trading mode class
+        """
+        return await self._load_class_from_path(name, BaseTradingMode)
+    
+    async def _resolve_name(self, name: Optional[str]) -> str:
+        """
+        Validate and resolve trading mode name
+        
+        Args:
+            name: Trading mode name
+            
+        Returns:
+            str: Resolved trading mode name
+        """
+        # Validate mode type
+        try:
+            name_value = name.lower() if name else TradingMode.BACKTEST.value
+            mode = TradingMode(name_value)
+        except ValueError:
+            valid_modes = [m.value for m in TradingMode]
+            raise ValueError(f"Unsupported trading mode: {name}. Must be one of: {valid_modes}")
+            
+        # Force LIVE mode if real-time data is enabled
+        use_live_data = self.config.get("data", "use_live_data", default=False)
+        if use_live_data:
+            mode = TradingMode.LIVE
+            self.logger.info(f"Overriding mode to {mode.value} due to use_live_data=True")
+            
+        return mode.value
+    
+    def get_available_modes(self) -> Dict[str, str]:
+        """
+        Get available trading modes
+        
+        Returns:
+            Dict[str, str]: Mode names with descriptions
+        """
+        result = {}
+        for name, info in self.get_registered_items().items():
+            metadata = info.get('metadata', {})
+            description = metadata.get('description', '')
+            result[name] = description
+        
+        # Ensure basic enum modes are included
+        for mode in TradingMode:
+            if mode.value not in result:
+                result[mode.value] = self._get_default_description(mode)
+                
+        return result
+    
+    def _get_default_description(self, mode: TradingMode) -> str:
+        """
+        Get default description for trading mode
+        
+        Args:
+            mode: Trading mode enum
+            
+        Returns:
+            str: Default description
+        """
+        descriptions = {
+            TradingMode.BACKTEST: "Historical data backtesting",
+            TradingMode.PAPER: "Paper trading (uses real market data without real funds)",
+            TradingMode.LIVE: "Live trading (uses real funds on exchange)"
+        }
+        return descriptions.get(mode, "Unknown trading mode")
+    
+    def get_mode_features(self, mode_name: str) -> List[str]:
+        """
+        Get features of a trading mode
+        
+        Args:
+            mode_name: Trading mode name
+            
+        Returns:
+            List[str]: List of features
+        """
+        metadata = self._metadata.get(mode_name.lower(), {})
+        return metadata.get('features', [])
+
+
+# Example of using decorator in trading mode implementation
+@register_factory_class('trading_mode_factory', 'custom_mode', 
+                       description="Custom trading mode",
+                       features=["feature1", "feature2"])
+class CustomTradingMode(BaseTradingMode):
+    """
+    Custom trading mode demonstrating automatic registration
+    
+    Note: This class should be defined in a separate file, shown here as an example
+    """
+    pass

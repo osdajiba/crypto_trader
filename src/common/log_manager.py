@@ -159,7 +159,7 @@ class LogManager:
         """
         # Determine log file path
         module_path = None
-        
+
         # Check if we have module-specific path configuration
         modules_config = self.config.get("logging", "modules", default={})
         if modules_config and name in modules_config:
@@ -170,8 +170,18 @@ class LogManager:
             # Use the configured path
             log_file = self.base_dir / module_path
         else:
-            # Default to logger name with .log extension
-            log_file = self.base_dir / f"{name}.log"
+            # Use a more organized directory structure
+            # Add year-month directory structure
+            from datetime import datetime
+            year_month = datetime.now().strftime('%Y-%m')
+            
+            # For system.log, put it in logs/system/YYYY-MM/system.log
+            category = "system"
+            if "." in name:
+                parts = name.split(".")
+                category = parts[0]
+            
+            log_file = self.base_dir / category / year_month / f"{name}.log"
         
         # Ensure parent directory exists
         log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +202,7 @@ class LogManager:
                 backupCount=self.backup_count,
                 encoding="utf-8"
             )
-            
+                
         handler.setFormatter(logging.Formatter(self.format_str))
         return handler
     

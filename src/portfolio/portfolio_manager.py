@@ -33,7 +33,7 @@ class PortfolioManager:
     def list_assets(self) -> List[str]:
         return list(self.assets.keys())
 
-    # 扩展功能
+    # extended functions
     def get_asset_weights(self) -> Dict[str, float]:
         total_value = self.get_total_value()
         if total_value == 0:
@@ -41,9 +41,9 @@ class PortfolioManager:
         return {name: asset.get_value() / total_value for name, asset in self.assets.items()}
 
     def calculate_portfolio_risk(self, method: str = 'var') -> float:
-        # 实现风险计算逻辑
+        # Implement risk calculation logic
         pass
 
     def get_portfolio_return(self, start_date: str, end_date: str) -> float:
-        # 实现收益率计算逻辑
+        # Implement yield calculation logic
         pass

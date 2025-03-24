@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from src.risk.base_risk_manager import BaseRiskManager
 
 
-class BacktestRiskManager(BaseRiskManager):
+class LiveRiskManager(BaseRiskManager):
     """
     Risk management implementation for backtesting and paper trading
     

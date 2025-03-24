@@ -21,26 +21,25 @@ def retry(
     config_path: Optional[str] = None
 ) -> Callable:
     """
-    带指数退避的重试装饰器，支持同步和异步函数。
+    Retry decorator with exponential backoff, supports synchronous and asynchronous functions. 
     
-    Args:
-        max_retries (Optional[int]): 最大重试次数，默认从配置读取或 3
-        delay (Optional[float]): 初始重试延迟（秒），默认从配置读取或 1.0
-        exceptions (Tuple[Type[Exception]]): 需要捕获的异常类型，默认 (Exception,)
-        backoff_factor (float): 指数退避因子，每次重试延迟乘以此值，默认 2.0
-        on_error (Optional[Callable[[Exception, int], None]]): 发生错误时的回调，接收异常和重试次数
-        on_success (Optional[Callable[[Any, int], None]]): 重试成功时的回调，接收结果和尝试次数
-        should_retry (Optional[Callable[[Exception, int], bool]]): 自定义重试条件，返回是否继续重试
-        log_errors (bool): 是否记录错误日志，默认 True
-        config_path (Optional[str]): 配置文件路径，用于读取默认参数
-    
-    Returns:
-        Callable: 装饰后的函数
-    
-    Raises:
-        RuntimeError: 重试次数耗尽后仍失败
+    Args: 
+        max_retries (Optional[int]): Maximum number of retries, default reading from configuration or 3 
+        delay (Optional[float]): Initial retry delay (seconds), read from configuration by default or 1.0 
+        exceptions (Tuple[Type[Exception]]): Type of Exception to catch; default (Exception,) 
+        backoff_factor (float): Exponential backoff factor, multiplied by the delay per retry, default 2.0
+        on_error (Optional[Callable[[Exception, int], None]]): Callback in case of an error, receiving the exception and the number of retries 
+        on_success (Optional[Callable[[Any, int], None]]): Callback ona successful retry, receiving the result and the number of attempts 
+        should_retry (Optional[Callable[[Exception, int], bool]]): Define a custom retry condition that returns whether to continue retrying 
+        log_errors (bool): Default True 
+        config_path (Optional[str]): Configuration file path for reading default arguments 
+        
+    Returns: 
+        Callable: decorated function 
+        Raises: RuntimeError: fails even after exhausting the number of retries
     """
-    # 从配置加载默认参数（如果未显式指定）
+    
+    # Load default parameters from the configuration (if not explicitly specified)
     if config_path:
         config = ConfigManager.get_instance(config_path)
         max_retries = max_retries if max_retries is not None else config.get("default_config", "misc_config", "max_retries", default=3)
@@ -50,7 +49,7 @@ def retry(
         delay = delay if delay is not None else 1.0
 
     def decorator(func: Callable) -> Callable:
-        # 判断函数是否为异步
+        # Determines whether the function is asynchronous
         is_async = asyncio.iscoroutinefunction(func)
 
         if is_async:
@@ -74,7 +73,7 @@ def retry(
                             raise RuntimeError(f"Async operation '{func.__name__}' failed after {max_retries} retries") from e
                         await asyncio.sleep(current_delay)
                         current_delay *= backoff_factor
-                return None  # 理论上不会到达，但为类型安全添加
+                return None  # Theoretically not reached, but added for type safety
             return async_wrapper
         else:
             def sync_wrapper(*args, **kwargs) -> Any:
@@ -97,6 +96,6 @@ def retry(
                             raise RuntimeError(f"Operation '{func.__name__}' failed after {max_retries} retries") from e
                         time.sleep(current_delay)
                         current_delay *= backoff_factor
-                return None  # 理论上不会到达，但为类型安全添加
+                return None  # Theoretically not reached, but added for type safety
             return sync_wrapper
     return decorator

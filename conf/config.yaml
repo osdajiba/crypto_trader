@@ -1,282 +1,237 @@
-# ========================================================================
-# TRADING SYSTEM CONFIGURATION
-# Version: 1.0.0                                        Updated: 2025-03-11
-# ========================================================================
-
-# -----------------------------
-# SYSTEM SETTINGS
-# -----------------------------
-system:
-  operational_mode: backtest           # Options: backtest/live/paper
-  timezone: UTC                        # System timezone
-  
-  performance:
-    max_threads: 4                     # Maximum worker threads
-    max_memory: 1073741824             # Memory limit (1GB)
-    task_timeout: 300                  # Task timeout in seconds
-
-# -----------------------------
-# NETWORK CONFIGURATION
-# -----------------------------
-proxies:
-  http: http://127.0.0.1:7890          # HTTP proxy
-  https: https://127.0.0.1:7890         # HTTPS proxy
-
-# -----------------------------
-# API SETTINGS
-# -----------------------------
 api:
-  base_url: https://api.example.com    # API base URL
-  timeout: 60000                       # Timeout in milliseconds
-  retry_attempts: 3                    # Number of retry attempts
-  retry_delay: 1.0                     # Delay between retries (seconds)
-  enable_rate_limit: true              # Enable API rate limiting
-  
-  # Exchange-specific settings
+  base_url: https://api.example.com
   binance:
-    api_key: "YOUR_API_KEY"            # Exchange API key
-    secret: "YOUR_SECRET_KEY"          # Exchange API secret
+    api_key: your_api_key
     options:
-      adjust_time_diff: true           # Auto-adjust time difference
-      recv_window: 60000               # Processing window (ms)
-      default_type: spot               # Market type
-
-  # HTTP headers
+      adjust_time_diff: true
+      default_type: spot
+      recv_window: 60000
+    secret: your_secret_key
+    workaround_enabled: true
+  enable_rate_limit: true
   headers:
-    connection: close                  # Connection handling
-
-# -----------------------------
-# SECURITY SETTINGS
-# -----------------------------
-security:
-  use_env_vars: true                   # Use environment variables for secrets
-  credentials:
-    encryption: aes-256-cbc            # Encryption algorithm
-
-# -----------------------------
-# DATABASE CONFIGURATION
-# -----------------------------
-database:
-  url: sqlite:///database/trading.sqlite  # Database connection string
-  pool_size: 5                            # Connection pool size
-  timeout: 30                             # Connection timeout (seconds)
-  echo_sql: false                         # Log SQL statements (debug)
-
-# -----------------------------
-# DATA MANAGEMENT
-# -----------------------------
-data:
-  source:
-    live: false                        # Enable real-time data
-    type: local                        # Data source: local/exchange
-  
-  storage:
-    historical: data/historical/       # Historical data path
-    orders: data/order_history.csv     # Order history file
-    trades: data/trade_records.json    # Trade records file
-  
-  cache:
-    dir: ./cache                       # Cache directory
-    max_size: 104857600                # Max cache size (100MB)
-    retention_days: 30                 # Data retention period
-
-# -----------------------------
-# LOGGING CONFIGURATION
-# -----------------------------
-logging:
-  base_path: ./logs                    # Log root directory
-  level: INFO                          # Default log level
-  async_write: true                    # Non-blocking logging
-  
-  # Formatting
-  format: "%(asctime)s | %(levelname)-8s | %(module)-15s | %(message)s"
-  date_format: "%Y-%m-%d %H:%M:%S%z"   # ISO-8601 timestamp format
-  detailed_format: true                # Include file and line numbers
-  
-  # Log rotation
-  rotation:
-    strategy: size                     # size or time based rotation
-    max_file_size: 10                  # Max size in MB
-    backup_count: 5                    # Number of backups to keep
-    time_interval: D                   # D=day, H=hour (for time rotation)
-  
-  # Output destinations
-  handlers:
-    console:
-      enabled: true                    # Enable console output
-      level: WARNING                   # Console-specific level
-    
-    file:
-      enabled: true                    # Enable file output
-      compression: gz                  # Compress rotated logs
-      encoding: utf-8                  # File encoding
-      
-      buffer:
-        enabled: true                  # Buffer log messages
-        capacity: 1000                 # Buffer size
-        flush_interval: 5              # Flush interval (seconds)
-  
-  # Remote logging
-  syslog:
-    enabled: false                     # Enable syslog
-    host: logs.example.com             # Syslog server
-    port: 514                          # Syslog port
-  
-  # Module-specific log settings
-  modules:
-    core:
-      level: INFO                      # System core logs
-      path: system/core.log
-    
-    execution:
-      level: DEBUG                     # Order execution logs
-      path: trading/execution.log
-    
-    strategy:
-      level: INFO                      # Strategy decision logs
-      path: strategies/main.log
-    
-    risk:
-      level: WARNING                   # Risk management logs
-      path: risk/management.log
-    
-    data:
-      level: DEBUG                     # Data pipeline logs
-      path: data/pipeline.log
-    
-    api:
-      level: ERROR                     # API communication logs
-      path: network/api.log
-    
-    errors:
-      level: CRITICAL                  # Critical error logs
-      path: errors/system_errors.log
-
-# -----------------------------
-# TRADING CONFIGURATION
-# -----------------------------
-trading:
-  capital:
-    initial: 100000                    # Starting capital (USD)
-    min_order: 0.001                   # Minimum order size
-  
-  instruments:                         # Trading pairs
-    - BTC/USDT                         # Primary pair
-    - ETH/USDT                         # Secondary pair
-  
-  execution:
-    slippage: 0.001                    # Slippage assumption
-    leverage: 1                        # Trading leverage
-  
-  limits:
-    position: 0.1                      # Max position size (% of portfolio)
-    daily_trades: 50                   # Max trades per day
-    max_leverage: 10                   # Maximum allowed leverage
-    min_volume: 0.001                  # Minimum order volume
-
-# -----------------------------
-# RISK MANAGEMENT
-# -----------------------------
-risk:
-  stop_loss:
-    enabled: true                      # Enable stop-loss
-    percentage: 0.02                   # 2% stop-loss
-    max_daily: 0.05                    # 5% max daily loss
-  
-  take_profit:
-    enabled: true                      # Enable take-profit
-    percentage: 0.05                   # 5% take-profit target
-  
-  drawdown:
-    max_portfolio: 0.2                 # 20% max portfolio drawdown
-    max_single_trade: 0.1              # 10% max single trade drawdown
-
-# -----------------------------
-# STRATEGY CONFIGURATION
-# -----------------------------
-strategy:
-  active: dual_ma                      # Active strategy name
-  timeframe: 1h                        # Strategy timeframe
-  
-  parameters:                          # Strategy parameters
-    fast_period: 50                    # Fast MA period
-    slow_period: 200                   # Slow MA period
-    threshold: 0.005                   # Signal threshold
-  
-  fallback_strategy: neural_network    # Alternate strategy
-
-# -----------------------------
-# BACKTESTING CONFIGURATION
-# -----------------------------
+    connection: close
+  retry_attempts: 3
+  retry_delay: 1.0
+  timeout: 60000
+  useproxy: auto
 backtest:
-  mode: full                           # full/single_pass/walk_forward
-  
-  period:
-    start: 2023-01-01                  # Backtest start date
-    end: 2023-12-31                    # Backtest end date
-  
   costs:
-    commission: 0.001                  # Transaction fee (0.1%)
-    slippage: 0.001                    # Simulated slippage (0.1%)
-  
+    commission: 0.001
+    slippage: 0.001
+  engine: ohlcv
+  mode: full
+  period:
+    end: 2023-3-31
+    start: '2023-01-01'
   reporting:
-    formats:                           # Output formats
-      - csv
-      - json
-      - html
-    
-    metrics:                           # Performance metrics
-      - sharpe_ratio
-      - max_drawdown
-      - annualized_return
-
-# -----------------------------
-# LIVE TRADING CONFIGURATION
-# -----------------------------
+    formats:
+    - csv
+    - json
+    - html
+    metrics:
+    - sharpe_ratio
+    - max_drawdown
+    - annualized_return
+data:
+  cache:
+    dir: ./cache
+    enabled: true
+    max_size: 104857600
+    retention_days: 30
+  database:
+    host: localhost
+    name: trading
+    password: ''
+    port: 3306
+    table_prefix: market_
+    type: mysql
+    user: root
+  source:
+    backup_source: exchange
+    live: false
+    primary_source: local
+    type: local
+  storage:
+    historical: data/historical/
+    orders: data/order_history.csv
+    trades: data/trade_records.json
+database:
+  echo_sql: false
+  pool_size: 5
+  timeout: 30
+  url: sqlite:///database/trading.sqlite
 live:
   exchange:
-    name: binance                      # Exchange name
-    environment: production            # production/testnet
-    
+    environment: production
+    name: binance
     rate_limits:
-      requests: 20                     # Max API calls per second
-      timeout: 30                      # Connection timeout
-  
+      requests: 20
+      timeout: 30
   monitoring:
-    interval: 60                       # Monitoring interval (seconds)
-    
-    metrics:                           # Live metrics to track
-      - portfolio_value
-      - daily_return
-      - position_risk
-  
+    interval: 60
+    metrics:
+    - portfolio_value
+    - daily_return
+    - position_risk
   safeguards:
-    max_retries: 3                     # Error recovery attempts
-    cooldown: 60                       # Cooldown period (seconds)
-    
-    emergency_stop:                    # Circuit breaker
-      enabled: true                    # Enable emergency stop
-      threshold: 0.1                   # Trigger at 10% daily loss
-
-# -----------------------------
-# NOTIFICATIONS
-# -----------------------------
+    cooldown: 60
+    emergency_stop:
+      enabled: true
+      threshold: 0.1
+    max_retries: 3
+logging:
+  async_write: true
+  base_path: ./logs
+  categories:
+    core:
+      level: INFO
+      modules:
+      - core
+      - trading_system
+      - mode
+      - performance
+    data:
+      level: INFO
+      modules:
+      - datasource
+      - dataframe
+      - database
+      - download_data
+    exchange:
+      level: WARNING
+      modules:
+      - exchange
+      - api
+      - binance
+      - websocket
+    strategy:
+      level: INFO
+      modules:
+      - strategy
+      - indicators
+      - signals
+      - backtest
+    system:
+      level: INFO
+      modules:
+      - system
+      - cli_runner
+      - launcher
+      - gui_app
+      - async_executor
+    utils:
+      level: INFO
+      modules:
+      - utils
+      - network
+      - config_manager
+  combined_log: true
+  date_format: '%Y-%m-%d %H:%M:%S%z'
+  detailed_format: true
+  format: '%(asctime)s | %(levelname)-8s | %(module)-15s | [%(filename)s:%(lineno)d]
+    | %(message)s'
+  handlers:
+    console:
+      colors: true
+      enabled: true
+      level: INFO
+    file:
+      buffer:
+        capacity: 1000
+        enabled: true
+        flush_interval: 5
+      compression: gz
+      enabled: true
+      encoding: utf-8
+  level: INFO
+  rotation:
+    backup_count: 5
+    max_file_size: 10485760
+    strategy: size
+    time_interval: D
+  summary:
+    enabled: true
+    format: json
+    level: WARNING
+  syslog:
+    enabled: false
+    facility: local0
+    host: localhost
+    port: 514
+network:
+  connection:
+    retry_attempts: 3
+    retry_delay: 2
+    test_url: https://api.binance.com/api/v3/ping
+    timeout: 30
+  proxy:
+    detection:
+      check_common_ports: true
+      check_env: true
+      check_system: true
+      test_connection: true
+    enabled: auto
 notifications:
   email:
-    enabled: false                     # Enable email notifications
+    enabled: false
     recipients:
-      - your.email@example.com         # Email recipients
-  
+    - your.email@example.com
   telegram:
-    enabled: false                     # Enable Telegram notifications
-    bot_token: YOUR_BOT_TOKEN          # Telegram bot token
-    chat_id: YOUR_CHAT_ID              # Telegram chat ID
-
-# -----------------------------
-# VALIDATION SETTINGS
-# -----------------------------
+    bot_token: YOUR_BOT_TOKEN
+    chat_id: YOUR_CHAT_ID
+    enabled: false
+proxies:
+  http: 127.0.0.1:7890
+  https: 127.0.0.1:7890
+risk:
+  drawdown:
+    max_portfolio: 0.2
+    max_single_trade: 0.1
+  stop_loss:
+    enabled: true
+    max_daily: 0.05
+    percentage: 0.02
+  take_profit:
+    enabled: true
+    percentage: 0.05
+security:
+  credentials:
+    encryption: aes-256-cbc
+  use_env_vars: true
+strategy:
+  active: dual_ma
+  fallback_strategy: neural_network
+  parameters:
+    fast_period: 50
+    slow_period: 200
+    threshold: 0.005
+  timeframe: 1h
+system:
+  backtest_mode: ohlcv
+  offline_mode: false
+  operational_mode: backtest
+  performance:
+    max_memory: 1073741824
+    max_threads: 4
+    task_timeout: 300
+  timezone: UTC
+trading:
+  capital:
+    initial: 100000.0
+    min_order: 0.001
+  execution:
+    leverage: 1
+    slippage: 0.001
+  instruments:
+  - BTC/USDT
+  limits:
+    daily_trades: 50
+    max_leverage: 10
+    min_volume: 0.001
+    position: 0.1
 validation:
-  required:                            # Required configuration keys
-    - database.url
-    - system.performance.max_threads
-    - trading.capital.initial
+  required:
+  - database.url
+  - system.performance.max_threads
+  - trading.capital.initial

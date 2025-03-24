@@ -6,226 +6,170 @@ from src.strategy.base_strategy import BaseStrategy
 from src.common.config_manager import ConfigManager
 from src.common.abstract_factory import register_factory_class
 from src.common.async_executor import AsyncExecutor
-from src.common.data_processor import DataProcessor
 
 
 @register_factory_class('strategy_factory', 'dual_ma', 
-                       description="双均线交叉策略",
+                       description="Dual Moving Average Crossover Strategy",
                        category="trend",
                        parameters=["short_window", "long_window"])
 class DualMAStrategy(BaseStrategy):
     """
-    双均线交叉策略实现，使用短期和长期移动平均线的交叉生成交易信号。
+    Implementation of Dual Moving Average crossover strategy generating trading signals 
+    using short-term and long-term moving averages.
     
-    通过AsyncExecutor管理异步任务，提供更高效的资源使用和更好的错误处理。
+    Enhanced with factor registration and efficient data management.
     """
 
     def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
         """
-        初始化双均线策略
+        Initialize Dual MA strategy
         
         Args:
-            config (ConfigManager): 配置管理器实例
-            params (Optional[Dict[str, Any]]): 策略特定参数
-                期望参数: short_window, long_window, symbol, multi_symbol_data, lookback_period, period
+            config (ConfigManager): Configuration manager instance
+            params (Optional[Dict[str, Any]]): Strategy-specific parameters
+                Expected parameters: short_window, long_window, symbol, multi_symbol_data, lookback_period, period
         """
         super().__init__(config, params)
         self.short_window = self.params.get("short_window", 10)
         self.long_window = self.params.get("long_window", 30)
         self.primary_symbol = self.params.get("symbol", "unknown")
         self.multi_symbol_data = self.params.get("multi_symbol_data", {})
-        self.executor = AsyncExecutor()  # 获取单例实例
+        self.executor = AsyncExecutor()  # Get singleton instance
         self._running_tasks: List[str] = []
+        
+        # Register factors during initialization
+        self._register_default_factors()
+
+    def _register_default_factors(self) -> None:
+        """
+        Register MA factors based on strategy parameters
+        """
+        # Register short MA factor
+        self.register_ma_factor('short_ma', self.short_window)
+        
+        # Register long MA factor
+        self.register_ma_factor('long_ma', self.long_window)
+        
+        # Log registration
+        self.logger.debug(f"Registered factors: short_ma (window={self.short_window}), long_ma (window={self.long_window})")
+
+    def register_ma_factor(self, name: str, window_size: int) -> None:
+        """
+        Register a moving average factor
+        
+        Args:
+            name: Factor name
+            window_size: Window size for the moving average
+        """
+        # Define MA calculation function
+        def calculate_ma(data: pd.DataFrame, **kwargs) -> pd.Series:
+            if 'close' in data.columns:
+                return data['close'].rolling(window=window_size).mean()
+            return pd.Series(index=data.index)
+        
+        # Register the factor with the base class
+        self.register_factor(name, window_size, calculate_ma)
 
     async def initialize(self) -> None:
-        """初始化资源并验证参数，使用AsyncExecutor管理任务生命周期"""
-        # 启动执行器
+        """Initialize resources and validate parameters"""
+        # Start executor
         await self.executor.start()
         
-        # 使用父类初始化
-        await self.executor.submit(super().initialize)
+        # Parent class initialization
+        await super().initialize()
         
-        # 验证参数
+        # Parameter validation
         if self.short_window >= self.long_window:
-            self.logger.error("short_window (%d) must be less than long_window (%d)", 
-                              self.short_window, self.long_window)
+            self.logger.error(f"short_window ({self.short_window}) must be less than long_window ({self.long_window})")
             raise ValueError("short_window must be less than long_window")
         
-        if self.lookback_period < self.long_window:
-            self.logger.warning("lookback_period (%d) is less than long_window (%d), adjusting to %d", 
-                                self.lookback_period, self.long_window, self.long_window)
-            self.lookback_period = self.long_window
+        # Adjust lookback period if needed
+        min_lookback = self.long_window * 2  # At least double the long window for meaningful signals
+        if self.lookback_period < min_lookback:
+            self.logger.warning(f"lookback_period ({self.lookback_period}) is less than recommended ({min_lookback}), adjusting")
+            self.lookback_period = min_lookback
             
-        self.logger.info("Initialized DualMAStrategy with short_window=%d, long_window=%d", 
-                         self.short_window, self.long_window)
-
-    async def shutdown(self) -> None:
-        """关闭策略并清理资源"""
-        # 取消所有运行中的任务
-        for task_id in self._running_tasks.copy():
-            await self.executor.cancel_task(task_id)
-        self._running_tasks.clear()
-        
-        # 调用父类的shutdown方法
-        await super().shutdown()
-        
-        self.logger.info("DualMAStrategy shutdown complete")
+        self.logger.info(f"Initialized DualMAStrategy with short_window={self.short_window}, long_window={self.long_window}")
 
     async def _generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        生成基于市场数据的交易信号，实现BaseStrategy的抽象方法。
+        Generate trading signals based on market data
         
         Args:
-            data (pd.DataFrame): 用于信号生成的市场数据（例如，OHLCV）
+            data (pd.DataFrame): Market data for signal generation (e.g. OHLCV)
 
         Returns:
-            pd.DataFrame: 包含'timestamp', 'symbol', 'action'（买/卖）等列的信号
-        """
-        self.logger.info("Generating signals for DualMAStrategy")
-        
-        # 执行前置钩子
-        async with self.executor.task_context("pre_signal_hook") as task_id:
-            self._running_tasks.append(task_id)
-            await self._execute_hook("pre_signal_generation", data=data)
-            self._running_tasks.remove(task_id)
-
-        # 清理和验证数据
-        if DataProcessor is not None:
-            real_time_data = DataProcessor.clean_ohlcv(data)
-            real_time_data = DataProcessor.resample(real_time_data, self.period)
-        else:
-            real_time_data = self._preprocess_data(data)
-            
-        valid_data = await self.executor.submit(self._validate_data, real_time_data)
-        if not valid_data:
+            pd.DataFrame: Signals containing 'timestamp', 'symbol', 'action' (buy/sell) columns
+        """        
+        if data.empty:
+            self.logger.warning("Empty data, cannot generate signals")
             return pd.DataFrame()
-
-        # 准备分析数据
-        if DataProcessor is not None and hasattr(DataProcessor, "splice_data"):
-            all_data = DataProcessor.splice_data(
-                self.historical_data, real_time_data, self.primary_symbol, 
-                self.lookback_period, self.multi_symbol_data
-            )
-        else:
-            # 如果DataUtils不可用，使用内部方法
-            all_data = self._combine_historical_and_new_data(real_time_data)
-            
-        if all_data.empty:
-            self.logger.warning("No valid data after preparation")
-            return pd.DataFrame()
-
-        # 计算信号
-        async with self.executor.task_context("signal_calculation") as task_id:
-            self._running_tasks.append(task_id)
-            signals = await self._calculate_signals(all_data)
-            signals = self._filter_signals(signals)
-            self._running_tasks.remove(task_id)
-
-        # 更新历史数据缓存
-        if DataProcessor is not None and hasattr(DataProcessor, "update_historical_data"):
-            DataProcessor.update_historical_data(self.historical_data, real_time_data, 
-                                          self.primary_symbol, self.lookback_period)
-        else:
-            self._update_historical_data(real_time_data)
-            
-        self.logger.debug("Updated historical data for %s with %d new rows", 
-                        self.primary_symbol, len(real_time_data))
-
-        # 执行后置钩子
-        async with self.executor.task_context("post_signal_hook") as task_id:
-            self._running_tasks.append(task_id)
-            await self._execute_hook("post_signal_generation", signals=signals)
-            self._running_tasks.remove(task_id)
-            
-        return signals
-
-    def _combine_historical_and_new_data(self, new_data: pd.DataFrame) -> pd.DataFrame:
-        """
-        内部方法，在DataUtils不可用时合并历史和新数据
         
-        Args:
-            new_data (pd.DataFrame): 新的市场数据
-            
-        Returns:
-            pd.DataFrame: 合并的历史和新数据
-        """
-        if self.primary_symbol in self.historical_data:
-            combined = pd.concat([self.historical_data[self.primary_symbol], new_data])
-            combined['_symbol'] = self.primary_symbol
-            return combined
-        else:
-            new_data['_symbol'] = self.primary_symbol
-            return new_data
-
-    def _update_historical_data(self, new_data: pd.DataFrame) -> None:
-        """
-        内部方法，在DataUtils不可用时更新历史数据
+        # Get the symbol
+        symbol = self.primary_symbol
+        if '_symbol' in data.columns:
+            # If data has symbol column, use the first one (assuming it's all the same)
+            if not data.empty:
+                symbol = data['_symbol'].iloc[0]
         
-        Args:
-            new_data (pd.DataFrame): 要添加到历史缓存的新市场数据
-        """
-        if self.primary_symbol not in self.historical_data:
-            self.historical_data[self.primary_symbol] = new_data
-        else:
-            self.historical_data[self.primary_symbol] = pd.concat(
-                [self.historical_data[self.primary_symbol], new_data]
-            ).tail(self.lookback_period)
-
-    async def _calculate_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        计算基于双均线交叉的信号
+        # Calculate moving averages using optimized factor calculation
+        short_ma = self.calculate_factor(data, 'short_ma', symbol)
+        long_ma = self.calculate_factor(data, 'long_ma', symbol)
         
-        Args:
-            df (pd.DataFrame): 包含OHLCV数据的数据框
-            
-        Returns:
-            pd.DataFrame: 生成的交易信号
-        """
-        # 过滤主要符号
-        if '_symbol' in df.columns:
-            df = df[df['_symbol'] == self.primary_symbol].copy()
-        else:
-            df = df.copy()
-            
-        if df.empty:
-            self.logger.warning("No data for primary symbol %s", self.primary_symbol)
-            return pd.DataFrame()
-
-        # 计算移动平均线
-        df['short_ma'] = df['close'].rolling(window=self.short_window, min_periods=1).mean()
-        df['long_ma'] = df['close'].rolling(window=self.long_window, min_periods=1).mean()
-
-        # 生成信号
-        signals = pd.DataFrame(index=df.index)
-        signals['timestamp'] = df['time'] if 'time' in df.columns else df.index
-        signals['symbol'] = self.primary_symbol
-        signals['action'] = None
-
-        # 买入信号：短期均线向上穿过长期均线
-        signals.loc[(df['short_ma'] > df['long_ma']) & 
-                    (df['short_ma'].shift(1) <= df['long_ma'].shift(1)), 'action'] = 'buy'
+        # Create signal DataFrame
+        signals = pd.DataFrame(index=data.index)
+        signals['timestamp'] = data.index
+        signals['symbol'] = symbol
+        signals['action'] = None  # Initialize with None
         
-        # 卖出信号：短期均线向下穿过长期均线
-        signals.loc[(df['short_ma'] < df['long_ma']) & 
-                    (df['short_ma'].shift(1) >= df['long_ma'].shift(1)), 'action'] = 'sell'
-
+        # Buy signal: short MA crosses above long MA
+        crossover_up = (short_ma > long_ma) & (short_ma.shift(1) <= long_ma.shift(1))
+        signals.loc[crossover_up, 'action'] = 'buy'
+        
+        # Sell signal: short MA crosses below long MA
+        crossover_down = (short_ma < long_ma) & (short_ma.shift(1) >= long_ma.shift(1))
+        signals.loc[crossover_down, 'action'] = 'sell'
+        
+        # Drop rows with no action
         signals = signals.dropna(subset=['action'])
-        self.logger.debug("Generated %d signals for %s", len(signals), self.primary_symbol)
+        
+        # Add price information if needed for order sizing
+        if 'close' in data.columns:
+            signals['price'] = data.loc[signals.index, 'close']
+        
+        # Calculate position size based on available capital
+        if 'price' in signals.columns:
+            for idx, row in signals.iterrows():
+                if row['action'] == 'buy':
+                    signals.at[idx, 'quantity'] = self.calculate_position_size(row['price'], 
+                                                                          self.config.get("trading", "capital", "initial", default=100000))
+        
+                self.logger.info(f"Generated {len(signals)} signals for {symbol}")
         return signals
-
-    async def _calculate_factor(self, df: pd.DataFrame, factor: str) -> pd.Series:
+    
+    def calculate_position_size(self, price: float, capital: float) -> float:
         """
-        计算因子值（在此策略中未使用）
+        Calculate position size based on price and available capital
         
         Args:
-            df (pd.DataFrame): 包含OHLCV数据的数据框
-            factor (str): 因子名称
+            price (float): Current asset price
+            capital (float): Available capital
             
         Returns:
-            pd.Series: 计算的因子值
+            float: Position size
         """
-        self.logger.warning("Factor calculation not implemented in DualMAStrategy")
-        return pd.Series(0, index=df.index)
-
-
-
+        # Get risk settings from params or config
+        risk_per_trade = self.params.get("risk_per_trade", 0.01)  # Default 1% risk
+        max_position = self.config.get("trading", "limits", "position", default=0.1)  # Default max 10%
+        
+        # Calculate position size
+        risk_amount = capital * risk_per_trade
+        max_amount = capital * max_position
+        
+        # Use smaller of the two values
+        position_value = min(risk_amount, max_amount)
+        
+        # Convert to quantity
+        quantity = position_value / price if price > 0 else 0
+        
+        return quantity

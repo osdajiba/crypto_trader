@@ -14,6 +14,12 @@ import queue
 import tkinter.font as tkFont
 import asyncio
 import weakref
+import matplotlib
+matplotlib.use('TkAgg')
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import pandas as pd
+
 
 # Add project root to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +33,8 @@ try:
     from src.common.config_parser import ConfigParser
     from src.common.async_executor import AsyncExecutor
     from src.core.core import TradingCore
+    from src.datasource.download_data import run_downloads, scan_and_migrate
+
 except ImportError as e:
     print(f"Error importing required modules: {e}")
     print("Please ensure all dependencies are installed.")
@@ -1432,24 +1440,35 @@ class TradingSystemGUI:
         self.stats_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Create charts tab
+        # Create charts tab with improved selection
         chart_frame = ttk.Frame(chart_tab, padding="10")
         chart_frame.pack(fill=tk.BOTH, expand=True)
         
         # Add chart type selector
-        ttk.Label(chart_frame, text="Chart Type:").pack(side=tk.TOP, anchor=tk.W, padx=5, pady=5)
+        chart_controls = ttk.Frame(chart_frame)
+        chart_controls.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(chart_controls, text="Chart Type:").pack(side=tk.LEFT, padx=5)
         
         self.chart_type_var = tk.StringVar(value="equity_curve")
         chart_types = ["equity_curve", "drawdown", "monthly_returns", "trade_distribution"]
-        chart_combo = ttk.Combobox(chart_frame, textvariable=self.chart_type_var, values=chart_types, state="readonly")
-        chart_combo.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+        chart_combo = ttk.Combobox(chart_controls, textvariable=self.chart_type_var, values=chart_types, state="readonly", width=20)
+        chart_combo.pack(side=tk.LEFT, padx=5)
         
-        # Chart display area (placeholder)
+        # Add toggle for baseline display
+        self.show_baseline_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(chart_controls, text="Show Baseline", variable=self.show_baseline_var, 
+                    command=self._update_chart).pack(side=tk.LEFT, padx=20)
+        
+        # Chart display area with improved support for React components
         self.chart_display = ttk.Frame(chart_frame, relief=tk.SUNKEN, borderwidth=1)
         self.chart_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         chart_placeholder = ttk.Label(self.chart_display, text="Chart will be displayed here after trading run")
         chart_placeholder.pack(fill=tk.BOTH, expand=True)
+        
+        # Bind events for chart updates
+        chart_combo.bind("<<ComboboxSelected>>", self._update_chart)
         
         # Button frame for all tabs
         button_frame = ttk.Frame(results_frame)
@@ -1474,7 +1493,259 @@ class TradingSystemGUI:
             maximum=100
         )
         self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+
+    def _display_equity_curve_chart(self):
+        """Display equity curve using Matplotlib"""
+        try:
+            # Create figure and subplot
+            fig = Figure(figsize=(8, 4), dpi=100)
+            ax = fig.add_subplot(111)
             
+            # Get equity curve data
+            if 'equity_curve' in self.latest_results:
+                equity_data = self.latest_results['equity_curve']
+                
+                # Process data into plottable format
+                dates, values = self._extract_chart_data(equity_data)
+                
+                # Plot equity curve
+                ax.plot(dates, values, 'b-', label='Strategy')
+                
+                # Plot baseline if available and enabled
+                if self.show_baseline_var.get() and 'baseline_prices' in self.latest_results:
+                    baseline_data = self.latest_results['baseline_prices']
+                    baseline_dates, baseline_values = self._extract_chart_data(baseline_data)
+                    
+                    # Normalize baseline to start at same value as equity curve
+                    if values and baseline_values:
+                        try:
+                            normalization_factor = values[0] / baseline_values[0]
+                            normalized_baseline = [v * normalization_factor for v in baseline_values]
+                            
+                            # Plot normalized baseline
+                            ax.plot(baseline_dates, normalized_baseline, 'r--', label='Baseline')
+                        except (IndexError, ZeroDivisionError):
+                            pass
+                
+                # Add chart details
+                ax.set_title('Equity Curve')
+                ax.set_xlabel('Time')
+                ax.set_ylabel('Portfolio Value')
+                ax.grid(True)
+                ax.legend()
+                
+                # Create canvas and add to display
+                canvas = FigureCanvasTkAgg(fig, master=self.chart_display)
+                canvas.draw()
+                canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            else:
+                ttk.Label(self.chart_display, text="No equity curve data available").pack(fill=tk.BOTH, expand=True)
+        except Exception as e:
+            ttk.Label(self.chart_display, text=f"Error generating chart: {str(e)}").pack(fill=tk.BOTH, expand=True)
+
+    def _display_drawdown_chart(self):
+        """Display drawdown chart using Matplotlib"""
+        try:
+            # Create figure and subplot
+            fig = Figure(figsize=(8, 4), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            # Get drawdown data
+            if 'drawdown' in self.latest_results:
+                drawdown_data = self.latest_results['drawdown']
+                
+                # Process data into plottable format
+                dates, values = self._extract_chart_data(drawdown_data)
+                
+                # Plot drawdown
+                ax.fill_between(dates, 0, values, color='r', alpha=0.3)
+                ax.plot(dates, values, 'r-')
+                
+                # Add chart details
+                ax.set_title('Drawdown')
+                ax.set_xlabel('Time')
+                ax.set_ylabel('Drawdown %')
+                ax.grid(True)
+                
+                # Create canvas and add to display
+                canvas = FigureCanvasTkAgg(fig, master=self.chart_display)
+                canvas.draw()
+                canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            else:
+                ttk.Label(self.chart_display, text="No drawdown data available").pack(fill=tk.BOTH, expand=True)
+        except Exception as e:
+            ttk.Label(self.chart_display, text=f"Error generating chart: {str(e)}").pack(fill=tk.BOTH, expand=True)
+
+    def _display_monthly_returns_chart(self):
+        """Display monthly returns as a bar chart"""
+        try:
+            # Create figure and subplot
+            fig = Figure(figsize=(8, 4), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            # Get monthly returns data
+            if 'monthly_returns' in self.latest_results:
+                monthly_data = self.latest_results['monthly_returns']
+                
+                # Convert to lists for plotting
+                months = list(monthly_data.keys())
+                returns = list(monthly_data.values())
+                
+                # Plot monthly returns
+                colors = ['g' if r >= 0 else 'r' for r in returns]
+                ax.bar(months, returns, color=colors)
+                
+                # Add chart details
+                ax.set_title('Monthly Returns')
+                ax.set_xlabel('Month')
+                ax.set_ylabel('Return %')
+                ax.grid(True, axis='y')
+                
+                # Rotate x labels if needed
+                if len(months) > 6:
+                    plt = ax.xaxis.get_ticklabels()
+                    for p in plt:
+                        p.set_rotation(45)
+                
+                # Create canvas and add to display
+                canvas = FigureCanvasTkAgg(fig, master=self.chart_display)
+                canvas.draw()
+                canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            else:
+                ttk.Label(self.chart_display, text="No monthly returns data available").pack(fill=tk.BOTH, expand=True)
+        except Exception as e:
+            ttk.Label(self.chart_display, text=f"Error generating chart: {str(e)}").pack(fill=tk.BOTH, expand=True)
+
+    def _display_trade_distribution_chart(self):
+        """Display trade win/loss distribution as a pie chart"""
+        try:
+            # Create figure and subplot
+            fig = Figure(figsize=(8, 4), dpi=100)
+            ax = fig.add_subplot(111)
+            
+            # Get trades data
+            if 'trades' in self.latest_results:
+                trades = self.latest_results['trades']
+                
+                # Calculate win/loss stats
+                wins = sum(1 for t in trades if t.get('pnl', 0) > 0)
+                losses = sum(1 for t in trades if t.get('pnl', 0) <= 0)
+                
+                # Create pie chart
+                labels = f'Wins ({wins})', f'Losses ({losses})'
+                sizes = [wins, losses] if wins + losses > 0 else [1, 0]  # Avoid empty pie
+                colors = ['#4CAF50', '#F44336']
+                
+                ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+                ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+                ax.set_title('Trade Win/Loss Distribution')
+                
+                # Create canvas and add to display
+                canvas = FigureCanvasTkAgg(fig, master=self.chart_display)
+                canvas.draw()
+                canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            else:
+                ttk.Label(self.chart_display, text="No trade data available").pack(fill=tk.BOTH, expand=True)
+        except Exception as e:
+            ttk.Label(self.chart_display, text=f"Error generating chart: {str(e)}").pack(fill=tk.BOTH, expand=True)
+
+    def _extract_chart_data(self, data):
+        """Utility function to extract plottable data from various data formats"""
+        if isinstance(data, pd.DataFrame):
+            if 'timestamp' in data.columns and 'portfolio_value' in data.columns:
+                return data['timestamp'].tolist(), data['portfolio_value'].tolist()
+            elif 'timestamp' in data.columns:
+                return data['timestamp'].tolist(), data.iloc[:, 1].tolist()
+            elif 'portfolio_value' in data.columns:
+                return range(len(data)), data['portfolio_value'].tolist()
+            else:
+                return range(len(data)), data.iloc[:, 0].tolist()
+        elif isinstance(data, dict):
+            items = sorted(data.items())
+            return [item[0] for item in items], [item[1] for item in items]
+        else:
+            # Assume it's a list or array
+            return range(len(data)), list(data)
+
+    def _update_chart(self, event=None):
+        """Update chart based on current settings"""
+        # Clear the chart display
+        for widget in self.chart_display.winfo_children():
+            widget.destroy()
+            
+        chart_type = self.chart_type_var.get()
+        
+        # If no results data yet, show placeholder
+        if not hasattr(self, 'latest_results') or not self.latest_results:
+            ttk.Label(self.chart_display, text="Run a backtest to see results").pack(fill=tk.BOTH, expand=True)
+            return
+        
+        # Generate appropriate chart based on type
+        chart_display_functions = {
+            "equity_curve": self._display_equity_curve_chart,
+            "drawdown": self._display_drawdown_chart,
+            "monthly_returns": self._display_monthly_returns_chart,
+            "trade_distribution": self._display_trade_distribution_chart
+        }
+        
+        if chart_type in chart_display_functions:
+            chart_display_functions[chart_type]()
+        else:
+            ttk.Label(self.chart_display, text=f"Chart type {chart_type} not implemented").pack(fill=tk.BOTH, expand=True)
+
+    def display_results(self, result):
+        """Display results in the results tab with chart generation"""
+        # Store results for later chart updates
+        self.latest_results = result
+        
+        # Stop progress animation
+        self.progress_bar.stop()
+        self.progress_label.config(text="Processing results...")
+        
+        if not result:
+            self.progress_label.config(text="No results to display")
+            return
+        
+        # Display in text area
+        self.results_text.configure(state="normal")
+        self.results_text.delete(1.0, tk.END)
+        
+        # Format the results based on type
+        if isinstance(result, dict):
+            # Check for error
+            if "error" in result:
+                self.results_text.insert(tk.END, f"Error: {result['error']}\n")
+                self.progress_label.config(text="Error in results")
+            else:
+                # Format as JSON
+                try:
+                    formatted_result = json.dumps(result, indent=2)
+                    self.results_text.insert(tk.END, formatted_result)
+                    
+                    # Populate trades and stats if available
+                    if "trades" in result:
+                        self._populate_trades(result["trades"])
+                    if "metrics" in result:
+                        self._populate_statistics(result["metrics"])
+                        
+                    # Update charts
+                    self._update_chart()
+                        
+                    self.progress_label.config(text="Results loaded successfully")
+                    
+                except Exception as e:
+                    self.results_text.insert(tk.END, f"Error formatting results: {str(e)}\n{str(result)}")
+                    self.progress_label.config(text="Error formatting results")
+        else:
+            # Just display as string
+            self.results_text.insert(tk.END, str(result))
+            self.progress_label.config(text="Basic results displayed")
+        
+        self.results_text.configure(state="disabled")
+        
+        # Switch to results tab
+        self.notebook.select(self.results_tab)
+    
     def _process_log_queue(self):
         """Process log messages from the queue with performance optimizations"""
         # Batch process logs to reduce GUI updates
@@ -2137,57 +2408,6 @@ class TradingSystemGUI:
             self.paused = False
             self.root.after(0, self._update_control_buttons)
     
-    def display_results(self, result):
-        """Display results in the results tab with chart generation"""
-        # Stop progress animation
-        self.progress_bar.stop()
-        self.progress_label.config(text="Processing results...")
-        
-        if not result:
-            self.progress_label.config(text="No results to display")
-            return
-        
-        # Display in text area
-        self.results_text.configure(state="normal")
-        self.results_text.delete(1.0, tk.END)
-        
-        # Format the results based on type
-        if isinstance(result, dict):
-            # Check for error
-            if "error" in result:
-                self.results_text.insert(tk.END, f"Error: {result['error']}\n")
-                self.progress_label.config(text="Error in results")
-            else:
-                # Format as JSON
-                try:
-                    formatted_result = json.dumps(result, indent=2)
-                    self.results_text.insert(tk.END, formatted_result)
-                    
-                    # Also populate trades and stats if available
-                    if "trades" in result:
-                        self._populate_trades(result["trades"])
-                    if "metrics" in result:
-                        self._populate_statistics(result["metrics"])
-                        
-                    # Generate chart if data available
-                    if "equity_curve" in result or "trades" in result:
-                        self._generate_chart(result)
-                        
-                    self.progress_label.config(text="Results loaded successfully")
-                    
-                except Exception as e:
-                    self.results_text.insert(tk.END, f"Error formatting results: {str(e)}\n{str(result)}")
-                    self.progress_label.config(text="Error formatting results")
-        else:
-            # Just display as string
-            self.results_text.insert(tk.END, str(result))
-            self.progress_label.config(text="Basic results displayed")
-        
-        self.results_text.configure(state="disabled")
-        
-        # Switch to results tab
-        self.notebook.select(self.results_tab)
-    
     def _populate_trades(self, trades):
         """Populate trades treeview with data"""
         # Clear existing data
@@ -2451,10 +2671,7 @@ class TradingSystemGUI:
             # Get the logger
             logger = self.log_manager.get_logger("data_download")
             logger.info(f"Starting data download: {symbols}, {timeframes}, {start_date} to {end_date}")
-            
-            # Import the download function
-            from src.datasource.download_data import run_downloads
-            
+                        
             # Run the download process
             config_path = self.config_var.get()
             results = asyncio.run(run_downloads(
@@ -2549,8 +2766,6 @@ class TradingSystemGUI:
             
             # Import the migration function
             try:
-                from src.datasource.migrate_data import scan_and_migrate
-                
                 # Run the migration process
                 config_path = self.config_var.get()
                 asyncio.run(scan_and_migrate(

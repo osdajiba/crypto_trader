@@ -3,6 +3,7 @@ import pandas as pd
 from typing import Dict, Optional, Any
 from src.strategy.base_strategy import BaseStrategy
 from src.common.config_manager import ConfigManager
+from src.common.data_processor import DataProcessor
 
 class NeuralNetStrategy(BaseStrategy):
     """Multi-factor ranking strategy with historical preloading and real-time data splicing."""
@@ -44,13 +45,13 @@ class NeuralNetStrategy(BaseStrategy):
         self.logger.info("Generating signals for NeuralNetStrategy")
         await self._execute_hook("pre_signal_generation", data=data)
 
-        real_time_data = DataUtils.clean_ohlcv(data)
-        real_time_data = DataUtils.resample(real_time_data, self.period)
+        real_time_data = DataProcessor.clean_ohlcv(data)
+        real_time_data = DataProcessor.resample(real_time_data, self.period)
         if not await self.validate_data(real_time_data):  # Uses BaseStrategy.validate_data
             return pd.DataFrame()
 
         primary_symbol = self.params.get("symbol", "unknown")
-        all_data = DataUtils.splice_data(
+        all_data = DataProcessor.splice_data(
             self.historical_data, real_time_data, primary_symbol, 
             self.lookback_period, self.multi_symbol_data
         )
@@ -62,7 +63,7 @@ class NeuralNetStrategy(BaseStrategy):
         signals = await self._calculate_signals(all_data)
         signals = self.filter_signals(signals)
 
-        DataUtils.update_historical_data(self.historical_data, real_time_data, primary_symbol, self.lookback_period)
+        DataProcessor.update_historical_data(self.historical_data, real_time_data, primary_symbol, self.lookback_period)
         self.logger.debug("Updated historical data for %s with %d new rows", primary_symbol, len(real_time_data))
 
         await self._execute_hook("post_signal_generation", signals=signals)

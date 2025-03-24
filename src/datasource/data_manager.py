@@ -1,20 +1,18 @@
 # src/data/data_manager.py
 
 import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Any, Union, Tuple
+from typing import Dict, List, Optional, Any, Union
 from datetime import datetime, timedelta
-import asyncio
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.common.async_executor import AsyncExecutor
+from .sources import DataSourceFactory, LocalSource, ExchangeSource, DatabaseSource
 from .integrity_checker import DataIntegrityChecker
+
 
 class DataManager:
     """
-    Enhanced Data Manager responsible for fetching, caching, and managing market data
-    with improved error handling, data validation, and paginated data handling
+    Data Manager responsible for fetching, caching, and managing market data
     """
     
     def __init__(self, source_type: str = "local", config: Optional[ConfigManager] = None):
@@ -29,10 +27,7 @@ class DataManager:
         self.source_type = source_type.lower()
         self.logger = LogManager.get_logger("data.manager")
         
-        # Initialize async executor
-        self.executor = AsyncExecutor()
-        
-        # Data sources (to be initialized later)
+        # Data sources
         self.primary_source = None
         self.backup_source = None
         
@@ -41,7 +36,9 @@ class DataManager:
         self.use_cache = config.get("data", "cache", "enabled", default=True) if config else True
         
         # Data integrity checker
-        self.integrity_checker = None
+        self.integrity_checker = DataIntegrityChecker(
+            timeframe=config.get("data", "default_timeframe", default="1h") if config else "1h"
+        )
         self.validate_data = config.get("data", "validation", "enabled", default=True) if config else True
         
         # Pagination settings
@@ -56,39 +53,31 @@ class DataManager:
     def _initialize_data_sources(self):
         """Initialize appropriate data sources based on configuration"""
         try:
-            # Create integrity checker
-            self.integrity_checker = DataIntegrityChecker(
-                timeframe=self.config.get("data", "default_timeframe", default="1h") if self.config else "1h"
-            )
+            factory = DataSourceFactory()
+            primary_type = self.config.get("data", "primary_source", default="local")
+            backup_type = self.config.get("data", "backup_source", default="exchange")
             
-            # Initialize primary source based on source_type
+            # 初始化primary_source基于source_type
             if self.source_type == "local":
-                from src.datasource.sources import LocalSource
-                self.primary_source = LocalSource(config=self.config)
-                self.logger.info(f"Created local data source")
-                
+                self.primary_source = factory.create_source("local", self.config)
+                    
             elif self.source_type == "exchange":
-                from src.datasource.sources import ExchangeSource
-                self.primary_source = ExchangeSource(config=self.config)
-                self.logger.info(f"Created exchange data source")
+                self.primary_source = factory.create_source("exchange", self.config)
                 
+            elif self.source_type == "database":
+                self.primary_source = factory.create_source("database", self.config)
+                    
             elif self.source_type == "hybrid":
-                # In hybrid mode, primary is exchange and backup is local
-                from src.datasource.sources import ExchangeSource
-                from src.datasource.sources import LocalSource
-                self.primary_source = ExchangeSource(config=self.config)
-                self.backup_source = LocalSource(config=self.config)
-                self.logger.info(f"Created hybrid data sources (primary: exchange, backup: local)")
-                
+                self.primary_source = factory.create_source(primary_type, self.config)
+                self.backup_source = factory.create_source(backup_type, self.config)
+                    
             else:
                 raise ValueError(f"Unsupported data source type: {self.source_type}")
-                
-            # Create backup source for auto-download of missing data if in backtest mode
-            if self._get_trading_mode() == "BACKTEST" and self.source_type == "local" and not self.backup_source:
-                from src.datasource.sources import ExchangeSource
-                self.backup_source = ExchangeSource(config=self.config)
-                self.logger.info(f"Created exchange backup source for auto-downloading missing data")
-                
+                    
+            if self._get_trading_mode() == "BACKTEST" and not self.backup_source:
+                if self.source_type == "local":
+                    self.backup_source = factory.create_source(backup_type, self.config)
+                    
         except Exception as e:
             self.logger.error(f"Error initializing data sources: {e}", exc_info=True)
             raise
@@ -129,38 +118,18 @@ class DataManager:
             return self.data_cache[cache_key]
         
         try:
-            # Start async executor if not running
-            if not self.executor.is_running:
-                await self.executor.start()
-            
-            # Convert string dates to datetime objects if needed
-            start_dt = self._parse_datetime(start) if start else None
-            end_dt = self._parse_datetime(end) if end else None
-            
             # Try primary source first
             try:
-                if use_pagination and start_dt and end_dt:
-                    # Use paginated fetching for large date ranges
-                    data = await self._fetch_paginated_data(
-                        source=self.primary_source, 
-                        symbol=symbol, 
-                        timeframe=timeframe, 
-                        start_dt=start_dt, 
-                        end_dt=end_dt
-                    )
-                else:
-                    # Use standard fetch for smaller requests
-                    data = await self.executor.submit(
-                        self.primary_source.fetch_historical,
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        start=start_dt,
-                        end=end_dt
-                    )
+                data = await self.primary_source.fetch_historical(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start=start,
+                    end=end
+                )
                 
                 if not data.empty:
                     # Validate data if enabled
-                    if self.validate_data and self.integrity_checker:
+                    if self.validate_data:
                         valid, results = await self.integrity_checker.check(data)
                         if not valid:
                             self.logger.warning(f"Data integrity issues found for {symbol} {timeframe}")
@@ -173,38 +142,25 @@ class DataManager:
                     
                     return data
                 else:
-                    self.logger.warning(f"No historical data found in local database for {symbol} {timeframe}")
-                    self.logger.info(f"Auto try: fetch historical data from exchange ...")
+                    self.logger.warning(f"No historical data found in primary source for {symbol} {timeframe}")
                 
             except Exception as e:
                 self.logger.warning(f"Primary source failed for {symbol} {timeframe}: {e}")
                 
             # If primary source fails or returns empty and we have a backup, try it
             if self.backup_source:
-                self.logger.info(f"Trying download source from exchange for {symbol} {timeframe}")
+                self.logger.info(f"Trying backup source for {symbol} {timeframe}")
                 try:
-                    if use_pagination and start_dt and end_dt:
-                        # Use paginated fetching for large date ranges with backup source
-                        data = await self._fetch_paginated_data(
-                            source=self.backup_source, 
-                            symbol=symbol, 
-                            timeframe=timeframe, 
-                            start_dt=start_dt, 
-                            end_dt=end_dt
-                        )
-                    else:
-                        # Use standard fetch for smaller requests
-                        data = await self.executor.submit(
-                            self.backup_source.fetch_historical,
-                            symbol=symbol,
-                            timeframe=timeframe,
-                            start=start_dt,
-                            end=end_dt
-                        )
+                    data = await self.backup_source.fetch_historical(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        start=start,
+                        end=end
+                    )
                     
                     if not data.empty:
                         # Validate data if enabled
-                        if self.validate_data and self.integrity_checker:
+                        if self.validate_data:
                             valid, results = await self.integrity_checker.check(data)
                             if not valid:
                                 self.logger.warning(f"Data integrity issues found in backup data for {symbol} {timeframe}")
@@ -214,6 +170,11 @@ class DataManager:
                         if self.use_cache:
                             self.data_cache[cache_key] = data
                             self.logger.info(f"Backup historical data cached: {cache_key}")
+                        
+                        # If local is backup and exchange is primary, store the downloaded data
+                        if isinstance(self.backup_source, LocalSource) and hasattr(self.backup_source, 'update_data'):
+                            await self.backup_source.update_data(symbol, timeframe, data)
+                            self.logger.info(f"Data saved to local storage: {symbol} {timeframe}")
                         
                         return data
                 
@@ -227,196 +188,120 @@ class DataManager:
         except Exception as e:
             self.logger.error(f"Error fetching historical data: {e}", exc_info=True)
             return pd.DataFrame()
+
+    async def get_latest_data(self, symbol: str, timeframe: str, limit: int = 100) -> pd.DataFrame:
+        """
+        Get the most recent market data
+        
+        Args:
+            symbol: Trading pair symbol
+            timeframe: Data timeframe
+            limit: Maximum number of records to fetch
+            
+        Returns:
+            pd.DataFrame: Latest market data
+        """
+        # Only relevant for exchange or hybrid sources
+        if self.source_type in ["exchange", "hybrid"]:
+            try:
+                data = await self.primary_source.fetch_realtime(symbol, timeframe)
+                
+                if self.validate_data and not data.empty:
+                    valid, results = await self.integrity_checker.check(data)
+                    if not valid:
+                        self.logger.warning(f"Data integrity issues found in latest data for {symbol} {timeframe}")
+                        data = await self._fix_data_issues(data, results)
+                        
+                return data
+                
+            except Exception as e:
+                self.logger.error(f"Error fetching latest data: {e}")
+                return pd.DataFrame()
+        else:
+            # For local source, get most recent data from historical
+            end = datetime.now()
+            start = end - timedelta(days=7)  # Fetch last 7 days
+            return await self.get_historical_data(symbol, timeframe, start, end)
     
-    async def _fetch_paginated_data(
+    async def download_and_store_data(
         self, 
-        source: Any, 
         symbol: str, 
         timeframe: str, 
-        start_dt: datetime, 
-        end_dt: datetime
-    ) -> pd.DataFrame:
+        start: Optional[Union[str, datetime]] = None, 
+        end: Optional[Union[str, datetime]] = None
+    ) -> bool:
         """
-        Fetch data in pages and combine
+        Download data from exchange and store it
         
         Args:
-            source: Data source to use
-            symbol: Symbol to fetch
-            timeframe: Timeframe to fetch
-            start_dt: Start datetime
-            end_dt: End datetime
+            symbol: Trading pair symbol
+            timeframe: Data timeframe
+            start: Start date
+            end: End date
             
         Returns:
-            pd.DataFrame: Combined data from all pages
+            bool: Success status
         """
-        # Calculate time ranges for pagination
-        time_chunks = self._calculate_time_chunks(timeframe, start_dt, end_dt, self.page_size)
-        
-        if not time_chunks:
-            self.logger.error(f"Failed to calculate time chunks for pagination")
-            return pd.DataFrame()
+        # Need an exchange source
+        exchange_source = None
+        if self.source_type == "exchange":
+            exchange_source = self.primary_source
+        elif self.backup_source and hasattr(self.backup_source, 'fetch_historical'):
+            exchange_source = self.backup_source
             
-        self.logger.info(f"Fetching {symbol} {timeframe} data in {len(time_chunks)} pages")
-        
-        # Fetch data in chunks with concurrency control
-        all_chunks = []
-        chunk_sets = [time_chunks[i:i+self.max_concurrent_pages] for i in range(0, len(time_chunks), self.max_concurrent_pages)]
-        
-        for chunk_set_idx, chunk_set in enumerate(chunk_sets):
-            self.logger.info(f"Fetching page set {chunk_set_idx+1}/{len(chunk_sets)} ({len(chunk_set)} pages)")
+        if not exchange_source:
+            self.logger.warning(f"No exchange source available for downloading {symbol} {timeframe}")
+            return False
             
-            # Create tasks for each chunk in this set
-            tasks = []
-            for chunk_start, chunk_end in chunk_set:
-                tasks.append(self.executor.submit(
-                    source.fetch_historical,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    start=chunk_start,
-                    end=chunk_end
-                ))
-            
-            # Wait for all tasks in this set to complete
-            chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Process results, handling any exceptions
-            for i, result in enumerate(chunk_results):
-                if isinstance(result, Exception):
-                    self.logger.error(f"Error fetching page {chunk_set_idx * self.max_concurrent_pages + i}: {result}")
-                    continue
-                    
-                if not isinstance(result, pd.DataFrame) or result.empty:
-                    self.logger.warning(f"Empty result for page {chunk_set_idx * self.max_concurrent_pages + i}")
-                    continue
-                    
-                all_chunks.append(result)
-                
-            # Throttle between chunk sets if needed
-            if chunk_set_idx < len(chunk_sets) - 1:
-                await asyncio.sleep(0.5)  # Small delay between chunk sets
-        
-        # Combine all chunks
-        if not all_chunks:
-            self.logger.warning(f"No data returned from any page.")
-            return pd.DataFrame()
-            
-        combined_data = pd.concat(all_chunks, ignore_index=True)
-        
-        # Remove duplicates
-        timestamp_col = None
-        for col in ['datetime', 'timestamp', 'date', 'time']:
-            if col in combined_data.columns:
-                timestamp_col = col
-                break
-                
-        if timestamp_col:
-            # Sort by timestamp
-            combined_data = combined_data.sort_values(by=timestamp_col)
-            
-            # Remove duplicates keeping last occurrence
-            before_count = len(combined_data)
-            combined_data = combined_data.drop_duplicates(subset=[timestamp_col], keep='last')
-            after_count = len(combined_data)
-            
-            if before_count > after_count:
-                self.logger.info(f"Removed {before_count - after_count} duplicate records")
-        
-        self.logger.info(f"Successfully fetched and combined {len(combined_data)} records from {len(all_chunks)}/{len(time_chunks)} pages")
-        return combined_data
-    
-    def _calculate_time_chunks(
-        self, 
-        timeframe: str, 
-        start_dt: datetime, 
-        end_dt: datetime, 
-        chunk_size: int
-    ) -> List[Tuple[datetime, datetime]]:
-        """
-        Calculate time chunks for paginated fetching
-        
-        Args:
-            timeframe: Timeframe string (e.g., "1h", "1d")
-            start_dt: Start datetime
-            end_dt: End datetime
-            chunk_size: Maximum records per chunk
-            
-        Returns:
-            List[Tuple[datetime, datetime]]: List of (start, end) datetime pairs
-        """
         try:
-            # Convert timeframe to seconds
-            timeframe_seconds = self._timeframe_to_seconds(timeframe)
+            # Parse dates
+            from src.utils.time_utils import TimeUtils
+            start_dt = TimeUtils.parse_timestamp(start) if start else None
+            end_dt = TimeUtils.parse_timestamp(end) if end else datetime.now()
             
-            # Calculate total time range in seconds
-            total_seconds = (end_dt - start_dt).total_seconds()
-            
-            # Calculate estimated number of candles
-            estimated_candles = int(total_seconds / timeframe_seconds) + 1
-            
-            # Calculate number of chunks needed
-            num_chunks = (estimated_candles + chunk_size - 1) // chunk_size
-            
-            # Safety cap on number of chunks
-            max_chunks = 100  # Prevent excessive chunking
-            if num_chunks > max_chunks:
-                self.logger.warning(f"Requested date range would require {num_chunks} chunks, limiting to {max_chunks}")
-                num_chunks = max_chunks
-            
-            # Calculate duration of each chunk
-            chunk_seconds = total_seconds / num_chunks
-            
-            # Create time range chunks
-            chunks = []
-            for i in range(num_chunks):
-                chunk_start = start_dt + timedelta(seconds=i * chunk_seconds)
+            # Default start date is 1 year ago if not specified
+            if not start_dt:
+                start_dt = end_dt - timedelta(days=365)
                 
-                # For the last chunk, use the exact end time
-                if i == num_chunks - 1:
-                    chunk_end = end_dt
-                else:
-                    chunk_end = start_dt + timedelta(seconds=(i + 1) * chunk_seconds)
-                
-                chunks.append((chunk_start, chunk_end))
+            self.logger.info(f"Downloading data for {symbol} {timeframe} from {start_dt} to {end_dt}")
             
-            return chunks
+            # Fetch data from exchange
+            data = await exchange_source.fetch_historical(
+                symbol=symbol,
+                timeframe=timeframe,
+                start=start_dt,
+                end=end_dt
+            )
+            
+            if data.empty:
+                self.logger.error(f"Failed to download data for {symbol} {timeframe}")
+                return False
+                
+            # Get a local source to store the data
+            local_source = None
+            if self.source_type == "local":
+                local_source = self.primary_source
+            elif hasattr(self.backup_source, 'update_data'):
+                local_source = self.backup_source
+                
+            if not local_source:
+                self.logger.error(f"No local source available for storing data")
+                return False
+                
+            # Store the data
+            success = await local_source.update_data(symbol, timeframe, data)
+            
+            if success:
+                self.logger.info(f"Successfully downloaded and stored {len(data)} records for {symbol} {timeframe}")
+            else:
+                self.logger.error(f"Failed to store downloaded data for {symbol} {timeframe}")
+                
+            return success
             
         except Exception as e:
-            self.logger.error(f"Error calculating time chunks: {e}")
-            return []
-    
-    def _timeframe_to_seconds(self, timeframe: str) -> int:
-        """
-        Convert timeframe string to seconds
-        
-        Args:
-            timeframe: Timeframe string (e.g., "1h", "1d")
-            
-        Returns:
-            int: Number of seconds
-        """
-        # Extract number and unit
-        import re
-        match = re.match(r"(\d+)([a-zA-Z]+)", timeframe)
-        if not match:
-            self.logger.warning(f"Invalid timeframe format: {timeframe}, using 1h as default")
-            return 3600  # Default to 1 hour
-            
-        quantity = int(match.group(1))
-        unit = match.group(2).lower()
-        
-        # Convert to seconds
-        if unit == 'm' or unit == 'min':
-            return quantity * 60
-        elif unit == 'h' or unit == 'hour':
-            return quantity * 3600
-        elif unit == 'd' or unit == 'day':
-            return quantity * 86400
-        elif unit == 'w' or unit == 'week':
-            return quantity * 86400 * 7
-        else:
-            self.logger.warning(f"Unknown time unit: {unit}, assuming minutes")
-            return quantity * 60
-    
+            self.logger.error(f"Error downloading and storing data: {e}")
+            return False
+
     async def _fix_data_issues(self, df: pd.DataFrame, check_results: Dict[str, Any]) -> pd.DataFrame:
         """
         Apply automatic fixes to common data issues
@@ -479,180 +364,6 @@ class DataManager:
             self.logger.error(f"Error fixing data issues: {e}")
             return df  # Return original if fixes fail
     
-    def _parse_datetime(self, dt_input: Union[str, datetime]) -> datetime:
-        """Parse datetime from various input formats"""
-        if isinstance(dt_input, datetime):
-            return dt_input
-            
-        try:
-            # Try different formats
-            for fmt in ["%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y%m%d", "%Y%m%d%H%M%S"]:
-                try:
-                    return datetime.strptime(dt_input, fmt)
-                except ValueError:
-                    continue
-                    
-            # Try pandas to_datetime as fallback
-            return pd.to_datetime(dt_input).to_pydatetime()
-            
-        except Exception as e:
-            self.logger.error(f"Error parsing datetime {dt_input}: {e}")
-            raise ValueError(f"Invalid datetime format: {dt_input}")
-    
-    async def get_latest_data(self, symbol: str, timeframe: str, limit: int = 100) -> pd.DataFrame:
-        """
-        Get the most recent market data
-        
-        Args:
-            symbol: Trading pair symbol
-            timeframe: Data timeframe
-            limit: Maximum number of records to fetch
-            
-        Returns:
-            pd.DataFrame: Latest market data
-        """
-        # Only relevant for exchange or hybrid sources
-        if self.source_type in ["exchange", "hybrid"]:
-            try:
-                data = await self.executor.submit(
-                    self.primary_source.get_latest_data,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    limit=limit
-                )
-                
-                if self.validate_data and self.integrity_checker and not data.empty:
-                    valid, results = await self.integrity_checker.check(data)
-                    if not valid:
-                        self.logger.warning(f"Data integrity issues found in latest data for {symbol} {timeframe}")
-                        data = await self._fix_data_issues(data, results)
-                        
-                return data
-                
-            except Exception as e:
-                self.logger.error(f"Error fetching latest data: {e}")
-                return pd.DataFrame()
-        else:
-            # For local source, get most recent data from historical
-            end = datetime.now()
-            start = end - timedelta(days=7)  # Fetch last 7 days
-            return await self.get_historical_data(symbol, timeframe, start, end)
-    
-    async def update_local_data(self, symbol: str, timeframe: str, data: pd.DataFrame) -> bool:
-        """
-        Update local data storage using a consolidated daily file format
-        
-        Args:
-            symbol: Trading pair symbol
-            timeframe: Data timeframe
-            data: New data to store
-            
-        Returns:
-            bool: Success status
-        """
-        # Only relevant if we have a local source (primary or backup)
-        local_source = None
-        if self.source_type == "local":
-            local_source = self.primary_source
-        elif self.backup_source and hasattr(self.backup_source, "update_data"):
-            local_source = self.backup_source
-            
-        if local_source and hasattr(local_source, "update_data"):
-            try:
-                # Validate data before storing
-                if self.validate_data and self.integrity_checker and not data.empty:
-                    valid, results = await self.integrity_checker.check(data)
-                    if not valid:
-                        self.logger.warning(f"Fixing data integrity issues before updating local storage")
-                        data = await self._fix_data_issues(data, results)
-                
-                # Update local storage
-                success = await self.executor.submit(
-                    local_source.update_data,
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    data=data
-                )
-                
-                # Update cache if successful
-                if success and self.use_cache:
-                    # Update any relevant cache entries
-                    for key in list(self.data_cache.keys()):
-                        if key.startswith(f"{symbol}|{timeframe}"):
-                            del self.data_cache[key]  # Invalidate cached data
-                    
-                    self.logger.info(f"Invalidated cache for {symbol} {timeframe} after update")
-                
-                return success
-                
-            except Exception as e:
-                self.logger.error(f"Error updating local data: {e}")
-                return False
-        else:
-            self.logger.warning(f"No local source available for updating data")
-            return False
-    
-    async def download_and_store_data(
-        self, 
-        symbol: str, 
-        timeframe: str, 
-        start: Optional[Union[str, datetime]] = None, 
-        end: Optional[Union[str, datetime]] = None
-    ) -> bool:
-        """
-        Download data from exchange and store it locally
-        
-        Args:
-            symbol: Trading pair symbol
-            timeframe: Data timeframe
-            start: Start date
-            end: End date
-            
-        Returns:
-            bool: Success status
-        """
-        if not self.backup_source:
-            self.logger.warning(f"No exchange source available for downloading {symbol} {timeframe}")
-            return False
-            
-        try:
-            # Parse dates
-            start_dt = self._parse_datetime(start) if start else None
-            end_dt = self._parse_datetime(end) if end else datetime.now()
-            
-            # Default start date is 1 year ago if not specified
-            if not start_dt:
-                start_dt = end_dt - timedelta(days=365)
-                
-            self.logger.info(f"Downloading data for {symbol} {timeframe} from {start_dt} to {end_dt}")
-            
-            # Use exchange source to fetch data with pagination
-            data = await self._fetch_paginated_data(
-                source=self.backup_source, 
-                symbol=symbol, 
-                timeframe=timeframe, 
-                start_dt=start_dt, 
-                end_dt=end_dt
-            )
-            
-            if data.empty:
-                self.logger.error(f"Failed to download data for {symbol} {timeframe}")
-                return False
-                
-            # Store the data locally
-            success = await self.update_local_data(symbol, timeframe, data)
-            
-            if success:
-                self.logger.info(f"Successfully downloaded and stored {len(data)} records for {symbol} {timeframe}")
-            else:
-                self.logger.error(f"Failed to store downloaded data for {symbol} {timeframe}")
-                
-            return success
-            
-        except Exception as e:
-            self.logger.error(f"Error downloading and storing data: {e}")
-            return False
-    
     async def clear_cache(self, symbol: Optional[str] = None, timeframe: Optional[str] = None) -> None:
         """
         Clear the data cache for specific symbol/timeframe or all
@@ -699,7 +410,7 @@ class DataManager:
         Args:
             symbols: List of symbols to preload
             timeframe: Timeframe to preload
-            days: Number of days to preload (from now)
+            days: Number of days to preload
             
         Returns:
             Dict[str, pd.DataFrame]: Preloaded data keyed by symbol
@@ -730,16 +441,16 @@ class DataManager:
     async def close(self) -> None:
         """Clean up resources"""
         # Close data sources
-        if hasattr(self.primary_source, 'close'):
+        if self.primary_source and hasattr(self.primary_source, 'close'):
             try:
-                await self.executor.submit(self.primary_source.close)
+                await self.primary_source.close()
                 self.logger.debug("Closed primary data source")
             except Exception as e:
                 self.logger.error(f"Error closing primary data source: {e}")
                 
         if self.backup_source and hasattr(self.backup_source, 'close'):
             try:
-                await self.executor.submit(self.backup_source.close)
+                await self.backup_source.close()
                 self.logger.debug("Closed backup data source")
             except Exception as e:
                 self.logger.error(f"Error closing backup data source: {e}")

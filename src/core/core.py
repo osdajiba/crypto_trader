@@ -6,24 +6,14 @@ from typing import Dict, List, Optional, Callable, Any
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
-from src.mode.trading_mode_factory import TradingModeFactory
+from src.mode.base_trading_mode import TradingModeFactory
 
 class TradingCore:
     """Core coordinator for multi-asset concurrent trading system"""
-
+    
     def __init__(self, config: ConfigManager, mode: str = None, backtest_engine: str = None):
         """
         Initialize the trading core with configuration and mode.
-
-        Args:
-            config (ConfigManager): Initialized configuration manager instance.
-            mode (str, optional): Trading mode ("backtest", "paper", "live"). 
-                                  If None, uses the value from config.
-            backtest_engine (str, optional): Backtest engine type to use.
-                                           If None, uses the value from config.
-
-        Raises:
-            ValueError: If an unsupported mode is provided.
         """
         self.config: ConfigManager = config
         self.logger = LogManager.get_logger(name="trading_system")
@@ -38,6 +28,9 @@ class TradingCore:
         self.async_exec = AsyncExecutor()
         self._running = False
         self.trading_mode = None
+        
+        # Add this line to store the callback
+        self._progress_callback = None
         
         # Create trading mode factory
         self.mode_factory = TradingModeFactory(config=self.config)
@@ -74,15 +67,19 @@ class TradingCore:
         self._running = True
         
         try:
-            # Create and initialize the appropriate trading mode
-            self.trading_mode = await self.mode_factory.create(self.trading_mode)
+            self.trading_mode = await self.mode_factory.create(self.mode)            
             
+            # Apply stored progress callback if available
+            if hasattr(self, '_progress_callback') and self._progress_callback and hasattr(self.trading_mode, 'set_progress_callback'):
+                self.trading_mode.set_progress_callback(self._progress_callback)
+                self.logger.debug("Progress callback applied to initialized trading mode")
+                        
             # Ensure trading mode is fully initialized
             if self.trading_mode is None:
-                raise ValueError(f"Failed to create trading mode: {self.trading_mode}")
+                raise ValueError(f"Failed to create trading mode: {self.mode}")
             
             # If backtest mode, log the engine type and set it
-            if self.trading_mode == "backtest" and hasattr(self.trading_mode, 'set_engine_type'):
+            if self.mode == "backtest" and hasattr(self.trading_mode, 'set_engine_type'):
                 self.logger.info(f"Using backtest engine: {self.backtest_engine}")
                 self.trading_mode.set_engine_type(self.backtest_engine)
             
@@ -113,7 +110,7 @@ class TradingCore:
             
         finally:
             await self.shutdown()
-
+        
     async def shutdown(self) -> None:
         """Safely shut down all components."""
         if not self._running:
@@ -149,11 +146,14 @@ class TradingCore:
         Args:
             callback: Function taking (percentage, message) parameters
         """
+        # Store the callback for later use
+        self._progress_callback = callback
+        self.logger.debug("Progress callback stored for later use")
+        
+        # If trading mode is already initialized, apply immediately
         if self.trading_mode and hasattr(self.trading_mode, 'set_progress_callback'):
             self.trading_mode.set_progress_callback(callback)
-            self.logger.debug("Progress callback registered")
-        else:
-            self.logger.warning("Cannot register progress callback: trading mode not initialized")
+            self.logger.debug("Progress callback registered immediately")
             
     def stop(self) -> None:
         """Request to stop the trading process"""

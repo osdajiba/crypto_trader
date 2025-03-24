@@ -111,20 +111,20 @@ class ExecutionEngine:
         
     
     async def _live_execution(self, orders: List) -> pd.DataFrame:
-        """实盘执行：通过Binance接口下单"""
+        """Real order execution: Order via exchange's interface"""
         executed_orders = []
         for order in orders:
             try:
-                # 转换为交易所需要的参数格式
+                # Convert to the parameter format required by the exchange
                 response = self.binance.create_order(
                     symbol=order.symbol,
-                    direction=order.direction,  # 传递Direction枚举
+                    direction=order.direction,  # Pass the Direction enumeration
                     order_type='limit' if isinstance(order, LimitOrder) else 'market',
                     quantity=order.quantity,
                     price=order.price
                 )
                 
-                # 记录成交详情
+                # Record transaction details
                 executed_orders.append({
                     'order_id': response['id'],
                     'symbol': order.symbol,
@@ -132,39 +132,39 @@ class ExecutionEngine:
                     'avg_price': float(response['average']),
                     'status': self._map_exchange_status(response['status'])
                 })
-                self.logger.info(f"实盘订单 {response['id']} 已提交")
+                self.logger.info(f"Order {response['id']} submitted")
                 
             except ccxt.InsufficientFunds as e:
-                self.logger.error(f"资金不足: {str(e)}")
+                self.logger.error(f"Insufficient fund: {str(e)}")
             except Exception as e:
-                self.logger.error(f"下单失败: {str(e)}")
+                self.logger.error(f"Order failure: {str(e)}")
 
         return pd.DataFrame(executed_orders)
 
     async def _backtest_execution(self, orders: List) -> Tuple[pd.DataFrame, Dict]:
-        """完整回测：修改历史数据"""
+        """Full backtest: Modify historical data"""
         updated_data = self.historical_data.copy()
         executed = []
         
         for order in orders:
             symbol_data = updated_data[order.symbol]
-            execution_bar = symbol_data.loc[order.timestamp:].iloc[0]  # 找到执行时刻的K线
+            execution_bar = symbol_data.loc[order.timestamp:].iloc[0]  # Find the execution time
             
-            # 计算可成交量（考虑市场深度）
-            max_volume = execution_bar['volume'] * 0.1  # 假设最多成交该K线成交量的10%
+            # Calculating volume (considering market depth)
+            max_volume = execution_bar['volume'] * 0.1  # Assume that the maximum trading volume of the K line is 10%
             filled_qty = min(order.quantity, max_volume)
             
             if filled_qty > 0:
-                # 计算执行价格（带滑点）
+                # Calculation of strike price (with slippage)
                 if order.direction == Direction.BUY:
                     exec_price = execution_bar['high'] * (1 + self.slippage)
                 else:
                     exec_price = execution_bar['low'] * (1 - self.slippage)
                 
-                # 更新历史成交量
+                # Update historical volume
                 updated_data[order.symbol].loc[execution_bar.name, 'volume'] -= filled_qty
                 
-                # 记录成交
+                # Record transaction
                 executed.append({
                     'order_id': order.order_id,
                     'filled_qty': filled_qty,
@@ -175,34 +175,34 @@ class ExecutionEngine:
         return pd.DataFrame(executed), updated_data
 
     async def _simple_backtest_execution(self, orders: List) -> pd.DataFrame:
-        """简单回测：仅检测可行性"""
+        """Simple backtest: Only feasibility is tested"""
         results = []
         
         for order in orders:
             symbol_data = self.historical_data[order.symbol]
             execution_bar = symbol_data.loc[order.timestamp:].iloc[0]
             
-            # 检查价格条件
+            # Check price terms
             if isinstance(order, LimitOrder):
                 if order.direction == Direction.BUY and order.price < execution_bar['low']:
-                    continue  # 限价未触发
+                    continue  # Limit not triggered
                 elif order.direction == Direction.SELL and order.price > execution_bar['high']:
                     continue
             
-            # 检查成交量
+            # Check volume
             fillable_qty = min(order.quantity, execution_bar['volume'])
             
             if fillable_qty > 0:
                 results.append({
                     'order_id': order.order_id,
                     'filled': fillable_qty,
-                    'price': execution_bar['close']  # 假设以收盘价成交
+                    'price': execution_bar['close']  # !Assume closing price
                 })
 
         return pd.DataFrame(results)
 
     def _map_exchange_status(self, status: str) -> str:
-        """映射交易所状态到本地状态"""
+        """Map transaction state to local state"""
         return {
             'new': 'submitted',
             'filled': 'filled',

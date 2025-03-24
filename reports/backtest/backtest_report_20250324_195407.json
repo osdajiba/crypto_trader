@@ -1,0 +1,26 @@
+{
+    "initial_capital": 100000,
+    "final_equity": 100000,
+    "total_return": 0,
+    "total_return_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "total_trades": 0,
+    "buy_trades": 0,
+    "sell_trades": 0,
+    "current_positions": {},
+    "remaining_cash": 100000,
+    "trades": [],
+    "backtest_params": {
+        "symbols": [
+            "BTC/USDT"
+        ],
+        "timeframe": "1h",
+        "start_date": "2023-01-01",
+        "end_date": "2023-3-31",
+        "transaction_costs": {
+            "commission_rate": 0.001,
+            "slippage": 0.001
+        }
+    },
+    "strategy": "str"
+}
