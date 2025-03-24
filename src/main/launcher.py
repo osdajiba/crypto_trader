@@ -9,6 +9,7 @@ import tkinter as tk
 
 from src.common.log_manager import LogManager  
 from src.common.config_manager import ConfigManager
+from src.common.log_initializer import LogInitializer
 
 
 # Add project root to path
@@ -59,19 +60,6 @@ def parse_arguments() -> argparse.Namespace:
                       help="Async worker threads")
     
     return parser.parse_args()
-
-def setup_environment(args):
-    """Setup environment variables and paths"""
-    # Constants
-    base_dir = Path(project_root)
-    default_config_path = base_dir / "conf/bt_config.yaml"
-    config_path = Path(args.config) if args.config else default_config_path
-    # Initialize config
-    args.config = ConfigManager(config_path=str(config_path))
-    # Set up Logger
-    logger = LogManager(args.config)
-
-    return logger
     
 def prompt_mode_selection() -> str:
     """Command-line prompt for trading mode selection"""
@@ -113,7 +101,29 @@ def prompt_backtest_engine_selection() -> str:
                 print("Invalid selection. Please choose 1 or 2.")
         except ValueError:
             print("Please enter either 1 or 2.")
-            
+
+def setup_environment(args):
+    """Setup environment variables and paths with enhanced logging"""
+    # Constants
+    base_dir = Path(project_root)
+    default_config_path = base_dir / "conf/bt_config.yaml"
+    config_path = Path(args.config) if args.config else default_config_path
+    
+    # Initialize config
+    args.config = ConfigManager(config_path=str(config_path))
+    log_init = LogInitializer(args.config)
+    log_init.initialize()
+    
+    # Get the main logger
+    logger = log_init.get_logger("trading_system")
+    
+    # Adjust log level if debug mode is enabled
+    if args.debug:
+        LogManager.set_level("DEBUG")
+        logger.debug("Debug logging enabled")
+    
+    return logger
+
 def launch():
     """Main entry point for the launcher"""
     args = parse_arguments()

@@ -6,7 +6,7 @@ from datetime import datetime
 
 from src.mode.base_trading_mode import BaseTradingMode
 from src.execution.execution_engine import ExecutionEngine
-from src.risk.risk_manager import BacktestRiskManager
+from src.risk.backtest_risk_manager import BacktestRiskManager
 from src.backtest.performance_monitor import PerformanceMonitor
 
 

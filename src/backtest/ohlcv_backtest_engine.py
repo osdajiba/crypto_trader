@@ -1,412 +1,641 @@
 # src/backtest/ohlcv_backtest_engine.py
 
-from typing import Dict, List, Any
+import asyncio
 import pandas as pd
+import numpy as np
+from typing import Dict, Any, Optional, List, Tuple
+import time
+import traceback
 
-from src.backtest.base_backtest_engine import BacktestEngine
-from src.execution.execution_engine import ExecutionEngine
-from src.risk.risk_manager import BacktestRiskManager
-from src.backtest.performance_monitor import PerformanceMonitor
+from base_backtest_engine import BaseBacktestEngine, register_backtest_engine
+from src.common.config_manager import ConfigManager
 
 
-class OHLCVBacktestEngine(BacktestEngine):
-    """OHLCV data-based backtesting engine implementation"""
+@register_backtest_engine('ohlcv', 
+    description="OHLCV Backtest Engine for vectorized backtesting",
+    category="backtest")
+class OHLCVBacktestEngine(BaseBacktestEngine):
+    """
+    OHLCV Backtest Engine
     
-    async def _initialize_backtest(self, symbols: List[str], timeframe: str) -> None:
+    Performs vectorized backtest operations on OHLCV data,
+    processing all data at once for maximum performance.
+    """
+    
+    def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
+        """Initialize OHLCV backtest engine"""
+        super().__init__(config, params)
+        
+        # OHLCV specific settings
+        self.initial_capital = self.params.get('initial_capital', 100000)
+        self.commission_rate = self.params.get('commission_rate', 0.001)
+        self.slippage = self.params.get('slippage', 0.001)
+        
+        # Factor calculation cache
+        self.factor_values = {}  # Symbol -> Factor -> Series
+
+    async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
         """
-        Initialize OHLCV backtest
+        Run market replay backtest, processing data sequentially
         
         Args:
-            symbols: List of trading symbols
-            timeframe: Timeframe
-        """
-        # Save backtest parameters
-        self.symbols = symbols
-        self.timeframe = timeframe
-        
-        # Initialize component references
-        self.execution_engine = ExecutionEngine(
-            config=self.config,
-            mode="backtest"
-        )
-        
-        self.risk_manager = BacktestRiskManager(config=self.config)
-        await self.risk_manager.initialize()
-        
-        self.performance_monitor = PerformanceMonitor(
-            config=self.config,
-            initial_balance=self.initial_capital
-        )
-        
-        # Initialize strategy
-        await self.strategy.initialize()
-        
-        self.logger.info(f"Initializing OHLCV backtest | Initial capital: {self.initial_capital}")
-    
-    async def _load_historical_data(self, symbols: List[str], timeframe: str) -> Dict[str, pd.DataFrame]:
-        """
-        Load OHLCV historical data
-        
-        Args:
-            symbols: List of trading symbols
-            timeframe: Timeframe
+            data: Dictionary of symbol -> DataFrame
             
         Returns:
-            Dict[str, pd.DataFrame]: Historical data
+            Dict: Backtest results with baseline data
         """
-        data_map = {}
+        if not self._is_initialized:
+            await self.initialize()
         
-        # Set backtest date range
-        start_date = self.config.get("backtest", "period", "start", default=None)
-        if not start_date:
-            start_date = self.config.get("backtest", "start_date", default=None)
-            
-        end_date = self.config.get("backtest", "period", "end", default=None)
-        if not end_date:
-            end_date = self.config.get("backtest", "end_date", default=None)
+        start_time = time.time()
+        self._is_running = True
+        self.cash = self.initial_capital
+        self.positions = {}
+        self.trades = []
+        self.portfolio_history = []
         
-        # Load historical data for each symbol
-        for symbol in symbols:
-            try:
-                data = await self.data_manager.get_historical_data(
-                    symbol=symbol,
-                    timeframe=timeframe,
-                    start=start_date,
-                    end=end_date
-                )
-                
-                if not data.empty:
-                    data_map[symbol] = data
-                    self.logger.info(f"Loaded {symbol} historical data: {len(data)} records")
-                else:
-                    self.logger.warning(f"No historical data found for {symbol}")
-                
-            except Exception as e:
-                self.logger.error(f"Failed to load {symbol} historical data: {e}")
-        
-        return data_map
-    
-    def _get_time_points(self, data: Dict[str, pd.DataFrame]) -> List[Any]:
-        """
-        Get all time points
-        
-        Args:
-            data: Historical data
-            
-        Returns:
-            List[Any]: Sorted unique time points
-        """
-        all_timestamps = []
-        
-        for df in data.values():
-            if 'datetime' in df.columns:
-                all_timestamps.extend(df['datetime'].tolist())
-            elif isinstance(df.index, pd.DatetimeIndex):
-                all_timestamps.extend(df.index.tolist())
-        
-        # Return sorted unique timestamps
-        return sorted(set(all_timestamps))
-    
-    def _get_data_at_time_point(self, data: Dict[str, pd.DataFrame], time_point: Any) -> Dict[str, pd.DataFrame]:
-        """
-        Get data at specified time point
-        
-        Args:
-            data: Historical data
-            time_point: Time point
-            
-        Returns:
-            Dict[str, pd.DataFrame]: Data at time point
-        """
-        result = {}
-        
-        for symbol, df in data.items():
-            if 'datetime' in df.columns:
-                data_at_time = df[df['datetime'] == time_point]
-                if not data_at_time.empty:
-                    result[symbol] = data_at_time
-            elif isinstance(df.index, pd.DatetimeIndex):
-                try:
-                    # Try to get exact timestamp match from index
-                    data_at_time = df.loc[[time_point]]
-                    if not data_at_time.empty:
-                        result[symbol] = data_at_time
-                except KeyError:
-                    # No exact match - try the nearest timestamp if needed
-                    pass
-        
-        return result
-    
-    async def _process_data_point(self, time_point: Any, data: Dict[str, pd.DataFrame]) -> None:
-        """
-        Process single time point data
-        
-        Args:
-            time_point: Time point
-            data: Time point data
-        """
-        # Update current timestamp
-        self.state['timestamp'] = time_point
-        
-        # Update market prices
-        self._update_market_prices(data)
-        
-        # Process each symbol
-        for symbol, symbol_data in data.items():
-            # Generate signals
-            signals = await self.strategy.process_data(symbol_data, symbol)
-            
-            # Validate signals
-            valid_signals = await self.risk_manager.validate_signals(signals)
-            
-            # Execute valid signals
-            if not valid_signals.empty:
-                executed_trades = self._execute_trades(valid_signals, data)
-                
-                # Record trades
-                if executed_trades:
-                    self.state['trades'].extend(executed_trades)
-    
-    def _execute_trades(self, signals: pd.DataFrame, current_data: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
-        """
-        Execute trading signals
-        
-        Args:
-            signals: Trading signals
-            current_data: Current market data
-            
-        Returns:
-            List[Dict[str, Any]]: List of executed trades
-        """
-        executed_trades = []
-        
-        for _, signal in signals.iterrows():
-            symbol = signal['symbol']
-            action = signal['action'].lower()
-            
-            # Only process buy/sell signals
-            if action not in ['buy', 'sell']:
-                continue
-            
-            # Get current price
-            if symbol not in current_data or current_data[symbol].empty:
-                continue
-                
-            current_price = current_data[symbol]['close'].iloc[0]
-            
-            # Calculate execution price (considering slippage)
-            execution_price = current_price * (1 + self.slippage) if action == 'buy' else current_price * (1 - self.slippage)
-            
-            # Calculate quantity
-            if 'quantity' in signal:
-                quantity = signal['quantity']
-            else:
-                # Calculate position size (based on risk parameters)
-                risk_per_trade = self.config.get("risk", "risk_per_trade", default=0.01)
-                max_position = self.config.get("trading", "limits", "position", default=0.1)
-                
-                # Calculate based on portfolio value
-                portfolio_value = self._calculate_equity()
-                max_trade_value = portfolio_value * max_position
-                risk_adjusted_value = portfolio_value * risk_per_trade
-                
-                # Use the smaller of the two values
-                trade_value = min(max_trade_value, risk_adjusted_value)
-                quantity = trade_value / execution_price
-            
-            # Validate trade
-            if action == 'buy':
-                # Check available cash
-                total_cost = quantity * execution_price * (1 + self.commission_rate)
-                if total_cost > self.state['cash']:
-                    quantity = self.state['cash'] / (execution_price * (1 + self.commission_rate))
-                    if quantity <= 0:
-                        continue
-            elif action == 'sell':
-                # Check available position
-                current_position = self.state['positions'].get(symbol, {}).get('quantity', 0)
-                if current_position <= 0:
-                    continue
-                quantity = min(quantity, current_position)
-            
-            # Execute trade
-            commission_cost = quantity * execution_price * self.commission_rate
-            
-            if action == 'buy':
-                # Update cash
-                self.state['cash'] -= (quantity * execution_price + commission_cost)
-                
-                # Create or update position
-                if symbol not in self.state['positions']:
-                    self.state['positions'][symbol] = {
-                        'quantity': 0,
-                        'avg_price': 0
-                    }
-                
-                position = self.state['positions'][symbol]
-                total_qty = position['quantity'] + quantity
-                avg_price = ((position['quantity'] * position['avg_price']) + (quantity * execution_price)) / total_qty if total_qty > 0 else 0
-                
-                position['quantity'] = total_qty
-                position['avg_price'] = avg_price
-                
-            else:  # sell
-                # Update cash
-                self.state['cash'] += (quantity * execution_price - commission_cost)
-                
-                # Update position
-                position = self.state['positions'][symbol]
-                position['quantity'] -= quantity
-                
-                if position['quantity'] <= 0:
-                    del self.state['positions'][symbol]
-            
-            # Record trade
-            trade = {
-                'timestamp': current_data[symbol]['datetime'].iloc[0],
-                'symbol': symbol,
-                'action': action,
-                'quantity': quantity,
-                'price': execution_price,
-                'commission': commission_cost,
-                'slippage': abs(execution_price - current_price),
-                'cash_after': self.state['cash']
-            }
-            
-            executed_trades.append(trade)
-            
-            # Record trade in performance monitor
-            if self.performance_monitor:
-                # For performance monitor, we use dummy prices depending on action
-                if action == 'buy':
-                    self.performance_monitor.record_trade(
-                        timestamp=self.state['timestamp'],
-                        symbol=symbol,
-                        direction=action,
-                        entry_price=execution_price,
-                        exit_price=execution_price,  # Dummy for buy
-                        quantity=quantity,
-                        commission=commission_cost
-                    )
-                else:  # sell
-                    # For sell, we use the position average price as the entry
-                    if symbol in self.state['positions']:
-                        entry_price = self.state['positions'][symbol]['avg_price']
-                    else:
-                        # Position already closed
-                        entry_price = execution_price * 0.9  # Placeholder
-                        
-                    self.performance_monitor.record_trade(
-                        timestamp=self.state['timestamp'],
-                        symbol=symbol,
-                        direction=action,
-                        entry_price=entry_price,
-                        exit_price=execution_price,
-                        quantity=quantity,
-                        commission=commission_cost
-                    )
-        
-        return executed_trades
-    
-    async def _close_positions(self) -> None:
-        """Close all open positions at the end of backtest"""
-        for symbol, position in list(self.state['positions'].items()):
-            # Check if we have a current price
-            if symbol not in self.state['market_prices']:
-                continue
-                
-            current_price = self.state['market_prices'][symbol]
-            quantity = position['quantity']
-            
-            # Calculate commission
-            commission = quantity * current_price * self.commission_rate
-            
-            # Update cash
-            self.state['cash'] += (quantity * current_price - commission)
-            
-            # Record trade
-            trade = {
-                'timestamp': self.state['timestamp'],
-                'symbol': symbol,
-                'action': 'sell',
-                'quantity': quantity,
-                'price': current_price,
-                'commission': commission,
-                'slippage': 0,
-                'cash_after': self.state['cash'],
-                'note': 'position_close'
-            }
-            
-            self.state['trades'].append(trade)
-            self.logger.info(f"Closed position: {quantity} {symbol} at {current_price}")
-            
-            # Record in performance monitor
-            if self.performance_monitor:
-                self.performance_monitor.record_trade(
-                    timestamp=self.state['timestamp'],
-                    symbol=symbol,
-                    direction='sell',
-                    entry_price=position['avg_price'],
-                    exit_price=current_price,
-                    quantity=quantity,
-                    commission=commission
-                )
-        
-        # Clear positions
-        self.state['positions'] = {}
-    
-    def _generate_backtest_report(self) -> Dict[str, Any]:
-        """
-        Generate backtest report
-        
-        Returns:
-            Dict[str, Any]: Backtest report
-        """
-        final_equity = self._calculate_equity()
-        
-        # Calculate performance metrics
-        total_return = final_equity - self.initial_capital
-        total_return_pct = (total_return / self.initial_capital) * 100 if self.initial_capital > 0 else 0
-        
-        # Calculate trade statistics
-        trades = self.state['trades']
-        buy_trades = len([t for t in trades if t['action'] == 'buy'])
-        sell_trades = len([t for t in trades if t['action'] == 'sell'])
-        
-        # Get advanced metrics from performance monitor
-        performance_metrics = {}
-        if self.performance_monitor:
-            self.performance_monitor.calculate_performance_metrics()
-            performance_report = self.performance_monitor.generate_detailed_report()
-            performance_metrics = performance_report.get('performance_metrics', {})
-        
-        # Compile report
-        report = {
-            'initial_capital': self.initial_capital,
-            'final_equity': final_equity,
-            'total_return': total_return,
-            'total_return_pct': total_return_pct,
-            'max_drawdown_pct': self.state['max_drawdown'] * 100,
-            'sharpe_ratio': performance_metrics.get('sharpe_ratio', 0),
-            'sortino_ratio': performance_metrics.get('sortino_ratio', 0),
-            'win_rate': performance_metrics.get('win_rate', 0) * 100 if isinstance(performance_metrics.get('win_rate', 0), float) else 0,
-            'profit_factor': performance_metrics.get('profit_factor', 0),
-            'total_trades': len(trades),
-            'buy_trades': buy_trades,
-            'sell_trades': sell_trades,
-            'backtest_params': {
-                'symbols': self.symbols,
-                'timeframe': self.timeframe,
-                'start_date': self.config.get("backtest", "period", "start", default=""),
-                'end_date': self.config.get("backtest", "period", "end", default=""),
-                'commission_rate': self.commission_rate,
-                'slippage': self.slippage
-            },
-            'strategy': self.strategy.__class__.__name__,
-            'open_positions': self.state['positions'],
-            'remaining_cash': self.state['cash'],
-            'trades': trades,
-            'engine_type': 'ohlcv'
+        results = {
+            'signals': {},
+            'trades': [],
+            'equity_curve': pd.DataFrame(),
+            'metrics': {}
         }
         
-        return report
+        try:
+            # Prepare initial data buffers
+            sufficient_data = await self.prepare_data(data)
+            if not sufficient_data:
+                self.logger.warning("Insufficient data for backtest")
+                return {'error': 'Insufficient data for backtest'}
+            
+            # Get common timeline for all symbols
+            timeline = self._get_common_timeline(data)
+            self.logger.info(f"Running market replay with {len(timeline)} time points")
+            
+            # Track signals by symbol
+            all_signals = {}
+            
+            # NEW: Track baseline performance (underlying asset prices)
+            baseline_history = []
+            
+            # Get main symbol (first in list if multiple)
+            symbols = list(data.keys())
+            main_symbol = symbols[0] if symbols else None
+            self.logger.info(f"Using {main_symbol} as the baseline asset")
+            
+            # Process each time point sequentially
+            self.logger.info("Beginning market replay simulation")
+            for i, timestamp in enumerate(timeline):
+                if not self._is_running:
+                    self.logger.info("Backtest stopped early")
+                    break
+                
+                # Get data for current timestamp across all symbols
+                current_data = self._get_data_at_timestamp(data, timestamp)
+                
+                # Update portfolio value based on current prices
+                portfolio_value = self._calculate_portfolio_value(current_data)
+                self.portfolio_history.append({
+                    'timestamp': timestamp,
+                    'cash': self.cash,
+                    'portfolio_value': portfolio_value
+                })
+                
+                # NEW: Track baseline (underlying asset) price
+                if main_symbol in current_data and not current_data[main_symbol].empty:
+                    baseline_price = current_data[main_symbol]['close'].iloc[0]
+                    baseline_history.append({
+                        'timestamp': timestamp,
+                        'price': baseline_price
+                    })
+                
+                # Process each symbol's data point
+                for symbol, data_point in current_data.items():
+                    # Process data through strategy
+                    signals = await self.process_data_point(data_point, symbol)
+                    
+                    # Store signals
+                    if not signals.empty:
+                        if symbol not in all_signals:
+                            all_signals[symbol] = []
+                        all_signals[symbol].append(signals)
+                        
+                        # Execute signals
+                        new_trades = self._execute_signals(signals, current_data)
+                        self.trades.extend(new_trades)
+                
+                # Log progress
+                if i % 100 == 0:
+                    self.logger.debug(f"Processed {i}/{len(timeline)} time points")
+                
+                # Simulate real-time delay if specified
+                if self.replay_speed > 0 and i % 10 == 0:
+                    await asyncio.sleep(self.replay_speed / 1000)  # Convert to seconds
+            
+            # Combine signals
+            for symbol, signals_list in all_signals.items():
+                if signals_list:
+                    results['signals'][symbol] = pd.concat(signals_list)
+                else:
+                    results['signals'][symbol] = pd.DataFrame()
+            
+            # Create equity curve
+            if self.portfolio_history:
+                results['equity_curve'] = pd.DataFrame(self.portfolio_history)
+            
+            # NEW: Add baseline prices to results
+            if baseline_history:
+                results['baseline_prices'] = pd.DataFrame(baseline_history)
+                self.logger.info(f"Stored {len(baseline_history)} baseline price points")
+            
+            # Store trades
+            results['trades'] = self.trades
+            
+            # Calculate metrics
+            execution_time = time.time() - start_time
+            self.metrics['processing_time'] = execution_time
+            
+            # Calculate final portfolio value
+            final_value = self.portfolio_history[-1]['portfolio_value'] if self.portfolio_history else self.initial_capital
+            
+            # NEW: Calculate baseline performance metrics
+            if baseline_history:
+                initial_price = baseline_history[0]['price']
+                final_price = baseline_history[-1]['price']
+                
+                baseline_return = (final_price - initial_price) / initial_price
+                baseline_return_pct = baseline_return * 100
+                
+                # Add baseline metrics to results
+                results['metrics']['baseline_initial_price'] = initial_price
+                results['metrics']['baseline_final_price'] = final_price
+                results['metrics']['baseline_return_pct'] = baseline_return_pct
+                
+                # Calculate alpha (strategy outperformance)
+                strategy_return_pct = ((final_value / self.initial_capital) - 1) * 100
+                results['metrics']['alpha'] = strategy_return_pct - baseline_return_pct
+            
+            # Calculate performance metrics
+            results['metrics'] = {
+                **self.metrics,
+                'initial_capital': self.initial_capital,
+                'final_value': final_value,
+                'total_return': final_value - self.initial_capital,
+                'total_return_pct': ((final_value / self.initial_capital) - 1) * 100,
+                'total_trades': len(self.trades),
+                'symbols_traded': len(set(trade['symbol'] for trade in self.trades)) if self.trades else 0
+            }
+            
+            # Calculate additional metrics if equity curve exists
+            if not results['equity_curve'].empty:
+                results['metrics'].update(self._calculate_advanced_metrics(results['equity_curve']))
+            
+            self.logger.info(f"Market replay completed in {execution_time:.2f}s, "
+                        f"processed {self.metrics.get('data_points_processed', 0)} data points, "
+                        f"generated {len(self.trades)} trades")
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error during market replay: {str(e)}\n{traceback.format_exc()}")
+            return {'error': str(e)}
+        finally:
+            self._is_running = False
+    
+    async def _calculate_all_factors(self, data: pd.DataFrame, symbol: str) -> None:
+        """
+        Calculate all factors for a symbol's data in vectorized manner
+        
+        Args:
+            data: Full historical data
+            symbol: Symbol
+        """
+        if not self.strategy or not hasattr(self.strategy, '_factor_registry'):
+            return
+            
+        # Initialize cache for this symbol
+        if symbol not in self.factor_values:
+            self.factor_values[symbol] = {}
+        
+        # Calculate each registered factor
+        for factor_name in self.strategy._factor_registry:
+            try:
+                # Calculate factor values
+                factor_values = self._calculate_factor_vectorized(data, factor_name, symbol)
+                
+                # Store in cache
+                if factor_values is not None:
+                    self.factor_values[symbol][factor_name] = factor_values
+                
+            except Exception as e:
+                self.logger.error(f"Error calculating factor '{factor_name}' for {symbol}: {str(e)}")
+    
+    def _calculate_factor_vectorized(self, data: pd.DataFrame, factor_name: str, symbol: str) -> Optional[pd.Series]:
+        """
+        Calculate factor values for entire dataset
+        
+        Args:
+            data: Full historical data
+            factor_name: Factor name
+            symbol: Symbol
+            
+        Returns:
+            pd.Series: Factor values or None if error
+        """
+        # Check if already calculated
+        if symbol in self.factor_values and factor_name in self.factor_values[symbol]:
+            return self.factor_values[symbol][factor_name]
+        
+        try:
+            # Get factor info
+            factor_info = self.strategy._factor_registry.get(factor_name)
+            if not factor_info:
+                return None
+            
+            # Calculate dependencies first
+            for dep_name in factor_info.get('depends_on', []):
+                if dep_name not in self.factor_values.get(symbol, {}):
+                    self._calculate_factor_vectorized(data, dep_name, symbol)
+            
+            # Calculate factor
+            if factor_info.get('func') and callable(factor_info['func']):
+                # Prepare kwargs with dependencies
+                kwargs = {}
+                for dep_name in factor_info.get('depends_on', []):
+                    if symbol in self.factor_values and dep_name in self.factor_values[symbol]:
+                        kwargs[dep_name] = self.factor_values[symbol][dep_name]
+                
+                # Calculate factor
+                return factor_info['func'](data, **kwargs)
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating factor '{factor_name}' for {symbol}: {str(e)}")
+            return None
+    
+    async def _generate_signals_vectorized(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """
+        Generate signals for entire dataset at once
+        
+        Args:
+            data: Processed data
+            symbol: Symbol
+            
+        Returns:
+            pd.DataFrame: Signals
+        """
+        try:
+            # Check if strategy has vectorized signal generation
+            if hasattr(self.strategy, '_generate_signals_vectorized'):
+                # Use vectorized method if available
+                signals = await self.strategy._generate_signals_vectorized(data, symbol, self.factor_values.get(symbol, {}))
+                
+                # Add symbol if not present
+                if not signals.empty and 'symbol' not in signals.columns:
+                    signals['symbol'] = symbol
+                
+                return signals
+            
+            # If no vectorized method, use regular strategy logic but apply to the entire dataset
+            # Add factor columns to dataset
+            enriched_data = data.copy()
+            for factor_name, factor_values in self.factor_values.get(symbol, {}).items():
+                factor_column = f"factor_{factor_name}"
+                enriched_data[factor_column] = factor_values
+            
+            # Create a method that applies the strategy's signal generation logic to the entire dataset
+            signals = await self._apply_strategy_vectorized(enriched_data, symbol)
+            
+            return signals
+            
+        except Exception as e:
+            self.logger.error(f"Error generating vectorized signals for {symbol}: {str(e)}")
+            return pd.DataFrame()
+    
+    async def _apply_strategy_vectorized(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """
+        Apply strategy logic to entire dataset
+        
+        Args:
+            data: Dataset with factor values
+            symbol: Symbol
+            
+        Returns:
+            pd.DataFrame: Signals
+        """
+        # This is a generic implementation that needs to be customized
+        # for the specific strategy logic
+        
+        # For strategies like DualMA, we'd calculate crossovers directly
+        if 'factor_short_ma' in data.columns and 'factor_long_ma' in data.columns:
+            # Create signal DataFrame
+            signals = pd.DataFrame(index=data.index)
+            signals['timestamp'] = data.index
+            signals['symbol'] = symbol
+            
+            # Buy signal: short MA crosses above long MA
+            crossover_up = (data['factor_short_ma'] > data['factor_long_ma']) & \
+                           (data['factor_short_ma'].shift(1) <= data['factor_long_ma'].shift(1))
+            
+            # Sell signal: short MA crosses below long MA
+            crossover_down = (data['factor_short_ma'] < data['factor_long_ma']) & \
+                             (data['factor_short_ma'].shift(1) >= data['factor_long_ma'].shift(1))
+            
+            # Set action based on crossovers
+            signals['action'] = None
+            signals.loc[crossover_up, 'action'] = 'buy'
+            signals.loc[crossover_down, 'action'] = 'sell'
+            
+            # Add price
+            if 'close' in data.columns:
+                signals['price'] = data['close']
+            
+            # Drop rows with no action
+            signals = signals.dropna(subset=['action'])
+            
+            return signals
+        
+        # For other strategies, we might need to process data point by point
+        # This is less efficient but more general
+        signals_list = []
+        for i in range(len(data)):
+            data_point = data.iloc[[i]]
+            signal = await self.strategy.process_data(data_point, symbol)
+            if not signal.empty:
+                signals_list.append(signal)
+        
+        if signals_list:
+            return pd.concat(signals_list)
+        return pd.DataFrame()
+    
+    def _simulate_portfolio(self, all_signals: Dict[str, pd.DataFrame], price_data: Dict[str, pd.DataFrame]) -> Tuple[List[Dict], pd.DataFrame]:
+        """
+        Simulate portfolio performance based on generated signals
+        
+        Args:
+            all_signals: Dictionary of symbol -> signals DataFrame
+            price_data: Dictionary of symbol -> price DataFrame
+            
+        Returns:
+            Tuple[List[Dict], pd.DataFrame]: Trades and equity curve
+        """
+        # Initialize portfolio
+        portfolio = {
+            'cash': self.initial_capital,
+            'positions': {},  # symbol -> quantity
+            'trades': [],
+            'history': []     # portfolio value history
+        }
+        
+        try:
+            # Create unified timeline
+            all_timestamps = []
+            for df in price_data.values():
+                if isinstance(df.index, pd.DatetimeIndex):
+                    all_timestamps.extend(df.index.tolist())
+                elif 'datetime' in df.columns:
+                    all_timestamps.extend(df['datetime'].tolist())
+            
+            timeline = sorted(set(all_timestamps))
+            
+            # Organize signals by timestamp
+            signal_by_time = {}
+            for symbol, signals in all_signals.items():
+                if signals.empty:
+                    continue
+                
+                for _, signal in signals.iterrows():
+                    timestamp = signal.get('timestamp')
+                    if timestamp is None and isinstance(signal.name, pd.Timestamp):
+                        timestamp = signal.name
+                        
+                    if timestamp:
+                        if timestamp not in signal_by_time:
+                            signal_by_time[timestamp] = []
+                        signal_by_time[timestamp].append(signal.to_dict())
+            
+            # Initialize portfolio history
+            for timestamp in timeline:
+                # Get current prices
+                current_prices = {}
+                for symbol, df in price_data.items():
+                    if isinstance(df.index, pd.DatetimeIndex):
+                        if timestamp in df.index:
+                            current_prices[symbol] = df.loc[timestamp, 'close']
+                    elif 'datetime' in df.columns:
+                        mask = df['datetime'] == timestamp
+                        if mask.any():
+                            current_prices[symbol] = df.loc[mask, 'close'].iloc[0]
+                
+                # Calculate portfolio value
+                portfolio_value = portfolio['cash']
+                for symbol, quantity in portfolio['positions'].items():
+                    if symbol in current_prices:
+                        portfolio_value += quantity * current_prices[symbol]
+                
+                # Execute any signals at this timestamp
+                if timestamp in signal_by_time:
+                    for signal in signal_by_time[timestamp]:
+                        self._execute_signal(signal, current_prices, portfolio)
+                
+                # Record portfolio history
+                portfolio['history'].append({
+                    'timestamp': timestamp,
+                    'cash': portfolio['cash'],
+                    'portfolio_value': portfolio_value
+                })
+            
+            # Create equity curve DataFrame
+            equity_curve = pd.DataFrame(portfolio['history'])
+            
+            # Add returns calculations
+            if not equity_curve.empty and 'portfolio_value' in equity_curve.columns:
+                equity_curve['return'] = equity_curve['portfolio_value'].pct_change()
+                equity_curve['cumulative_return'] = (1 + equity_curve['return'].fillna(0)).cumprod() - 1
+            
+            return portfolio['trades'], equity_curve
+            
+        except Exception as e:
+            self.logger.error(f"Error simulating portfolio: {str(e)}")
+            return [], pd.DataFrame()
+    
+    def _execute_signal(self, signal: Dict, current_prices: Dict[str, float], portfolio: Dict) -> None:
+        """
+        Execute a trading signal
+        
+        Args:
+            signal: Signal dictionary
+            current_prices: Current prices by symbol
+            portfolio: Portfolio state
+        """
+        symbol = signal['symbol']
+        action = signal['action'].lower()
+        timestamp = signal.get('timestamp')
+        
+        # Skip if we don't have price data
+        if symbol not in current_prices:
+            return
+            
+        price = current_prices[symbol]
+        
+        # Apply slippage
+        if action == 'buy':
+            execution_price = price * (1 + self.slippage)
+        else:  # sell
+            execution_price = price * (1 - self.slippage)
+        
+        # Determine quantity
+        quantity = signal.get('quantity')
+        if quantity is None:
+            # Use 1% of portfolio value by default
+            portfolio_value = portfolio['cash']
+            for sym, qty in portfolio['positions'].items():
+                if sym in current_prices:
+                    portfolio_value += qty * current_prices[sym]
+            
+            risk_pct = 0.01  # 1% risk per trade
+            quantity = (portfolio_value * risk_pct) / execution_price
+        
+        # Execute trade
+        if action == 'buy':
+            # Calculate cost
+            cost = quantity * execution_price
+            commission = cost * self.commission_rate
+            total_cost = cost + commission
+            
+            # Check if we have enough cash
+            if total_cost > portfolio['cash']:
+                quantity = portfolio['cash'] / (execution_price * (1 + self.commission_rate))
+                cost = quantity * execution_price
+                commission = cost * self.commission_rate
+                total_cost = cost + commission
+            
+            if quantity > 0:
+                # Update cash
+                portfolio['cash'] -= total_cost
+                
+                # Update position
+                if symbol not in portfolio['positions']:
+                    portfolio['positions'][symbol] = 0
+                portfolio['positions'][symbol] += quantity
+                
+                # Record trade
+                portfolio['trades'].append({
+                    'timestamp': timestamp,
+                    'symbol': symbol,
+                    'action': 'buy',
+                    'quantity': quantity,
+                    'price': execution_price,
+                    'commission': commission,
+                    'cost': total_cost
+                })
+        
+        elif action == 'sell':
+            # Check if we have the position
+            if symbol in portfolio['positions'] and portfolio['positions'][symbol] > 0:
+                # Limit to current position
+                quantity = min(quantity, portfolio['positions'][symbol])
+                
+                # Calculate value
+                value = quantity * execution_price
+                commission = value * self.commission_rate
+                net_value = value - commission
+                
+                # Update cash
+                portfolio['cash'] += net_value
+                
+                # Update position
+                portfolio['positions'][symbol] -= quantity
+                
+                # Remove position if zero
+                if portfolio['positions'][symbol] <= 0:
+                    del portfolio['positions'][symbol]
+                
+                # Record trade
+                portfolio['trades'].append({
+                    'timestamp': timestamp,
+                    'symbol': symbol,
+                    'action': 'sell',
+                    'quantity': quantity,
+                    'price': execution_price,
+                    'commission': commission,
+                    'value': net_value
+                })
+    
+    def _calculate_performance_metrics(self, equity_curve: pd.DataFrame, trades: List[Dict]) -> Dict[str, Any]:
+        """
+        Calculate performance metrics
+        
+        Args:
+            equity_curve: Portfolio equity curve
+            trades: List of trades
+            
+        Returns:
+            Dict: Performance metrics
+        """
+        metrics = {}
+        
+        try:
+            # Basic metrics
+            if not equity_curve.empty and 'portfolio_value' in equity_curve.columns:
+                initial_value = equity_curve['portfolio_value'].iloc[0]
+                final_value = equity_curve['portfolio_value'].iloc[-1]
+                
+                metrics['initial_capital'] = initial_value
+                metrics['final_value'] = final_value
+                metrics['total_return'] = final_value - initial_value
+                metrics['total_return_pct'] = (final_value / initial_value - 1) * 100
+                
+                # Calculate drawdown
+                equity_curve['peak'] = equity_curve['portfolio_value'].cummax()
+                equity_curve['drawdown'] = (equity_curve['portfolio_value'] - equity_curve['peak']) / equity_curve['peak']
+                metrics['max_drawdown_pct'] = equity_curve['drawdown'].min() * 100 if not equity_curve['drawdown'].empty else 0
+                
+                # Calculate Sharpe ratio (assuming 252 trading days per year)
+                if 'return' in equity_curve.columns and len(equity_curve) > 1:
+                    daily_returns = equity_curve['return'].fillna(0)
+                    avg_return = daily_returns.mean()
+                    std_return = daily_returns.std()
+                    if std_return > 0:
+                        metrics['sharpe_ratio'] = (avg_return / std_return) * (252 ** 0.5)
+                    else:
+                        metrics['sharpe_ratio'] = 0
+            
+            # Trade metrics
+            metrics['total_trades'] = len(trades)
+            if trades:
+                # Calculate win rate
+                buy_trades = {t['timestamp'].strftime('%Y-%m-%d %H:%M:%S'): t for t in trades if t['action'] == 'buy'}
+                sell_trades = {t['timestamp'].strftime('%Y-%m-%d %H:%M:%S'): t for t in trades if t['action'] == 'sell'}
+                
+                # This is a simplified calculation - it doesn't account for matching buys/sells
+                if buy_trades and sell_trades:
+                    # Calculate profit/loss per trade
+                    profitable_trades = 0
+                    total_matched = 0
+                    
+                    for timestamp, sell in sell_trades.items():
+                        # Find closest buy
+                        if timestamp in buy_trades:
+                            buy = buy_trades[timestamp]
+                            if sell['price'] > buy['price']:
+                                profitable_trades += 1
+                            total_matched += 1
+                    
+                    if total_matched > 0:
+                        metrics['win_rate'] = (profitable_trades / total_matched) * 100
+            
+            return metrics
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating performance metrics: {str(e)}")
+            return {'error': str(e)}
+    
+    async def shutdown(self) -> None:
+        """Clean up resources"""
+        # Clear factor cache
+        self.factor_values.clear()
+        
+        # Call parent shutdown
+        await super().shutdown()

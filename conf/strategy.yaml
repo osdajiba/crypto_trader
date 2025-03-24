@@ -1,0 +1,61 @@
+# Configuration Example for Multi-Factors Strategy
+# Add this to your config.yaml file under the strategy section
+
+strategy:
+  active: multi_factors  # Set as the active strategy
+  fallback_strategy: dual_ma
+  parameters:
+    threshold: 0.5       # Signal threshold
+    lookback_period: 100 # Data history length
+  
+  # Factor configuration
+  factors:
+    # RSI Factor
+    rsi:
+      type: rsi
+      params:
+        period: 14
+      window_size: 30
+      weight: 1.0
+      signal_type: threshold
+      normalize: true
+      upper_threshold: 70
+      lower_threshold: 30
+      is_differential: false
+    
+    # MACD Factor
+    macd:
+      type: macd
+      params:
+        fast_period: 12
+        slow_period: 26
+        signal_period: 9
+      window_size: 50
+      weight: 2.0
+      signal_type: crossover
+      normalize: false
+      is_differential: true
+    
+    # Bollinger Bands Factor
+    bollinger:
+      type: bollinger
+      params:
+        period: 20
+        std_dev: 2.0
+      window_size: 30
+      weight: 1.5
+      signal_type: threshold
+      normalize: true
+      is_differential: false
+    
+    # Volume Oscillator Factor
+    volume_osc:
+      type: volume_osc
+      params:
+        fast_period: 5
+        slow_period: 14
+      window_size: 30
+      weight: 0.5
+      signal_type: momentum
+      normalize: true
+      is_differential: false

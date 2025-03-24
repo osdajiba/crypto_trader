@@ -106,24 +106,22 @@ class ConfigManager:
                 'trades': 'data/trade_records.json'
             },
             'cache': {
-                'dir': './cache',                # Matches original key 'cache_dir'
-                'max_size': 104857600,           # Updated to 100 MB (100 * 1024 * 1024 bytes)
+                'enabled': True,
+                'dir': './cache',
+                'max_size': 104857600,
                 'retention_days': 30
             }
         },
+        
         'logging': {
-            'base_path': './logs',               # Updated from 'file_path' to match YAML
+            'base_path': './logs',
             'level': 'INFO',
-            'async_write': True,                 # Added from YAML
-            'format': '%(asctime)s | %(levelname)-8s | %(module)-15s | %(message)s',
-            'date_format': '%Y-%m-%d %H:%M:%S%z',  # ISO-8601 format from YAML
-            'detailed_format': True,             # Added from YAML
-            'rotation': {
-                'strategy': 'size',
-                'max_file_size': 10485760,       # Updated to 10 MB (10 * 1024 * 1024 bytes)
-                'backup_count': 5,
-                'time_interval': 'D'             # Added for completeness, though strategy is size-based
-            },
+            'async_write': True,
+            'combined_log': True,
+            'format': "%(asctime)s | %(levelname)-8s | %(module)-15s | [%(filename)s:%(lineno)d] | %(message)s",
+            'date_format': '%Y-%m-%d %H:%M:%S%z',
+            'detailed_format': True,
+            
             'handlers': {
                 'console': {
                     'enabled': True,
@@ -136,9 +134,43 @@ class ConfigManager:
                     'buffer': {
                         'enabled': True,
                         'capacity': 1000,
-                        'flush_interval': 5      # In seconds
+                        'flush_interval': 5
                     }
                 }
+            },
+            
+            'categories': {
+                'core': {
+                    'level': 'INFO',
+                    'modules': ['core', 'trading_system', 'mode', 'performance']
+                },
+                'data': {
+                    'level': 'INFO',
+                    'modules': ['datasource', 'dataframe', 'database', 'download_data']
+                },
+                'strategy': {
+                    'level': 'INFO',
+                    'modules': ['strategy', 'indicators', 'signals', 'backtest']
+                },
+                'exchange': {
+                    'level': 'WARNING',
+                    'modules': ['exchange', 'api', 'binance', 'websocket']
+                },
+                'system': {
+                    'level': 'INFO',
+                    'modules': ['system', 'cli_runner', 'launcher', 'gui_app', 'async_executor']
+                },
+                'utils': {
+                    'level': 'INFO',
+                    'modules': ['utils', 'network', 'config_manager']
+                }
+            },
+            
+            'rotation': {
+                'strategy': 'size',
+                'max_file_size': 10485760,
+                'backup_count': 5,
+                'time_interval': 'D'
             }
         },
         'system': {
@@ -165,7 +197,11 @@ class ConfigManager:
         
         # Initialize runtime date context
         self._runtime_date = datetime.now().date()
-        self.load()
+        self._next_date_check = datetime.now() + timedelta(days=1)
+        
+        # Load the configuration if a path was provided
+        if config_path:
+            self.load()
     
     def _check_date_rollover(self):
         """Check if date directory needs rotation"""
@@ -182,17 +218,17 @@ class ConfigManager:
     def get_log_path(self) -> Path:
         """Get current log directory (with date check)"""
         self._check_date_rollover()
-        return Path(self._config['logging']['file_path'])
+        return Path(self.get("logging", "base_path", default="./logs"))
 
     def validate(self):
         required_keys = [
-            ("mode", "type"),
-            ("strategy", "type"),
-            ("symbols", "list")
+            ("system", "operational_mode"),
+            ("logging", "base_path"),
+            ("trading", "capital", "initial")
         ]
-        for section, key in required_keys:
-            if not self.get(section, key):
-                raise ValueError(f"Missing configuration: {section}.{key}")
+        for keys in required_keys:
+            if not self.get(*keys):
+                raise ValueError(f"Missing configuration: {'.'.join(keys)}")
     
     def load(self, path: Optional[Union[str, Path]] = None) -> None:
         """
@@ -209,10 +245,11 @@ class ConfigManager:
             self._config_path = Path(path)
         
         if not self._config_path:
-            raise ConfigLoadError("No configuration path specified")
+            return  # No path specified, use default config
         
         if not self._config_path.exists():
-            raise ConfigLoadError(f"Configuration file not found: {self._config_path}")
+            self._logger.warning(f"Configuration file not found: {self._config_path}, using defaults")
+            return
         
         # Determine backend based on file extension
         extension = self._config_path.suffix.lower()
@@ -225,7 +262,12 @@ class ConfigManager:
         try:
             loaded_config = backend.load(self._config_path)
             self._merge_config(loaded_config)
-            self._validate_config_structure()
+            # Only validate if a schema is provided
+            try:
+                self._validate_config_structure()
+            except Exception as e:
+                self._logger.warning(f"Config validation warning: {e}")
+                
             self._logger.info(f"Configuration loaded from {self._config_path}")
         except ConfigLoadError:
             raise
@@ -277,27 +319,29 @@ class ConfigManager:
                 'required': True,
                 'type': dict,
                 'children': {
-                    'cache_dir': {'type': str, 'required': True},
-                    'max_cache_size': {'type': int, 'required': True, 'min': 0},
-                    'retention_days': {'type': int, 'required': True, 'min': 1}
+                    'cache': {'type': dict, 'required': True},
+                    'storage': {'type': dict, 'required': True},
+                    'source': {'type': dict, 'required': True}
                 }
             },
             'logging': {
                 'required': True,
                 'type': dict,
                 'children': {
-                    'level': {'type': str, 'required': True, 'values': ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']},
-                    'file_path': {'type': str, 'required': True},
-                    'max_file_size': {'type': int, 'required': True, 'min': 1024},
-                    'backup_count': {'type': int, 'required': True, 'min': 0}
+                    'base_path': {'type': str, 'required': True},
+                    'level': {'type': str, 'required': True},
+                    'handlers': {'type': dict, 'required': True},
+                    'categories': {'type': dict, 'required': True},
+                    'rotation': {'type': dict, 'required': True}
                 }
             },
             'system': {
                 'required': True,
                 'type': dict,
                 'children': {
-                    'max_threads': {'type': int, 'required': True, 'min': 1},
-                    'max_memory': {'type': int, 'required': True, 'min': 1024 * 1024}
+                    'operational_mode': {'type': str, 'required': True},
+                    'timezone': {'type': str, 'required': True},
+                    'performance': {'type': dict, 'required': True}
                 }
             }
         }
@@ -462,3 +506,27 @@ class ConfigManager:
     def reset(self) -> None:
         """Reset to default configuration"""
         self._config = copy.deepcopy(self._DEFAULT_CONFIG)
+        
+    def get_log_level(self, level_str: str) -> int:
+        """
+        Convert string log level to numeric value
+        
+        Args:
+            level_str: String representation of log level
+            
+        Returns:
+            int: Numeric log level
+        """
+        log_levels = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        
+        level_upper = level_str.upper()
+        if level_upper in log_levels:
+            return log_levels[level_upper]
+        
+        return logging.INFO  # Default to INFO level

@@ -1,422 +1,464 @@
-# src/utils/file_utils.py
-# Consolidated file utility functions
+# src\utils\file_utils.py
 
-import os
-import pandas as pd
 import asyncio
-from typing import List, Dict, Any, Optional, Union, Callable
-from datetime import datetime
-import traceback
+import os
+import json
+import csv
+import functools
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Callable, Tuple
+import pandas as pd
+import aiofiles
+import pyarrow as pa
+import pyarrow.parquet as pq
 
+from .time_utils import TimeUtils
 from src.common.log_manager import LogManager
 
-logger = LogManager.get_logger("utils.file")
+logger = LogManager.get_logger("data.source")
 
-class ParquetFileManager:
-    """Unified class for handling timestamp-based Parquet files"""
+class FileUtils:
+    """File operation utility class with optimized async operations"""
     
+    PARQUET_COMPRESSION = 'SNAPPY'
+    CSV_ENCODING = 'utf-8'
+    DEFAULT_CHUNK_SIZE = 1024 * 1024  # 1MB
+
     @staticmethod
-    def get_directory_path(base_path: str, timeframe: str, symbol: str, 
-                         timestamp: datetime) -> str:
-        """
-        Get directory path for a specific timestamp
-        
-        Args:
-            base_path: Base data path
-            timeframe: Timeframe (e.g., '1h')
-            symbol: Symbol (e.g., 'BTC/USDT')
-            timestamp: Datetime
-            
-        Returns:
-            str: Directory path for the timestamp
-        """
-        # Convert symbol format
+    async def _async_io_executor(func: Callable, *args, **kwargs) -> Any:
+        """General purpose asynchronous IO executor"""
+        loop = asyncio.get_running_loop()
+        bound_func = functools.partial(func, *args, **kwargs)
+        return await loop.run_in_executor(None, bound_func)
+
+    @staticmethod
+    async def async_makedirs(path: str) -> None:
+        """Asynchronous directory creation"""
+        await FileUtils._async_io_executor(os.makedirs, path, exist_ok=True)
+
+    @staticmethod
+    async def async_write_parquet(file_path: str, df: pd.DataFrame) -> None:
+        """Optimized asynchronous Parquet writes"""
+        try:
+            dir_path = os.path.dirname(file_path)
+            await FileUtils.async_makedirs(dir_path)
+
+            # Handle timezone
+            if 'datetime' in df.columns and df['datetime'].dt.tz is not None:
+                df = df.copy()
+                df['datetime'] = df['datetime'].dt.tz_convert(None)
+
+            table = pa.Table.from_pandas(df)
+            await FileUtils._async_io_executor(
+                pq.write_table,
+                table,
+                file_path,
+                compression=FileUtils.PARQUET_COMPRESSION
+            )
+        except Exception as e:
+            logger.error(f"Parquet write failed: {str(e)}")
+
+    @staticmethod
+    async def async_read_parquet(file_path: str) -> pd.DataFrame:
+        """Asynchronously read a parquet file"""
+        try:
+            df = await FileUtils._async_io_executor(pd.read_parquet, file_path)
+            return df
+        except Exception as e:
+            logger.error(f"Error reading parquet file {file_path}: {str(e)}")
+            return pd.DataFrame()
+
+    @staticmethod
+    def timestamp_to_path(data_path: str, timeframe: str, symbol: str, 
+                        timestamp: datetime) -> str:
+        """Generate directory path for a specific timestamp"""
         safe_symbol = symbol.replace('/', '_')
         
-        # Extract year and month
         year = timestamp.year
         month = timestamp.month
         
-        # Build path
-        return os.path.join(
-            base_path,
+        path = os.path.join(
+            data_path,
             timeframe,
             safe_symbol,
             str(year),
             f"{month:02d}"
         )
+        
+        return path
     
     @staticmethod
-    def ensure_directory_exists(path: str) -> None:
-        """
-        Ensure a directory exists
+    def generate_timestamp_filename(start: datetime, end: datetime) -> str:
+        """Generate timestamp-based filename for parquet files"""
+        return f"{int(start.timestamp())}_{int(end.timestamp())}.parquet"
+
+    @staticmethod
+    async def _async_file_operation(mode: str, file_path: str, 
+                                   data: Optional[Any] = None) -> Any:
+        """Generic asynchronous file operation"""
+        await FileUtils.async_makedirs(os.path.dirname(file_path))
         
-        Args:
-            path: Directory path
-        """
+        if mode == 'read':
+            async with aiofiles.open(file_path, 'r', encoding=FileUtils.CSV_ENCODING) as f:
+                return await f.read()
+        
+        async with aiofiles.open(file_path, 'w', encoding=FileUtils.CSV_ENCODING) as f:
+            await f.write(data)
+
+    @staticmethod
+    async def async_read_json(file_path: str) -> Dict[str, Any]:
+        """Read JSON file asynchronously"""
+        content = await FileUtils._async_file_operation('read', file_path)
+        return json.loads(content)
+
+    @staticmethod
+    async def async_write_json(file_path: str, data: Dict[str, Any]) -> None:
+        """Write JSON file asynchronously"""
+        await FileUtils._async_file_operation('write', file_path, json.dumps(data, indent=2))
+
+    @staticmethod
+    async def async_read_csv(file_path: str) -> List[Dict[str, str]]:
+        """Read CSV file asynchronously"""
+        content = await FileUtils._async_file_operation('read', file_path)
+        return list(csv.DictReader(content.splitlines()))
+
+    @staticmethod
+    async def async_write_csv(file_path: str, data: List[Dict[str, Any]]) -> None:
+        """Write CSV file asynchronously"""
+        if not data:
+            return
+
+        headers = data[0].keys()
+        csv_content = ','.join(headers) + '\n'
+        csv_content += '\n'.join(
+            ','.join(str(item) for item in row.values())
+            for row in data
+        )
+        await FileUtils._async_file_operation('write', file_path, csv_content)
+
+    @staticmethod
+    def sync_operation(async_func: Callable) -> Callable:
+        """Decorator to run async functions synchronously"""
+        @functools.wraps(async_func)
+        def wrapper(*args, **kwargs):
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(async_func(*args, **kwargs))
+            finally:
+                loop.close()
+        return wrapper
+
+    @staticmethod
+    def ensure_data_directory(data_path: str, timeframe: str, symbol: str, 
+                            timestamp: datetime) -> str:
+        """Ensure directory structure exists and return path"""
+        path = FileUtils.timestamp_to_path(data_path, timeframe, symbol, timestamp)
         os.makedirs(path, exist_ok=True)
-    
+        return path
+
     @staticmethod
-    def generate_filename(start_time: datetime, end_time: datetime) -> str:
-        """
-        Generate timestamp-based filename
+    async def batch_process_parquet_files(file_paths: List[str],
+                                        processor_func: Callable,
+                                        batch_size: int = 10) -> List[Any]:
+        """Process multiple parquet files concurrently in batches"""
+        results = []
         
-        Args:
-            start_time: Start datetime
-            end_time: End datetime
+        # 批量处理文件以避免资源过载
+        for i in range(0, len(file_paths), batch_size):
+            batch = file_paths[i:i+batch_size]
+            batch_results = await asyncio.gather(
+                *[processor_func(path) for path in batch], 
+                return_exceptions=True
+            )
             
-        Returns:
-            str: Filename in format 'start_timestamp_end_timestamp.parquet'
-        """
-        start_ts = int(start_time.timestamp())
-        end_ts = int(end_time.timestamp())
+            # 过滤出异常并添加有效结果
+            results.extend(result for result in batch_results 
+                        if not isinstance(result, Exception))
         
-        return f"{start_ts}_{end_ts}.parquet"
-    
-    @staticmethod
-    def parse_filename_timestamps(filename: str) -> tuple:
-        """
-        Parse timestamps from filename
-        
-        Args:
-            filename: Filename in format 'start_timestamp_end_timestamp.parquet'
-            
-        Returns:
-            tuple: (start_timestamp, end_timestamp)
-        """
-        try:
-            # Remove extension
-            basename = os.path.splitext(filename)[0]
-            
-            # Split by underscore
-            parts = basename.split('_')
-            
-            # Parse timestamps
-            start_ts = int(parts[0])
-            end_ts = int(parts[1])
-            
-            return start_ts, end_ts
-        except (ValueError, IndexError):
-            return None, None
-    
-    @staticmethod
-    async def read_parquet(file_path: str) -> pd.DataFrame:
-        """
-        Read a Parquet file asynchronously
-        
-        Args:
-            file_path: Path to Parquet file
-            
-        Returns:
-            DataFrame: Data from file
-        """
-        try:
-            # This is wrapped in a loop to make it non-blocking
-            loop = asyncio.get_event_loop()
-            df = await loop.run_in_executor(None, pd.read_parquet, file_path)
-            
-            # Process DataFrame - ensure datetime column is present
-            if 'timestamp' in df.columns and 'datetime' not in df.columns:
-                df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
-            
-            # Convert datetime column to datetime type if needed
-            if 'datetime' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['datetime']):
-                df['datetime'] = pd.to_datetime(df['datetime'])
-                
-            return df
-        except Exception as e:
-            logger.error(f"Error reading Parquet file {file_path}: {str(e)}")
-            return pd.DataFrame()
-    
-    @staticmethod
-    async def write_parquet(df: pd.DataFrame, file_path: str) -> bool:
-        """
-        Write DataFrame to Parquet file asynchronously
-        
-        Args:
-            df: DataFrame to write
-            file_path: Output file path
-            
-        Returns:
-            bool: Success status
-        """
-        try:
-            # Ensure datetime column exists and is properly formatted
-            if 'datetime' not in df.columns:
-                if isinstance(df.index, pd.DatetimeIndex):
-                    df = df.reset_index()
-                elif 'timestamp' in df.columns:
-                    df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
-            
-            # Ensure parent directory exists
-            parent_dir = os.path.dirname(file_path)
-            os.makedirs(parent_dir, exist_ok=True)
-            
-            # Write file
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, df.to_parquet, file_path, False)
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error writing Parquet file {file_path}: {str(e)}")
-            return False
-    
+        return results
+
+
+class ParquetFileManager:
+    """Manages Parquet file operations for time-series data"""
+
     @staticmethod
     def find_files_in_date_range(
-        base_dir: str, 
-        timeframe: str,
-        symbol: str,
-        start_dt: datetime,
+        base_path: str, 
+        timeframe: str, 
+        symbol: str, 
+        start_dt: datetime, 
         end_dt: datetime
     ) -> List[str]:
-        """
-        Find Parquet files in a date range
-        
-        Args:
-            base_dir: Base directory
-            timeframe: Timeframe (e.g., '1h')
-            symbol: Symbol (e.g., 'BTC/USDT')
-            start_dt: Start datetime
-            end_dt: End datetime
+        """Find Parquet files for symbol/timeframe within a date range"""
+        try:
+            symbol_dir = os.path.join(base_path, timeframe, symbol.replace('/', '_'))
             
-        Returns:
-            List[str]: List of file paths
-        """
-        symbol_dir = os.path.join(base_dir, timeframe, symbol.replace('/', '_'))
-        if not os.path.exists(symbol_dir):
-            return []
+            # 确保时区感知的日期时间并转换为时间戳
+            start_dt, end_dt = map(TimeUtils.ensure_tz_aware, (start_dt, end_dt))
+            start_ts, end_ts = int(start_dt.timestamp()), int(end_dt.timestamp())
             
-        # Convert to Unix timestamps
-        start_ts = int(start_dt.timestamp())
-        end_ts = int(end_dt.timestamp())
-        
-        matched_files = []
-        
-        # Get year range to search
-        start_year = start_dt.year
-        end_year = end_dt.year
-        
-        # Iterate through years and months
-        for year in range(start_year, end_year + 1):
-            year_dir = os.path.join(symbol_dir, str(year))
-            if not os.path.exists(year_dir):
-                continue
+            # 如果目录不存在则提前返回
+            if not os.path.exists(symbol_dir):
+                logger.warning(f"Directory does not exist: {symbol_dir}")
+                return []
                 
-            # Get month range
-            start_month = 1
-            end_month = 12
+            logger.info(f"Searching for files in {symbol_dir} from timestamp {start_ts} to {end_ts}")
             
-            if year == start_year:
-                start_month = start_dt.month
-            if year == end_year:
-                end_month = end_dt.month
-                
-            for month in range(start_month, end_month + 1):
-                month_dir = os.path.join(year_dir, f"{month:02d}")
+            file_paths = []
+            
+            # 生成要搜索的年月组合
+            date_ranges = []
+            current = datetime(start_dt.year, start_dt.month, 1, tzinfo=timezone.utc)
+            end_month = datetime(end_dt.year, end_dt.month, 1, tzinfo=timezone.utc)
+            
+            while current <= end_month:
+                date_ranges.append((current.year, current.month))
+                # 移至下个月
+                current = (datetime(current.year + 1, 1, 1) if current.month == 12 
+                        else datetime(current.year, current.month + 1, 1)).replace(tzinfo=timezone.utc)
+            
+            # 检查各月目录中的文件
+            for year, month in date_ranges:
+                month_dir = os.path.join(symbol_dir, str(year), f"{month:02d}")
                 if not os.path.exists(month_dir):
                     continue
                     
-                # Check each file in the month directory
-                for file in os.listdir(month_dir):
-                    if not file.endswith('.parquet'):
-                        continue
-                        
-                    # Check if file overlaps with date range
-                    file_start_ts, file_end_ts = ParquetFileManager.parse_filename_timestamps(file)
+                # 使用列表推导式和条件表达式处理文件
+                for file in (f for f in os.listdir(month_dir) if f.endswith('.parquet')):
+                    file_path = os.path.join(month_dir, file)
                     
-                    if file_start_ts is not None and file_end_ts is not None:
-                        if file_end_ts >= start_ts and file_start_ts <= end_ts:
-                            matched_files.append(os.path.join(month_dir, file))
-        
-        return matched_files
-    
-    @staticmethod
-    async def batch_process_files(
-        file_paths: List[str],
-        processor_func: Callable,
-        batch_size: int = 10
-    ) -> List[Any]:
-        """
-        Process files in batches
-        
-        Args:
-            file_paths: List of file paths
-            processor_func: Function to process each file
-            batch_size: Batch size
+                    # 时间戳格式文件名处理
+                    if '_' in file:
+                        parts = file.split('.')[0].split('_')
+                        if len(parts) >= 2:
+                            try:
+                                file_start_ts, file_end_ts = map(int, parts[:2])
+                                # 使用布尔表达式简化重叠检查
+                                overlaps = (
+                                    (start_ts <= file_start_ts <= end_ts) or
+                                    (start_ts <= file_end_ts <= end_ts) or
+                                    (file_start_ts <= start_ts and file_end_ts >= end_ts)
+                                )
+                                if overlaps:
+                                    file_paths.append(file_path)
+                            except ValueError:
+                                pass
+                    
+                    # 时间段格式文件名处理
+                    elif file.startswith(f"{timeframe}-"):
+                        try:
+                            date_str = file.split('.')[0].replace(f"{timeframe}-", "")
+                            date_dt = datetime.strptime(date_str, "%Y-%m-%d")
+                            file_start_ts = int(date_dt.replace(tzinfo=timezone.utc).timestamp())
+                            file_end_ts = int((date_dt + timedelta(days=1)).replace(tzinfo=timezone.utc).timestamp())
+                            
+                            overlaps = (
+                                (start_ts <= file_start_ts <= end_ts) or
+                                (start_ts <= file_end_ts <= end_ts) or
+                                (file_start_ts <= start_ts and file_end_ts >= end_ts)
+                            )
+                            if overlaps:
+                                file_paths.append(file_path)
+                        except ValueError:
+                            pass
             
-        Returns:
-            List[Any]: Processing results
-        """
-        results = []
-        
-        # Process files in batches
-        for i in range(0, len(file_paths), batch_size):
-            batch = file_paths[i:i+batch_size]
+            logger.info(f"Found {len(file_paths)} files for {symbol} {timeframe} in date range")
+            return file_paths
             
-            # Process batch concurrently
-            tasks = [processor_func(f) for f in batch]
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Filter out exceptions
-            for result in batch_results:
-                if not isinstance(result, Exception) and result is not None:
-                    if isinstance(result, pd.DataFrame) and not result.empty:
-                        results.append(result)
+        except Exception as e:
+            logger.error(f"Error in find_files_in_date_range for {symbol} {timeframe}: {str(e)}")
+            raise
         
-        return results
-    
     @staticmethod
     async def load_and_combine_files(
-        file_paths: List[str],
-        date_filter: Optional[tuple] = None,
-        drop_duplicates: bool = True
+        file_paths: List[str], 
+        date_filter: Optional[Tuple[datetime, datetime]] = None
     ) -> pd.DataFrame:
-        """
-        Load and combine multiple Parquet files
-        
-        Args:
-            file_paths: List of file paths
-            date_filter: Optional (start_dt, end_dt) for filtering
-            drop_duplicates: Whether to drop duplicate timestamps
-            
-        Returns:
-            DataFrame: Combined data
-        """
+        """Load and combine multiple Parquet files into a single DataFrame"""
         if not file_paths:
             return pd.DataFrame()
             
-        # Load all files
-        dfs = await ParquetFileManager.batch_process_files(
-            file_paths,
-            ParquetFileManager.read_parquet
-        )
+        # 定义异步加载单个文件的函数
+        async def load_file(path):
+            try:
+                return await FileUtils._async_io_executor(pd.read_parquet, path)
+            except Exception as e:
+                logger.error(f"Error loading file {path}: {str(e)}")
+                return pd.DataFrame()
+        
+        # 并发加载所有文件
+        dfs = await asyncio.gather(*[load_file(path) for path in file_paths])
+        
+        # 过滤出非空DataFrame
+        dfs = [df for df in dfs if not df.empty]
         
         if not dfs:
             return pd.DataFrame()
-            
-        # Combine DataFrames
-        combined_df = pd.concat(dfs, ignore_index=True)
         
-        # Ensure datetime column exists
-        if 'datetime' not in combined_df.columns and 'timestamp' in combined_df.columns:
-            combined_df['datetime'] = pd.to_datetime(combined_df['timestamp'], unit='ms')
+        # 应用日期过滤器
+        if date_filter and 'datetime' in dfs[0].columns:
+            start_dt, end_dt = map(TimeUtils.ensure_tz_aware, date_filter)
             
-        # Apply date filter if specified
-        if date_filter and 'datetime' in combined_df.columns:
-            start_dt, end_dt = date_filter
-            combined_df = combined_df[
-                (combined_df['datetime'] >= pd.Timestamp(start_dt)) &
-                (combined_df['datetime'] <= pd.Timestamp(end_dt))
-            ]
+            # 将Python datetime转换为pandas Timestamp对象，保证类型兼容
+            pd_start = pd.Timestamp(start_dt)
+            pd_end = pd.Timestamp(end_dt)
             
-        # Sort by datetime
-        if 'datetime' in combined_df.columns:
-            combined_df = combined_df.sort_values('datetime')
+            filtered_dfs = []
+            for df in dfs:
+                # 确保时区感知
+                if df['datetime'].dt.tz is None:
+                    df = df.copy()
+                    df['datetime'] = df['datetime'].dt.tz_localize('UTC')
+                # 使用pandas Timestamp对象进行过滤
+                filtered_df = df[(df['datetime'] >= pd_start) & (df['datetime'] <= pd_end)]
+                if not filtered_df.empty:
+                    filtered_dfs.append(filtered_df)
             
-            # Drop duplicates if requested
-            if drop_duplicates:
-                combined_df = combined_df.drop_duplicates(subset=['datetime'], keep='last')
+            dfs = filtered_dfs
         
-        return combined_df
-    
+        # 合并并排序
+        if not dfs:
+            return pd.DataFrame()
+            
+        result = pd.concat(dfs, ignore_index=True)
+        
+        # 按datetime排序（如果存在）
+        if not result.empty and 'datetime' in result.columns:
+            result = result.sort_values('datetime').reset_index(drop=True)
+        
+        return result
+        
     @staticmethod
-    async def save_dataframe(
-        df: pd.DataFrame,
-        base_path: str,
-        timeframe: str,
-        symbol: str,
-        folder_suffix: str = ""
+    async def save_dataframe_as_daily_files(
+        df: pd.DataFrame, 
+        base_path: str, 
+        timeframe: str, 
+        symbol: str
     ) -> bool:
-        """
-        Save DataFrame to Parquet file in timestamp-based format
-        
-        Args:
-            df: DataFrame to save
-            base_path: Base directory
-            timeframe: Timeframe
-            symbol: Symbol
-            folder_suffix: Optional suffix for folder name
-            
-        Returns:
-            bool: Success status
-        """
-        if df.empty:
-            logger.warning("Cannot save empty DataFrame")
+        """Save DataFrame to daily Parquet files using timeframe-YYYY-MM-DD format"""
+        if df.empty or 'datetime' not in df.columns:
             return False
             
         try:
-            # Ensure datetime column exists
-            if 'datetime' not in df.columns:
-                if isinstance(df.index, pd.DatetimeIndex):
-                    df = df.reset_index()
-                elif 'timestamp' in df.columns:
-                    df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
-                else:
-                    logger.error("Cannot save DataFrame: no datetime column")
-                    return False
-                    
-            # Get time range
-            min_time = df['datetime'].min()
-            max_time = df['datetime'].max()
+            symbol_safe = symbol.replace('/', '_')
             
-            # Build folder path with optional suffix
-            tf_folder = f"{timeframe}{folder_suffix}"
-            folder_path = ParquetFileManager.get_directory_path(
-                base_path, tf_folder, symbol, min_time
-            )
+            # 添加日期列用于分组
+            df = df.copy()
+            df['date'] = df['datetime'].dt.date
             
-            # Ensure directory exists
-            ParquetFileManager.ensure_directory_exists(folder_path)
+            # 定义异步保存函数
+            async def save_daily_file(date, group_df):
+                daily_df = group_df.drop(columns=['date'])
+                
+                # 构建路径
+                date_obj = pd.Timestamp(date)
+                dir_path = os.path.join(
+                    base_path, 
+                    timeframe, 
+                    symbol_safe, 
+                    str(date_obj.year), 
+                    f"{date_obj.month:02d}"
+                )
+                
+                # 创建文件名
+                filename = f"{timeframe}-{date_obj.year}-{date_obj.month:02d}-{date_obj.day:02d}.parquet"
+                file_path = os.path.join(dir_path, filename)
+                
+                # 创建目录并保存文件
+                await FileUtils.async_makedirs(dir_path)
+                await FileUtils._async_io_executor(daily_df.to_parquet, file_path, index=False)
+                return True
             
-            # Generate filename
-            filename = ParquetFileManager.generate_filename(min_time, max_time)
-            file_path = os.path.join(folder_path, filename)
+            # 并发执行所有保存操作
+            tasks = [save_daily_file(date, group) for date, group in df.groupby('date')]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            # Save DataFrame
-            return await ParquetFileManager.write_parquet(df, file_path)
-            
+            # 检查是否有任何保存失败
+            return all(not isinstance(r, Exception) for r in results)
+                
         except Exception as e:
             logger.error(f"Error saving DataFrame: {str(e)}")
             return False
     
     @staticmethod
-    async def update_or_merge_file(
-        new_data: pd.DataFrame,
-        file_path: str
+    async def save_dataframe_as_timestamp_file(
+        df: pd.DataFrame,
+        base_path: str,
+        timeframe: str,
+        symbol: str
     ) -> bool:
-        """
-        Update existing file or create new one
-        
-        Args:
-            new_data: New data to save
-            file_path: File path
-            
-        Returns:
-            bool: Success status
-        """
-        if new_data.empty:
+        """Save DataFrame to a Parquet file using timestamp-based filename"""
+        if df.empty:
             return False
             
         try:
-            if os.path.exists(file_path):
-                # Read existing file
-                existing_df = await ParquetFileManager.read_parquet(file_path)
+            if 'datetime' not in df.columns:
+                raise ValueError("DataFrame must have a datetime column")
                 
-                if not existing_df.empty:
-                    # Combine with new data
-                    combined_df = pd.concat([existing_df, new_data], ignore_index=True)
-                    
-                    # Remove duplicates
-                    if 'datetime' in combined_df.columns:
-                        combined_df = combined_df.sort_values('datetime')
-                        combined_df = combined_df.drop_duplicates(subset=['datetime'], keep='last')
-                        
-                    # Save combined data
-                    return await ParquetFileManager.write_parquet(combined_df, file_path)
+            # Get min and max timestamps
+            min_dt = df['datetime'].min()
+            max_dt = df['datetime'].max()
             
-            # If file doesn't exist or reading failed, just save new data
-            return await ParquetFileManager.write_parquet(new_data, file_path)
+            # Ensure timezone-aware
+            min_dt = TimeUtils.ensure_tz_aware(min_dt)
+            max_dt = TimeUtils.ensure_tz_aware(max_dt)
+            
+            # Create directory path
+            dir_path = FileUtils.timestamp_to_path(base_path, timeframe, symbol, min_dt)
+            os.makedirs(dir_path, exist_ok=True)
+            
+            # Create filename
+            filename = FileUtils.generate_timestamp_filename(min_dt, max_dt)
+            file_path = os.path.join(dir_path, filename)
+            
+            # Save file
+            df.to_parquet(file_path, index=False)
+            
+            return True
             
         except Exception as e:
-            logger.error(f"Error updating file {file_path}: {str(e)}")
+            logger.error(f"Error saving timestamp dataframe: {str(e)}")
             return False
+        
+    @staticmethod
+    def generate_date_ranges(start_dt: datetime, end_dt: datetime) -> List[Tuple[int, int]]:
+        """生成年月组合，用于查找文件"""
+        # 确保时区感知
+        start_dt = TimeUtils.ensure_tz_aware(start_dt)
+        end_dt = TimeUtils.ensure_tz_aware(end_dt)
+        
+        date_ranges = []
+        current = datetime(start_dt.year, start_dt.month, 1, tzinfo=timezone.utc)
+        end_month = datetime(end_dt.year, end_dt.month, 1, tzinfo=timezone.utc)
+        
+        while current <= end_month:
+            date_ranges.append((current.year, current.month))
+            # 计算下一个月（处理年末情况）
+            if current.month == 12:
+                current = datetime(current.year + 1, 1, 1, tzinfo=timezone.utc)
+            else:
+                current = datetime(current.year, current.month + 1, 1, tzinfo=timezone.utc)
+                
+        return date_ranges
+    
+    @staticmethod
+    def is_file_in_range(file_start_ts: int, file_end_ts: int, search_start_ts: int, search_end_ts: int) -> bool:
+        """判断文件的时间范围是否与搜索范围重叠"""
+        # 简化重叠检查逻辑，提高可读性和性能
+        return (
+            (search_start_ts <= file_start_ts <= search_end_ts) or  # 文件开始在搜索范围内
+            (search_start_ts <= file_end_ts <= search_end_ts) or    # 文件结束在搜索范围内
+            (file_start_ts <= search_start_ts and file_end_ts >= search_end_ts)  # 文件跨越整个搜索范围
+        )
+        
+    @staticmethod
+    async def _process_file_safely(func, file_path, *args, **kwargs):
+        """安全处理单个文件，捕获并记录异常"""
+        try:
+            result = await func(file_path, *args, **kwargs)
+            return result
+        except Exception as e:
+            logger.error(f"Error processing file {file_path}: {str(e)}")
+            # 返回空DataFrame或适当的默认值，而不是抛出异常
+            return pd.DataFrame() if 'read' in func.__name__ else False
+
