@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Type, TypeVar, ClassVar, Set, List
 import asyncio
 
-from .log_manager import LogManager
+from .logging import LogManager
 
 # Generic type variable
 T = TypeVar('T')

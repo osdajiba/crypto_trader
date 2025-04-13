@@ -56,6 +56,11 @@ data:
     historical: data/historical/
     orders: data/order_history.csv
     trades: data/trade_records.json
+  validation:
+    enabled: true
+    auto_fix: true
+    log_issues: true
+    fix_on_load: true
 database:
   echo_sql: false
   pool_size: 5

@@ -23,7 +23,7 @@ backtest:
   engine_type: ohlcv
   mode: full
   period:
-    end: '2023-03-31'
+    end: '2023-12-31'
     start: '2023-01-01'
   reporting:
     formats:

@@ -3,10 +3,10 @@
 import asyncio
 from typing import Dict, List, Optional, Callable, Any
 
-from src.common.config_manager import ConfigManager
-from src.common.log_manager import LogManager
+from common.config import ConfigManager
+from common.logging import LogManager
 from src.common.async_executor import AsyncExecutor
-from src.mode.base_trading_mode import TradingModeFactory
+from src.trading.modes.base import TradingModeFactory
 
 class TradingCore:
     """Core coordinator for multi-asset concurrent trading system"""
