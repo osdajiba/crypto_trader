@@ -3,10 +3,10 @@
 import asyncio
 from typing import Dict, List, Optional, Callable, Any
 
-from src.common.config_manager import ConfigManager
-from src.common.log_manager import LogManager
+from common.config import ConfigManager
+from common.logging import LogManager
 from src.common.async_executor import AsyncExecutor
-from src.mode.base_trading_mode import TradingModeFactory
+from src.trading.modes.base import TradingModeFactory
 
 class TradingCore:
     """Core coordinator for multi-asset concurrent trading system"""
@@ -15,7 +15,7 @@ class TradingCore:
         """
         Initialize the trading core with configuration and mode.
         """
-        self.config: ConfigManager = config
+        self.config = config
         self.logger = LogManager.get_logger(name="trading_system")
         
         self.mode = mode if mode is not None else config.get("system", "operational_mode", default="backtest")
@@ -59,10 +59,7 @@ class TradingCore:
         symbols = self.config.get("trading", "instruments", default=["BTC/USDT"])
         if isinstance(symbols, str):
             symbols = [symbols.strip()]
-        timeframe = self.config.get("trading", "timeframe", default="1h")
-        if not timeframe:
-            timeframe = self.config.get("strategy", "timeframe", default="1h")
-        
+        timeframe = self.config.get("trading", "timeframe", default="1m")
         self.logger.info(f"Starting trading pipeline | Symbols: {symbols} | Timeframe: {timeframe}")
         self._running = True
         

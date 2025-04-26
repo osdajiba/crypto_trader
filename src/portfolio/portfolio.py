@@ -1,7 +1,7 @@
 # src/portfolio/portfolio.py
 
-from src.portfolio.asset import Asset
-from src.portfolio.portfolio_manager import PortfolioManager
+from portfolio.assets.base import Asset
+from .manager import PortfolioManager
 
 class Portfolio(Asset):
     def __init__(self, name: str):
