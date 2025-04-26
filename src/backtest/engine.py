@@ -152,6 +152,7 @@ class BaseBacktestEngine:
                 self.logger.warning(f"Empty data for {symbol}")
                 sufficient_data = False
                 continue
+            df[symbol] = symbol
             
             # Initialize buffers
             self.data_buffers[symbol] = pd.DataFrame()

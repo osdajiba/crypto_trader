@@ -25,6 +25,7 @@ class OrderType(Enum):
 class Direction(Enum):
     BUY = 'buy'
     SELL = 'sell'
+    SHORT_SELL = 'short'
 
 
 class OrderStatus(Enum):
@@ -76,7 +77,7 @@ class Order:
         symbol: str,
         order_type: OrderType,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         price: Optional[float] = None,
         stop_price: Optional[float] = None,
         take_profit_price: Optional[float] = None,
@@ -96,7 +97,7 @@ class Order:
             raise TypeError("direction must be a Direction enum.")
         if not isinstance(validity, Validity):
             raise TypeError("validity must be a Validity enum.")
-        if not isinstance(quantity, int) or quantity <= 0:
+        if not isinstance(quantity, float) or quantity == 0.0:
             raise ValueError("quantity must be a positive integer.")
 
         # 处理市价单的特殊情况
@@ -123,6 +124,7 @@ class Order:
                 raise ValueError("SELL take-profit requires price > take_profit_price")
 
         # 价格精度处理
+        # TODO: function _get_price_precision() should be improved
         self._price_precision = self._get_price_precision(symbol)
         self.price = round(price, self._price_precision) if price is not None else None
         self.stop_price = round(stop_price, self._price_precision) if stop_price is not None else None
@@ -135,6 +137,10 @@ class Order:
         self.direction = direction
         self.quantity = quantity
         self.timestamp = timestamp or datetime.datetime.now()
+        # set datetime from timestamp
+        if isinstance(self.timestamp, (int, float)):
+            timestamp = timestamp / 1000 if self.timestamp > 1e12 else self.timestamp
+            self.datetime = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
         self.validity = validity
         self.status = OrderStatus.CREATED
         self.filled_quantity = 0
@@ -146,11 +152,14 @@ class Order:
         """获取价格精度（示例实现）"""
         return 2 if "BTC" in symbol else 4
 
-    def _calculate_expiry(self) -> datetime.datetime:
+    def _calculate_expiry(self) -> datetime:
         """计算订单过期时间"""
         if self.validity == Validity.DAY:
-            return self.timestamp.replace(hour=23, minute=59, second=59)
-        return datetime.datetime.max  # GTC订单永不过期
+            if isinstance(self.timestamp, (int, float, datetime)):
+                return self.datetime.replace(hour=23, minute=59, second=59)
+            else:
+                raise TypeError("timestamp must be a datetime, int, or float.")
+        return datetime.max  # GTC orders never expire (permanent order)
 
     def check_validity(self) -> bool:
         """检查订单是否有效"""
@@ -211,9 +220,9 @@ class MarketOrder(Order):
         self,
         symbol: str,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         order_id: Optional[str] = None,
-        timestamp: Optional[datetime.datetime] = None,
+        timestamp: Optional[int] = None,
         validity: Validity = Validity.DAY
     ):
         super().__init__(
@@ -233,7 +242,7 @@ class LimitOrder(Order):
         self,
         symbol: str,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         price: float,
         order_id: Optional[str] = None,
         timestamp: Optional[datetime.datetime] = None,
@@ -269,7 +278,7 @@ class StopLossOrder(Order):
         self,
         symbol: str,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         stop_price: float,
         order_id: Optional[str] = None,
         timestamp: Optional[datetime.datetime] = None,
@@ -293,7 +302,7 @@ class TakeProfitOrder(Order):
         self,
         symbol: str,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         take_profit_price: float,
         order_id: Optional[str] = None,
         timestamp: Optional[datetime.datetime] = None,
@@ -317,7 +326,7 @@ class LimitOrderWithSLTP(Order):
         self,
         symbol: str,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         price: float,
         stop_price: float,
         take_profit_price: float,
@@ -345,7 +354,7 @@ class MarketOrderWithSLTP(Order):
         self,
         symbol: str,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         stop_price: float,
         take_profit_price: float,
         order_id: Optional[str] = None,
@@ -371,7 +380,7 @@ class TrailingStopOrder(Order):
         self,
         symbol: str,
         direction: Direction,
-        quantity: int,
+        quantity: float,
         trail_value: float,
         is_percentage: bool = True,
         order_id: Optional[str] = None,

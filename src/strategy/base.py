@@ -78,7 +78,7 @@ class BaseStrategy(ABC):
                     max_window = max(max_window, dep_window)
         
         # Set the required data points (minimum 2)
-        self._required_data_points = max(max_window, 2)
+        self._required_data_points = max(max_window, 2) + 1
         
         # Update lookback period if needed
         if self._required_data_points > self.lookback_period:
@@ -103,11 +103,8 @@ class BaseStrategy(ABC):
             if not sufficient_history:
                 return pd.DataFrame()
             
-            # Get data for signal generation
-            combined_data = self._get_combined_data(symbol)
-            
             # Generate signals
-            signals = await self._generate_signals(combined_data)
+            signals = await self._generate_signals(self._data_buffer[symbol])
             
             # Add symbol if not present
             if not signals.empty and 'symbol' not in signals.columns:
@@ -152,11 +149,7 @@ class BaseStrategy(ABC):
         
         # Not enough data yet
         return False
-    
-    def _get_combined_data(self, symbol: str) -> pd.DataFrame:
-        """Get data for signal generation"""
-        return self._data_buffer[symbol].copy()
-    
+
     def calculate_factor(self, data: pd.DataFrame, factor_name: str, symbol: str = None) -> pd.Series:
         """
         Calculate factor values with caching for efficiency

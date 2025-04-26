@@ -284,7 +284,7 @@ class BacktestRiskManager(BaseRiskManager):
                 symbol = signal['symbol'] if 'symbol' in signal else 'unknown'
                 
                 # Skip invalid signals
-                if action not in ['buy', 'sell']:
+                if action not in ['buy', 'sell', 'short']:
                     self._logger.warning(f"Unknown action type: {action}, skipping")
                     drop_indices.append(idx)
                     continue

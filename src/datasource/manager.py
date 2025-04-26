@@ -51,7 +51,7 @@ class DataManager:
         
         # Data integrity checker with optimized settings
         self.integrity_checker = DataIntegrityChecker(
-            timeframe=config.get("data", "default_timeframe", default="1h") if config else "1h",
+            timeframe=config.get("data", "default_timeframe", default="1m") if config else "1m",
             parallel=config.get("data", "validation", "parallel", default=True) if config else True
         )
         self.validate_data = config.get("data", "validation", "enabled", default=True) if config else True
@@ -241,7 +241,6 @@ class DataManager:
                     if not valid:
                         self.logger.warning(f"Data integrity issues found in {source_name} data for {symbol} {timeframe}")
                         data = await self._fix_data_issues(data, results, symbol, timeframe)
-            
             return data
             
         except Exception as e:

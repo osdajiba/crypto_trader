@@ -25,7 +25,7 @@ class DataIntegrityChecker:
     Includes hardware acceleration, vectorized operations, and parallel processing.
     """
     
-    def __init__(self, timeframe: str = "1h", iqr_multiplier: float = 3.0, parallel: bool = True):
+    def __init__(self, timeframe: str = "1m", iqr_multiplier: float = 3.0, parallel: bool = True):
         """
         Initialize the data integrity checker
         

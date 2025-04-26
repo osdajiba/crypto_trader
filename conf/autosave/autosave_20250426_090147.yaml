@@ -10,11 +10,11 @@ api:
     workaround_enabled: true
   enable_rate_limit: true
   headers:
-    connection: close
+    connection: keep-alive
   retry_attempts: 3
   retry_delay: 1.0
   timeout: 60000
-  useproxy: auto
+  useproxy: true
 backtest:
   costs:
     commission: 0.001
@@ -23,8 +23,8 @@ backtest:
   engine_type: ohlcv
   mode: full
   period:
-    end: '2023-03-31'
-    start: '2023-01-01'
+    end: '2025-03-31'
+    start: '2025-01-01'
   reporting:
     formats:
     - csv
@@ -194,6 +194,10 @@ risk:
   drawdown:
     max_portfolio: 0.2
     max_single_trade: 0.1
+  exposure:
+    risk_per_trade: 1.0
+  limits:
+    max_leverage: 10
   stop_loss:
     enabled: true
     max_daily: 0.05
@@ -209,10 +213,10 @@ strategy:
   active: dual_ma
   fallback_strategy: neural_network
   parameters:
-    fast_period: 50
-    slow_period: 200
+    fast_period: 20
+    slow_period: 60
     threshold: 0.005
-  timeframe: 1h
+  timeframe: 1m
 system:
   backtest_mode: ohlcv
   config:
@@ -229,7 +233,7 @@ system:
 trading:
   capital:
     initial: 100000.0
-    min_order: 0.001
+    min_order: 1.0
   execution:
     leverage: 1
     slippage: 0.001
@@ -238,8 +242,8 @@ trading:
   limits:
     daily_trades: 50
     max_leverage: 10
-    min_volume: 0.001
-    position: 0.1
+    min_volume: 1
+    position: 1.0
 validation:
   required:
   - database.url

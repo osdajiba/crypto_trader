@@ -1,12 +1,12 @@
 # src/strategy/DualMA.py
 
+import numpy as np
 import pandas as pd
 from typing import Dict, Optional, Any, List
 from strategy.base import BaseStrategy
 from common.config import ConfigManager
 from src.common.abstract_factory import register_factory_class
 from src.common.async_executor import AsyncExecutor
-
 
 @register_factory_class('strategy_factory', 'dual_ma', 
                        description="Dual Moving Average Crossover Strategy",
@@ -107,10 +107,10 @@ class DualMAStrategy(BaseStrategy):
         
         # Get the symbol
         symbol = self.primary_symbol
-        if '_symbol' in data.columns:
+        if 'symbol' in data.columns:
             # If data has symbol column, use the first one (assuming it's all the same)
             if not data.empty:
-                symbol = data['_symbol'].iloc[0]
+                symbol = data['symbol'].iloc[0]
         
         # Calculate moving averages using optimized factor calculation
         short_ma = self.calculate_factor(data, 'short_ma', symbol)
@@ -118,9 +118,11 @@ class DualMAStrategy(BaseStrategy):
         
         # Create signal DataFrame
         signals = pd.DataFrame(index=data.index)
-        signals['timestamp'] = data.index
+        signals['datetime'] = data['datetime']
+        signals['timestamp'] = data['timestamp']
         signals['symbol'] = symbol
         signals['action'] = None  # Initialize with None
+        signals['quantity'] = 0  # Initialize with 0.0
         
         # Buy signal: short MA crosses above long MA
         crossover_up = (short_ma > long_ma) & (short_ma.shift(1) <= long_ma.shift(1))
@@ -138,14 +140,22 @@ class DualMAStrategy(BaseStrategy):
             signals['price'] = data.loc[signals.index, 'close']
         
         # Calculate position size based on available capital
-        if 'price' in signals.columns:
+        if not signals.empty and 'price' in signals.columns:
+            if 'quantity' not in signals.columns or not pd.api.types.is_float_dtype(signals['quantity']):
+                signals['quantity'] = np.nan  # Ensures the dtype becomes float64
+                
             for idx, row in signals.iterrows():
-                if row['action'] == 'buy':
-                    signals.at[idx, 'quantity'] = self.calculate_position_size(row['price'], 
-                                                                          self.config.get("trading", "capital", "initial", default=100000))
-        
-                self.logger.info(f"Generated {len(signals)} signals for {symbol}")
+                if row['action'] in ['buy', 'sell', 'short']:
+                    quantity = self.calculate_position_size(
+                        row['price'], 
+                        self.config.get("trading", "capital", "initial", default=100000)
+                    )
+                    signals.at[idx, 'quantity'] = quantity
+
+            self.logger.info(f"Generated {len(signals)} signals for {symbol}")
+
         return signals
+
     
     def calculate_position_size(self, price: float, capital: float) -> float:
         """
@@ -159,8 +169,8 @@ class DualMAStrategy(BaseStrategy):
             float: Position size
         """
         # Get risk settings from params or config
-        risk_per_trade = self.params.get("risk_per_trade", 0.01)  # Default 1% risk
-        max_position = self.config.get("trading", "limits", "position", default=0.1)  # Default max 10%
+        risk_per_trade = self.config.get("risk", "exposure","risk_per_trade", default=0.01)  # Default 1% risk
+        max_position = self.config.get("trading", "limits", "position", default=0.01)  # Default max 10%
         
         # Calculate position size
         risk_amount = capital * risk_per_trade

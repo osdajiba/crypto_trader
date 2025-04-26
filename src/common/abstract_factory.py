@@ -9,8 +9,10 @@ import pkgutil
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Type, TypeVar, ClassVar, Set, List
 import asyncio
+import logging
 
-from .logging import LogManager
+from .config import ConfigManager
+
 
 # Generic type variable
 T = TypeVar('T')
@@ -22,7 +24,7 @@ class AbstractFactory(ABC):
     # Class-level cache for singleton instances
     _instances: ClassVar[Dict[str, 'AbstractFactory']] = {}
     
-    def __init__(self, config):
+    def __init__(self, config: ConfigManager):
         """
         Initialize abstract factory
         
@@ -30,7 +32,7 @@ class AbstractFactory(ABC):
             config: Configuration object
         """
         self.config = config
-        self.logger = LogManager.get_logger(f"system.{self.__class__.__name__.lower()}")
+        self.logger = logging.getLogger(f"system.{self.__class__.__name__.lower()}")
         self._registry: Dict[str, Any] = {}
         self._cache: Dict[str, Any] = {}
         self._metadata: Dict[str, Dict[str, Any]] = {}

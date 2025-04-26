@@ -167,14 +167,3 @@ def launch():
     
     logger.info("Trading system shutting down")
     return {"status": "completed"}
-
-if __name__ == "__main__":
-    try:
-        result = launch() 
-        sys.exit(0 if not result or "error" not in result else 1)
-    except KeyboardInterrupt:
-        print("\nOperation cancelled by user.")
-        sys.exit(130)
-    except Exception as e:
-        print(f"Unhandled error: {str(e)}")
-        sys.exit(1)

@@ -169,7 +169,7 @@ class ConfigManager:
                 },
                 'system': {
                     'level': 'INFO',
-                    'modules': ['system', 'cli_runner', 'launcher', 'gui_app', 'async_executor']
+                    'modules': ['system', 'cli', 'launcher', 'gui', 'async_executor', 'risk']
                 },
                 'utils': {
                     'level': 'INFO',

@@ -60,15 +60,13 @@ class AsyncExecutor:
     def __new__(cls, *args, **kwargs):
         with cls._lock:
             if cls._instance is None:
-                # 只在第一次实例化时创建新对象并初始化
                 cls._instance = super().__new__(cls)
-                # 初始化操作放在 __new__ 中以确保线程安全
                 cls._instance._init_executor(*args, **kwargs)
             return cls._instance
     
-    def _init_executor(self, logger: LogManager):
+    def _init_executor(self):
         """Initialize executor resources with injected logger"""
-        self._logger = logger.get_logger(f"system.{self.__class__.__name__.lower()}")
+        self._logger = LogManager.get_logger(f"system.async_executor")
         self._tasks: Dict[str, TaskInfo] = {}
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._running = False
@@ -642,22 +640,26 @@ class AsyncExecutor:
         try:
             # Cancel the task scheduler first
             if self._scheduler_task and not self._scheduler_task.done():
-                self._scheduler_task.cancel()
-                try:
-                    await asyncio.wait_for(self._scheduler_task, timeout=0.5)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
+                if self._scheduler_task.get_loop() != asyncio.get_running_loop():
+                    self._logger.warning("Scheduler task belongs to a different loop, skipping cancel")
+                else:
+                    self._scheduler_task.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(self._scheduler_task), timeout=0.5)
+                    except (asyncio.CancelledError, asyncio.TimeoutError):
+                        pass
             
             # Get task snapshot to avoid modification during iteration
             with self._lock:
                 tasks_to_cancel = list(self._tasks.items())
-                # Clear periodic tasks set
                 self._periodic_tasks.clear()
             
             # Cancel each task individually
             for task_id, task_info in tasks_to_cancel:
                 if not task_info.task.done():
-                    self._logger.debug(f"Cancelling task {task_info.name} (ID: {task_id})")
+                    if task_info.task.get_loop() != asyncio.get_running_loop():
+                        self._logger.warning(f"Task {task_info.name} belongs to a different loop, skipping cancel")
+                        continue
                     task_info.task.cancel()
             
             # Wait for a short period for tasks to cancel
@@ -674,7 +676,7 @@ class AsyncExecutor:
             self._logger.debug("AsyncExecutor closed successfully")
             
         except Exception as e:
-            self._logger.error(f"Error while closing AsyncExecutor: {str(e)}")
+            self._logger.error(f"Error while closing AsyncExecutor: {str(e)}", exc_info=True)
         finally:
             self._in_cleanup = False
     

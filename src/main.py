@@ -22,7 +22,7 @@ def main():
         return {"error": f"Critical error: {str(e)}"}
 
 if __name__ == "__main__":
-    try:   
+    try:
         result = main()
         sys.exit(0 if not result or "error" not in result else 1)
     except KeyboardInterrupt:

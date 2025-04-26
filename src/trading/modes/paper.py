@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime
 
 from src.trading.modes.base import BaseTradingMode
-from execution.manager import ExecutionEngine
+from src.trading.execution.manager import ExecutionEngine
 
 
 class PaperTradingMode(BaseTradingMode):

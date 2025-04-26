@@ -18,6 +18,7 @@ from datasource.manager import DataManager
 from risk.manager import RiskManagerFactory
 from backtest.performance import PerformanceMonitor
 from strategy.base import StrategyFactory
+from trading.execution.order import Direction
 
 
 class BaseTradingMode(ABC):
@@ -245,14 +246,15 @@ class BaseTradingMode(ABC):
             # Generate signals
             signals = await self.strategy.process_data(data, symbol)
             
-            # Validate signals
-            valid_signals = await self.risk_manager.validate_signals(signals)
-            
-            # Execute signals
-            if not valid_signals.empty:
-                trades = await self._execute_signals(valid_signals, data_map)
-                if trades:
-                    executed_trades.extend(trades)
+            if not signals.empty:
+                # Validate signals
+                valid_signals = await self.risk_manager.validate_signals(signals)
+                
+                # Execute signals
+                if not valid_signals.empty:
+                    trades = await self._execute_signals(valid_signals, data_map)
+                    if trades:
+                        executed_trades.extend(trades)
         
         # Update equity curve and drawdown
         self._update_performance_metrics()
@@ -330,10 +332,11 @@ class BaseTradingMode(ABC):
         """
         # Extract order details
         try:
-            symbol = order['symbol']
-            action = order['action'].lower()
-            price = order['price']
-            quantity = order['quantity']
+            symbol = order.symbol
+            direction = order.direction
+            price = order.price
+            quantity = order.filled_qty
+            # timestamp = order.timestamp
             
             # Calculate commission
             commission_rate = self.config.get(self.mode_name, "commission_rate", 
@@ -341,11 +344,11 @@ class BaseTradingMode(ABC):
             commission = price * quantity * commission_rate
             
             # Update cash and positions
-            if action == 'buy':
+            if direction.value == 'buy':
                 # Update cash (deduct cost and commission)
                 total_cost = (price * quantity) + commission
                 if total_cost > self.state['cash']:
-                    self.logger.warning(f"Insufficient cash for {action} {quantity} {symbol} @ {price}")
+                    self.logger.warning(f"Insufficient cash for {direction} {quantity} {symbol} @ {price}")
                     return None
                     
                 self.state['cash'] -= total_cost
@@ -355,11 +358,12 @@ class BaseTradingMode(ABC):
                     self.state['positions'][symbol] = 0
                 self.state['positions'][symbol] += quantity
                 
-            elif action == 'sell':
+            elif direction.value == 'sell' or 'short':
                 # Check position
                 current_position = self.state['positions'].get(symbol, 0)
-                if current_position < quantity:
-                    self.logger.warning(f"Insufficient position for {action} {quantity} {symbol}")
+                
+                if current_position < quantity and direction.value == 'sell':
+                    self.logger.warning(f"Insufficient position for {direction} {quantity} {symbol}, CANNOT sell without a positive position: current position: {current_position}")
                     return None
                 
                 # Update position
@@ -374,7 +378,7 @@ class BaseTradingMode(ABC):
             trade = {
                 'timestamp': self.state['timestamp'],
                 'symbol': symbol,
-                'action': action,
+                'action': direction,
                 'quantity': quantity,
                 'price': price,
                 'commission': commission,
@@ -383,7 +387,7 @@ class BaseTradingMode(ABC):
             
             # Record the trade
             self.state['trades'].append(trade)
-            self.logger.info(f"Executed {action} {quantity} {symbol} @ {price}")
+            self.logger.info(f"Executed {direction} {quantity} {symbol} @ {price}")
             
             return trade
             

@@ -1,17 +1,15 @@
 # src\execution\execution_engine.py
 
+import ccxt
 import pandas as pd
 from typing import Dict, Optional, List, Tuple
+
 from common.config import ConfigManager
 from common.logging import LogManager
 from src.trading.execution.order import *
 from src.exchange.adapters.binance import Binance
-from enum import Enum
-import ccxt
+from src.trading.execution.order import Direction
 
-class Direction(Enum):
-    BUY = 'buy'
-    SELL = 'sell'
 
 class ExecutionEngine:
     """Engine for executing trading orders with multiple execution modes."""
@@ -80,7 +78,7 @@ class ExecutionEngine:
             symbol = signal['symbol']
             action = signal['action'].lower()
             timestamp = signal['timestamp']
-            quantity = signal.get('quantity', self.config.get("default_config", "user_config", "min_order_size", default=0.001))
+            quantity = signal['quantity']
             price = signal.get('price', None)
             direction = Direction.BUY if action == 'buy' else Direction.SELL
 
@@ -148,11 +146,11 @@ class ExecutionEngine:
         
         for order in orders:
             symbol_data = updated_data[order.symbol]
-            execution_bar = symbol_data.loc[order.timestamp:].iloc[0]  # Find the execution time
+            execution_bar = symbol_data[symbol_data['timestamp'] >= order.timestamp].iloc[0]
             
             # Calculating volume (considering market depth)
             max_volume = execution_bar['volume'] * 0.1  # Assume that the maximum trading volume of the K line is 10%
-            filled_qty = min(order.quantity, max_volume)
+            filled_qty = int(min(order.quantity, max_volume))
             
             if filled_qty > 0:
                 # Calculation of strike price (with slippage)
@@ -167,7 +165,12 @@ class ExecutionEngine:
                 # Record transaction
                 executed.append({
                     'order_id': order.order_id,
+                    'symbol': order.symbol,
+                    'timestamp': updated_data[order.symbol].loc[execution_bar.name, 'timestamp'],
+                    'execution_time': datetime.datetime.now(),
+                    'direction': order.direction,
                     'filled_qty': filled_qty,
+                    'unfilled_qty': order.quantity - filled_qty,
                     'price': exec_price,
                     'commission': exec_price * filled_qty * self.commission
                 })

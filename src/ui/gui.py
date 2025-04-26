@@ -68,7 +68,7 @@ class TradingSystemGUI:
         self._init_logging()
         
         # Set up the executor for async operations with better resource management
-        self.executor = AsyncExecutor(self.logger)
+        self.executor = AsyncExecutor()
         
         # Set up the window
         self.setup_window()
@@ -372,7 +372,7 @@ class TradingSystemGUI:
         
         # Strategy settings
         self.strategy_var = tk.StringVar(value=self.config.get("strategy", "active", default="dual_ma"))
-        self.timeframe_var = tk.StringVar(value=self.config.get("strategy", "timeframe", default="1h"))
+        self.timeframe_var = tk.StringVar(value=self.config.get("strategy", "timeframe", default="1m"))
         self.fallback_strategy_var = tk.StringVar(value=self.config.get("strategy", "fallback_strategy", default=""))
         
         # Strategy parameters
@@ -2702,7 +2702,7 @@ class TradingSystemGUI:
             
             # Reset timeframes
             for tf, var in self.dl_timeframes.items():
-                var.set(tf == "1h")  # Only 1h selected by default
+                var.set(tf == "1m")  # Only 1h selected by default
             
             # Reset date range
             self.dl_start_date_var.set(one_month_ago.strftime("%Y-%m-%d"))

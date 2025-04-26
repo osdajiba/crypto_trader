@@ -110,6 +110,7 @@ class BacktestTradingMode(BaseTradingMode):
                 )
                 
                 if not data.empty:
+                    data['symbol'] = symbol  # Add symbol column for later processing
                     data_map[symbol] = data
                     self.logger.info(f"Loaded {symbol} historical data: {len(data)} records")
                 else:
@@ -241,7 +242,7 @@ class BacktestTradingMode(BaseTradingMode):
         # Add backtest parameters
         report['backtest_params'] = {
             'symbols': self.config.get("trading", "instruments", default=[]),
-            'timeframe': self.config.get("data", "default_timeframe", default="1h"),
+            'timeframe': self.config.get("data", "default_timeframe", default="1m"),
             'start_date': self.start_date,
             'end_date': self.end_date,
             'transaction_costs': {
