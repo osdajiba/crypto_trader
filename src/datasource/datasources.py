@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta
 
 from src.common.helpers import TimeUtils
-from common.logging import LogManager
+from common.log_manager import LogManager
 from common.config import ConfigManager
 from src.common.async_executor import AsyncExecutor
 from datasource.integrity import DataIntegrityChecker

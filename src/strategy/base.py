@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 
 from src.common.abstract_factory import AbstractFactory, register_factory_class
 from common.config import ConfigManager
-from common.logging import LogManager
+from common.log_manager import LogManager
 
 
 class BaseStrategy(ABC):

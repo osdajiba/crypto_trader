@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import uuid
 import signal
-from common.logging import LogManager
+from common.log_manager import LogManager
 
 
 T = TypeVar('T')

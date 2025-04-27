@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, List, Optional, Callable, Any
 
 from common.config import ConfigManager
-from common.logging import LogManager
+from common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
 from src.trading.modes.base import TradingModeFactory
 

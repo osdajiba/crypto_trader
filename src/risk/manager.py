@@ -5,7 +5,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Set
 from abc import ABC, abstractmethod
 
-from common.logging import LogManager
+from common.log_manager import LogManager
 
 
 class RiskValidationError(Exception):

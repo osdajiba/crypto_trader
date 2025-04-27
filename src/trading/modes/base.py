@@ -11,7 +11,7 @@ from typing import Dict, Optional, Any, Type, List
 from pathlib import Path
 
 from common.config import ConfigManager
-from common.logging import LogManager
+from common.log_manager import LogManager
 from src.common.abstract_factory import AbstractFactory, register_factory_class
 from src.common.helpers import TradingMode
 from datasource.manager import DataManager

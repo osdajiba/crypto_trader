@@ -11,7 +11,7 @@ import traceback
 from src.common.abstract_factory import AbstractFactory, register_factory_class
 from src.common.async_executor import AsyncExecutor
 from common.config import ConfigManager
-from common.logging import LogManager
+from common.log_manager import LogManager
 from strategy.base import BaseStrategy, StrategyFactory
 
 

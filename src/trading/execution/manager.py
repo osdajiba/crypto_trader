@@ -5,7 +5,7 @@ import pandas as pd
 from typing import Dict, Optional, List, Tuple
 
 from common.config import ConfigManager
-from common.logging import LogManager
+from common.log_manager import LogManager
 from src.trading.execution.order import *
 from src.exchange.adapters.binance import Binance
 from src.trading.execution.order import Direction

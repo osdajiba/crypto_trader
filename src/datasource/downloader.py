@@ -16,8 +16,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(project_root)
 
-from common.config import ConfigManager
-from common.logging import LogManager
+from src.common.config import ConfigManager
+from src.common.log_manager import LogManager
 from src.datasource.manager import DataManager
 from datasource.datasources import LocalSource
 

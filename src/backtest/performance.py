@@ -6,7 +6,7 @@ from typing import Dict, Optional, Any
 import scipy.stats as stats
 from dataclasses import dataclass
 
-from common.logging import LogManager
+from common.log_manager import LogManager
 
 @dataclass
 class PerformanceMetrics:

@@ -1,29 +1,42 @@
 api:
   base_url: https://api.example.com
   binance:
-    api_key: your_api_key
+    api_key: HbMs2aPHQfPNh097P8SGWl7PpcjyUUk6I4WURcn6SUaTWjJ8SM8jb4tYSZgLFoBX
     options:
       adjust_time_diff: true
-      default_type: spot
+      default_type: future
+      keepalive: true
       recv_window: 60000
-    secret: your_secret_key
+    secret: vVQe126DGUw9BNwSG4gkt9E2DTz1YtiGnP3KzmVWH8AFZJ1SAEsPdOexbuwT68ck
     workaround_enabled: true
+  download_chunk_size: 250
   enable_rate_limit: true
   headers:
-    connection: close
-  retry_attempts: 3
-  retry_delay: 1.0
+    connection: keep-alive
+    keep-alive: 60
+  rate_limits:
+    max_concurrent: 5
+    requests: 20
+  retry_attempts: 5
+  retry_delay: 2.0
   timeout: 60000
-  useproxy: auto
+  useproxy: true
+  websocket:
+    enabled: true
+    heartbeat: true
+    max_reconnects: 100
+    ping_interval: 30000
+    reconnect_rate: 5000
 backtest:
   costs:
     commission: 0.001
     slippage: 0.001
   engine: ohlcv
+  engine_type: ohlcv
   mode: full
   period:
-    end: 2023-3-31
-    start: '2023-01-01'
+    end: '2025-03-31'
+    start: '2025-01-01'
   reporting:
     formats:
     - csv
@@ -57,10 +70,10 @@ data:
     orders: data/order_history.csv
     trades: data/trade_records.json
   validation:
-    enabled: true
     auto_fix: true
-    log_issues: true
+    enabled: true
     fix_on_load: true
+    log_issues: true
 database:
   echo_sql: false
   pool_size: 5
@@ -86,75 +99,85 @@ live:
       threshold: 0.1
     max_retries: 3
 logging:
-  async_write: true
   base_path: ./logs
+  level: INFO
+  format: "%(asctime)s | %(levelname)-8s | %(name)-25s | %(message)s"
+  detailed_format: "%(asctime)s | %(levelname)-8s | %(name)-25s | [%(filename)s:%(lineno)d] | %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
   categories:
-    core:
+    app:
       level: INFO
       modules:
-      - core
-      - trading_system
-      - mode
-      - performance
-    data:
-      level: INFO
-      modules:
-      - datasource
-      - dataframe
-      - database
-      - download_data
-    exchange:
-      level: WARNING
-      modules:
-      - exchange
-      - api
-      - binance
-      - websocket
+        - core
+        - main
+        - launcher
     strategy:
       level: INFO
       modules:
-      - strategy
-      - indicators
-      - signals
-      - backtest
-    system:
+        - strategy
+        - backtest
+    data:
       level: INFO
       modules:
-      - system
-      - cli_runner
-      - launcher
-      - gui_app
-      - async_executor
-    utils:
+        - datasource
+        - downloader
+    exchange:
+      level: WARNING
+      modules:
+        - exchange
+        - binance
+    portfolio:
       level: INFO
       modules:
-      - utils
-      - network
-      - config_manager
-  combined_log: true
-  date_format: '%Y-%m-%d %H:%M:%S%z'
-  detailed_format: true
-  format: '%(asctime)s | %(levelname)-8s | %(module)-15s | [%(filename)s:%(lineno)d]
-    | %(message)s'
+        - portfolio
+        - risk
+    cli:
+      level: INFO
+      modules:
+        - cli
+        - main.cli
+  files:
+    main:
+      path: "app/trading_system.log"
+      level: INFO
+    errors:
+      path: "app/errors.log"
+      level: ERROR
+    strategy:
+      path: "components/strategy.log"
+      level: INFO
+    data:
+      path: "components/data.log"
+      level: INFO
+    exchange:
+      path: "components/exchange.log"
+      level: INFO
+    portfolio:
+      path: "components/portfolio.log"
+      level: INFO
+    cli:
+      path: "cli/cli.log"
+      level: INFO
   handlers:
     console:
-      colors: true
       enabled: true
       level: INFO
+      colors: true
     file:
-      buffer:
-        capacity: 1000
-        enabled: true
-        flush_interval: 5
-      compression: gz
       enabled: true
+      compression: gz
       encoding: utf-8
-  level: INFO
+      buffer:
+        enabled: true
+        capacity: 1000
+        flush_interval: 5
   rotation:
-    backup_count: 5
-    max_file_size: 10485760
     strategy: size
-    time_interval: D
+    max_file_size: 10485760  # 10MB
+    backup_count: 5
+    time_interval: D  # Daily rotation if using time strategy
+  async_write: true
+  combined_log: false  # We'll use our own combined log in app/trading_system.log
   summary:
     enabled: true
     format: json
@@ -193,6 +216,10 @@ risk:
   drawdown:
     max_portfolio: 0.2
     max_single_trade: 0.1
+  exposure:
+    risk_per_trade: 1.0
+  limits:
+    max_leverage: 10
   stop_loss:
     enabled: true
     max_daily: 0.05
@@ -208,12 +235,16 @@ strategy:
   active: dual_ma
   fallback_strategy: neural_network
   parameters:
-    fast_period: 50
-    slow_period: 200
+    fast_period: 20
+    slow_period: 60
     threshold: 0.005
-  timeframe: 1h
+  timeframe: 1m
 system:
   backtest_mode: ohlcv
+  config:
+    autosave_enabled: true
+    autosave_interval: 300
+    autosave_path: conf/autosave
   offline_mode: false
   operational_mode: backtest
   performance:
@@ -224,7 +255,7 @@ system:
 trading:
   capital:
     initial: 100000.0
-    min_order: 0.001
+    min_order: 1.0
   execution:
     leverage: 1
     slippage: 0.001
@@ -233,8 +264,8 @@ trading:
   limits:
     daily_trades: 50
     max_leverage: 10
-    min_volume: 0.001
-    position: 0.1
+    min_volume: 1
+    position: 1.0
 validation:
   required:
   - database.url

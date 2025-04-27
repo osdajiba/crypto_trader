@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import functools
 
 from src.common.config import ConfigManager
-from src.common.logging import LogManager
+from src.common.log_manager import LogManager
 from src.common.helpers import TimeUtils
 from datasource.datasources import *
 from src.datasource.integrity import DataIntegrityChecker
