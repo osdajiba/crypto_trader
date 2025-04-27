@@ -10,9 +10,9 @@ import traceback
 
 from src.common.abstract_factory import AbstractFactory, register_factory_class
 from src.common.async_executor import AsyncExecutor
-from common.config import ConfigManager
-from common.log_manager import LogManager
-from strategy.base import BaseStrategy, StrategyFactory
+from src.common.config import ConfigManager
+from src.common.log_manager import LogManager
+from src.strategy.base import BaseStrategy, StrategyFactory
 
 
 class BaseBacktestEngine:
@@ -482,8 +482,8 @@ from typing import Dict, Any, Optional, List, Tuple
 import time
 import traceback
 
-from backtest.engine import BaseBacktestEngine, register_backtest_engine
-from common.config import ConfigManager
+from src.backtest.engine import BaseBacktestEngine, register_backtest_engine
+from src.common.config import ConfigManager
 
 
 @register_backtest_engine('market_replay', 
@@ -928,8 +928,8 @@ from typing import Dict, Any, Optional, List, Tuple
 import time
 import traceback
 
-from backtest.engine import BaseBacktestEngine, register_backtest_engine
-from common.config import ConfigManager
+from src.backtest.engine import BaseBacktestEngine, register_backtest_engine
+from src.common.config import ConfigManager
 
 
 @register_backtest_engine('ohlcv', 

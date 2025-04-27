@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import uuid
 import signal
-from common.log_manager import LogManager
+import logging
 
 
 T = TypeVar('T')
@@ -64,9 +64,32 @@ class AsyncExecutor:
                 cls._instance._init_executor(*args, **kwargs)
             return cls._instance
     
-    def _init_executor(self):
+    def _init_executor(self, logger=None):
         """Initialize executor resources with injected logger"""
-        self._logger = LogManager.get_logger(f"system.async_executor")
+        # Try to get a logger - fall back to a basic logger if LogManager isn't initialized
+        if logger:
+            # Use the provided logger if available
+            self._logger = logger
+        else:
+            try:
+                # Try to use LogManager 
+                try:
+                    from common.log_manager import LogManager
+                    self._logger = LogManager.get_logger("system.async_executor")
+                except (ImportError, RuntimeError):
+                    # Try alternative import path
+                    try:
+                        from src.common.log_manager import LogManager
+                        self._logger = LogManager.get_logger("system.async_executor")
+                    except (ImportError, RuntimeError):
+                        # Fall back to basic logger
+                        self._logger = self._create_default_logger()
+            except Exception as e:
+                # Last resort - create a very basic logger
+                self._logger = self._create_default_logger()
+                self._logger.warning(f"Using fallback logger due to: {str(e)}")
+                
+        # Initialize other attributes
         self._tasks: Dict[str, TaskInfo] = {}
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._running = False
@@ -83,6 +106,17 @@ class AsyncExecutor:
             "tasks_cancelled": 0,
         }
         self._signal_handlers_installed = False
+    
+    def _create_default_logger(self):
+        """Create a default logger when LogManager is not available"""
+        logger = logging.getLogger("system.async_executor")
+        if not logger.handlers:  # Only add handler if none exists
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+        return logger
     
     async def __aenter__(self):
         """Support for async context manager pattern"""

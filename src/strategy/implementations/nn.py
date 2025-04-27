@@ -1,8 +1,8 @@
 # src/strategy/nn.py
 import pandas as pd
 from typing import Dict, Optional, Any
-from strategy.base import BaseStrategy
-from common.config import ConfigManager
+from src.strategy.base import BaseStrategy
+from src.common.config import ConfigManager
 from src.datasource.processor import DataProcessor
 
 class NeuralNetStrategy(BaseStrategy):

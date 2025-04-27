@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Callable, Tuple, Union
 
 
-from common.log_manager import LogManager
+from src.common.log_manager import LogManager
 logger = LogManager.get_logger("helpers")
 
 

@@ -5,8 +5,8 @@ from typing import Dict, Optional, Callable, Any, List, Type, Union
 from abc import ABC, abstractmethod
 
 from src.common.abstract_factory import AbstractFactory, register_factory_class
-from common.config import ConfigManager
-from common.log_manager import LogManager
+from src.common.config import ConfigManager
+from src.common.log_manager import LogManager
 
 
 class BaseStrategy(ABC):
