@@ -48,7 +48,6 @@ cache/
 *.parquet
 
 # 忽略特定配置文件
-
 config/config.yaml
 config/autosave/
 
