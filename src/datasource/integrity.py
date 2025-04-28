@@ -1,28 +1,23 @@
-# src/data/integrity_checker.py
-
 from datetime import datetime
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, List, Optional, Tuple, Coroutine
+from typing import Dict, Any, List, Optional, Tuple
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
 
 from src.common.log_manager import LogManager
 
-
 class DataIntegrityChecker:
     """
     Optimized Data Integrity Checker
     
-    Checks for common data issues with enhanced performance:
+    Checks for common data issues like:
     - Missing values
     - Duplicate timestamps
     - Price anomalies
     - Out-of-sequence data
     - Volume anomalies
-    
-    Includes hardware acceleration, vectorized operations, and parallel processing.
     """
     
     def __init__(self, timeframe: str = "1m", iqr_multiplier: float = 3.0, parallel: bool = True):
@@ -574,128 +569,8 @@ class DataIntegrityChecker:
             recommendations.append("Replace zero prices with previous valid values")
         
         # OHLC consistency recommendations
-        consistency_key = "ohlc_consistency" if "ohlc_consistency" in results else "consistency"
-        if results.get(consistency_key, {}).get("passed") is False:
+        if results.get("ohlc_consistency", {}).get("passed") is False:
             recommendations.append("Fix OHLC price inconsistencies (high should be highest, low should be lowest)")
-        
-        return recommendations
-    
-    def get_fix_recommendations(self, results: Dict[str, Any], detailed: bool = False) -> Dict[str, Any]:
-        """
-        Generate detailed recommendations for fixing data issues
-        
-        Args:
-            results: Results from integrity check
-            detailed: Whether to include detailed fix instructions
-            
-        Returns:
-            Dict: Fix recommendations with specific steps for each issue type
-        """
-        recommendations = {}
-        
-        # Missing values recommendations
-        if results.get("missing_values", {}).get("passed") is False:
-            missing_counts = results.get("missing_values", {}).get("missing_counts", {})
-            total_missing = sum(missing_counts.values()) if missing_counts else 0
-            
-            recommendations["missing_values"] = {
-                "description": f"Found {total_missing} missing values in dataset",
-                "fix_strategy": "forward_fill_then_back",
-                "affected_columns": list(missing_counts.keys()) if missing_counts else [],
-                "severity": "medium" if total_missing < len(results.get("missing_values", {}).get("data", [])) * 0.05 else "high"
-            }
-        
-        # Duplicate timestamps recommendations
-        if results.get("duplicate_timestamps", {}).get("passed") is False:
-            duplicate_count = results.get("duplicate_timestamps", {}).get("duplicate_count", 0)
-            
-            recommendations["duplicate_timestamps"] = {
-                "description": f"Found {duplicate_count} duplicate timestamps",
-                "fix_strategy": "keep_last",
-                "severity": "high"
-            }
-        
-        # Timestamp sequence recommendations
-        if results.get("timestamp_sequence", {}).get("passed") is False:
-            recommendations["timestamp_sequence"] = {
-                "description": "Timestamps not in ascending order",
-                "fix_strategy": "sort_ascending",
-                "severity": "high"
-            }
-        
-        # Price anomalies recommendations
-        if results.get("price_anomalies", {}).get("passed") is False:
-            anomalies = results.get("price_anomalies", {}).get("anomalies", {})
-            total_anomalies = sum(info.get("count", 0) for info in anomalies.values())
-            
-            recommendations["price_anomalies"] = {
-                "description": f"Found {total_anomalies} price anomalies",
-                "fix_strategy": "interpolate_outliers",
-                "affected_columns": list(anomalies.keys()),
-                "severity": "medium"
-            }
-        
-        # Zero values recommendations
-        if results.get("zero_values", {}).get("passed") is False:
-            zero_counts = results.get("zero_values", {}).get("zero_counts", {})
-            
-            recommendations["zero_values"] = {
-                "description": f"Found zero values in columns: {', '.join(zero_counts.keys())}",
-                "fix_strategy": "replace_with_adjacent",
-                "affected_columns": list(zero_counts.keys()),
-                "severity": "medium" if "close" in zero_counts or "open" in zero_counts else "low"
-            }
-        
-        # OHLC consistency recommendations
-        consistency_key = "ohlc_consistency" if "ohlc_consistency" in results else "consistency"
-        if results.get(consistency_key, {}).get("passed") is False:
-            inconsistencies = results.get(consistency_key, {}).get("inconsistencies", {})
-            
-            recommendations[consistency_key] = {
-                "description": "OHLC price inconsistencies detected",
-                "fix_strategy": "enforce_high_low_rules",
-                "severity": "high",
-                "inconsistency_types": list(inconsistencies.keys()) if inconsistencies else []
-            }
-        
-        # If detailed instructions are requested, add code examples
-        if detailed:
-            for issue_type, rec in recommendations.items():
-                if issue_type == "duplicate_timestamps":
-                    rec["fix_code"] = "df = df.drop_duplicates(subset=['datetime'], keep='last')"
-                elif issue_type == "timestamp_sequence":
-                    rec["fix_code"] = "df = df.sort_values(by='datetime')"
-                elif issue_type == "missing_values":
-                    rec["fix_code"] = """# Forward fill then backward fill
-for col in ['open', 'high', 'low', 'close']:
-    if col in df.columns:
-        df[col] = df[col].ffill().bfill()"""
-                elif issue_type in ["ohlc_consistency", "consistency"]:
-                    rec["fix_code"] = """# Use numpy for vectorized performance
-high_array = np.maximum.reduce([df['high'].to_numpy(), df['open'].to_numpy(), df['close'].to_numpy()])
-low_array = np.minimum.reduce([df['low'].to_numpy(), df['open'].to_numpy(), df['close'].to_numpy()])
-df['high'] = high_array
-df['low'] = low_array"""
-                elif issue_type == "zero_values":
-                    rec["fix_code"] = """# Replace zeros with NaN then fill
-for col in ['open', 'high', 'low', 'close']:
-    zero_mask = df[col] == 0
-    if zero_mask.any():
-        df.loc[zero_mask, col] = None
-        df[col] = df[col].ffill().bfill()"""
-                elif issue_type == "price_anomalies":
-                    rec["fix_code"] = """# Identify and replace outliers with vectorized operations
-for col in ['open', 'high', 'low', 'close']:
-    values = df[col].to_numpy()
-    q1 = np.percentile(values, 25)
-    q3 = np.percentile(values, 75)
-    iqr = q3 - q1
-    lower_bound = q1 - (3.0 * iqr)
-    upper_bound = q3 + (3.0 * iqr)
-    outlier_mask = (values < lower_bound) | (values > upper_bound)
-    if np.any(outlier_mask):
-        df.loc[outlier_mask, col] = None
-        df[col] = df[col].interpolate(method='linear').ffill().bfill()"""
         
         return recommendations
     

@@ -13,7 +13,7 @@ import shutil
 from collections import deque
 
 
-class SimpleBufferedHandler(logging.Handler):
+class BufferedHandler(logging.Handler):
     """Simplified buffered log handler without threading or locks"""
     
     def __init__(self, handler, buffer_size=1000, flush_interval=None):
@@ -68,7 +68,7 @@ class SimpleBufferedHandler(logging.Handler):
         super().close()
 
 
-class SimpleCompressedRotatingFileHandler(RotatingFileHandler):
+class CompressedRotatingFileHandler(RotatingFileHandler):
     """Simplified log rotating handler with compression"""
     
     def __init__(self, filename, mode='a', maxBytes=0, backupCount=0, 
@@ -522,7 +522,7 @@ class LogManager:
             # Create appropriate handler based on rotation settings
             if self.rotation_strategy == "size":
                 if self.use_compression:
-                    handler = SimpleCompressedRotatingFileHandler(
+                    handler = CompressedRotatingFileHandler(
                         log_path,
                         maxBytes=self.max_file_size,
                         backupCount=self.backup_count,
@@ -558,7 +558,7 @@ class LogManager:
             # If buffering is enabled, wrap it with simple buffer handler
             if hasattr(self, 'use_buffer') and self.use_buffer:
                 buffer_size = getattr(self, 'buffer_size', 1000)
-                handler = SimpleBufferedHandler(
+                handler = BufferedHandler(
                     handler=handler,
                     buffer_size=buffer_size
                 )
