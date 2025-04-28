@@ -1,0 +1,313 @@
+api:
+  base_url: https://api.example.com
+  binance:
+    api_key: your_api_key_here
+    options:
+      adjust_time_diff: true
+      default_type: future
+      keepalive: true
+      recv_window: 60000
+    secret: your_secret_key_here
+    workaround_enabled: true
+  download_chunk_size: 250
+  enable_rate_limit: true
+  headers:
+    connection: keep-alive
+    keep-alive: 60
+  rate_limits:
+    max_concurrent: 5
+    requests: 20
+  retry_attempts: 5
+  retry_delay: 2.0
+  timeout: 60000
+  useproxy: true
+  websocket:
+    enabled: true
+    heartbeat: true
+    max_reconnects: 100
+    ping_interval: 30000
+    reconnect_rate: 5000
+backtest:
+  costs:
+    commission: 0.001
+    slippage: 0.001
+  engine: ohlcv
+  engine_type: ohlcv
+  mode: full
+  period:
+    end: '2025-03-31'
+    start: '2025-01-01'
+  reporting:
+    formats:
+    - csv
+    - json
+    - html
+    metrics:
+    - sharpe_ratio
+    - max_drawdown
+    - annualized_return
+data:
+  cache:
+    dir: ./cache
+    enabled: true
+    max_size: 104857600
+    retention_days: 30
+  database:
+    host: localhost
+    name: trading
+    password: ''
+    port: 3306
+    table_prefix: market_
+    type: mysql
+    user: root
+  source:
+    backup_source: exchange
+    live: false
+    primary_source: local
+    type: local
+  storage:
+    historical: data/historical/
+    orders: data/order_history.csv
+    trades: data/trade_records.json
+  validation:
+    auto_fix: true
+    enabled: true
+    fix_on_load: true
+    log_issues: true
+database:
+  echo_sql: false
+  pool_size: 5
+  timeout: 30
+  url: sqlite:///database/trading.sqlite
+live:
+  exchange:
+    environment: production
+    name: binance
+    rate_limits:
+      requests: 20
+      timeout: 30
+  monitoring:
+    interval: 60
+    metrics:
+    - portfolio_value
+    - daily_return
+    - position_risk
+  safeguards:
+    cooldown: 60
+    emergency_stop:
+      enabled: true
+      threshold: 0.1
+    max_retries: 3
+logging:
+  # 基本日志设置
+  base_path: ./logs
+  level: INFO
+  format: "%(asctime)s | %(levelname)-8s | %(name)-25s | %(message)s"
+  detailed_format: "%(asctime)s | %(levelname)-8s | %(name)-25s | [%(filename)s:%(lineno)d] | %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  
+  # 简化的日志分类
+  categories:
+    system:
+      level: INFO
+      modules:
+        - core
+        - main
+        - launcher
+        - cli
+        - cli_runner
+        - common
+        - common.config
+        - common.helpers
+        - common.abstract_factory
+        - common.async_executor
+        - utils
+    strategy:
+      level: INFO
+      modules:
+        - strategy
+        - strategy.base
+        - strategy.factor_lib
+        - strategy.registry
+        - strategy.implementations
+        - strategy.implementations.dual_ma
+        - strategy.implementations.multi_factors
+        - strategy.implementations.nn
+        - backtest
+        - backtest.engine
+        - backtest.performance
+    data:
+      level: INFO
+      modules:
+        - datasource
+        - datasource.datasources
+        - datasource.downloader
+        - datasource.integrity
+        - datasource.manager
+        - datasource.processor
+    exchange:
+      level: WARNING
+      modules:
+        - exchange
+        - exchange.adapters
+        - exchange.adapters.base
+        - exchange.adapters.binance
+    portfolio:
+      level: INFO
+      modules:
+        - portfolio
+        - portfolio.manager
+        - portfolio.portfolio
+        - portfolio.assets
+        - risk
+        - risk.manager
+        - risk.rules
+    trading:
+      level: INFO
+      modules:
+        - trading
+        - trading.execution
+        - trading.modes
+  
+  # 文件路径配置
+  files:
+    system:
+      path: "system.log"
+      level: INFO
+    errors:
+      path: "errors.log"
+      level: ERROR
+    strategy:
+      path: "strategy.log"
+      level: INFO
+    data:
+      path: "data.log"
+      level: INFO
+    exchange:
+      path: "exchange.log"
+      level: INFO
+    portfolio:
+      path: "portfolio.log"
+      level: INFO
+    trading:
+      path: "trading.log"
+      level: INFO
+  
+  # 处理器配置
+  handlers:
+    console:
+      enabled: true
+      level: INFO
+      colors: true
+    file:
+      enabled: true
+      compression: gz
+      encoding: utf-8
+      buffer:
+        enabled: true
+        capacity: 1000
+        flush_interval: 5
+  
+  # 日志轮转策略
+  rotation:
+    strategy: size
+    max_file_size: 10485760  # 10MB
+    backup_count: 5
+    time_interval: D  # 使用时间策略时的每日轮转
+  
+  # 其他日志选项
+  async_write: true
+  combined_log: true  # 启用合并日志
+  summary:
+    enabled: true
+    format: json
+    level: WARNING
+  syslog:
+    enabled: false
+    facility: local0
+    host: localhost
+    port: 514
+network:
+  connection:
+    retry_attempts: 3
+    retry_delay: 2
+    test_url: https://api.binance.com/api/v3/ping
+    timeout: 30
+  proxy:
+    detection:
+      check_common_ports: true
+      check_env: true
+      check_system: true
+      test_connection: true
+    enabled: auto
+notifications:
+  email:
+    enabled: false
+    recipients:
+    - your.email@example.com
+  telegram:
+    bot_token: YOUR_BOT_TOKEN
+    chat_id: YOUR_CHAT_ID
+    enabled: false
+proxies:
+  http: 127.0.0.1:7890
+  https: 127.0.0.1:7890
+risk:
+  drawdown:
+    max_portfolio: 0.2
+    max_single_trade: 0.1
+  exposure:
+    risk_per_trade: 1.0
+  limits:
+    max_leverage: 10
+  stop_loss:
+    enabled: true
+    max_daily: 0.05
+    percentage: 0.02
+  take_profit:
+    enabled: true
+    percentage: 0.05
+security:
+  credentials:
+    encryption: aes-256-cbc
+  use_env_vars: true
+strategy:
+  active: dual_ma
+  fallback_strategy: neural_network
+  parameters:
+    fast_period: 20
+    slow_period: 60
+    threshold: 0.005
+  timeframe: 1m
+system:
+  backtest_mode: ohlcv
+  config:
+    autosave_enabled: true
+    autosave_interval: 300
+    autosave_path: conf/autosave
+  offline_mode: false
+  operational_mode: backtest
+  performance:
+    max_memory: 1073741824
+    max_threads: 4
+    task_timeout: 300
+  timezone: UTC
+trading:
+  capital:
+    initial: 100000.0
+    min_order: 1.0
+  execution:
+    leverage: 1
+    slippage: 0.001
+  instruments:
+  - BTC/USDT
+  limits:
+    daily_trades: 50
+    max_leverage: 10
+    min_volume: 1
+    position: 1.0
+validation:
+  required:
+  - database.url
+  - system.performance.max_threads
+  - trading.capital.initial

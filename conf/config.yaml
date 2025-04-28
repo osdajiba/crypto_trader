@@ -99,65 +99,101 @@ live:
       threshold: 0.1
     max_retries: 3
 logging:
+  # 基本日志设置
   base_path: ./logs
   level: INFO
   format: "%(asctime)s | %(levelname)-8s | %(name)-25s | %(message)s"
   detailed_format: "%(asctime)s | %(levelname)-8s | %(name)-25s | [%(filename)s:%(lineno)d] | %(message)s"
   date_format: "%Y-%m-%d %H:%M:%S"
+  
+  # 简化的日志分类
   categories:
-    app:
+    system:
       level: INFO
       modules:
         - core
         - main
         - launcher
+        - cli
+        - cli_runner
+        - common
+        - common.config
+        - common.helpers
+        - common.abstract_factory
+        - common.async_executor
+        - utils
     strategy:
       level: INFO
       modules:
         - strategy
+        - strategy.base
+        - strategy.factor_lib
+        - strategy.registry
+        - strategy.implementations
+        - strategy.implementations.dual_ma
+        - strategy.implementations.multi_factors
+        - strategy.implementations.nn
         - backtest
+        - backtest.engine
+        - backtest.performance
     data:
       level: INFO
       modules:
         - datasource
-        - downloader
+        - datasource.datasources
+        - datasource.downloader
+        - datasource.integrity
+        - datasource.manager
+        - datasource.processor
     exchange:
       level: WARNING
       modules:
         - exchange
-        - binance
+        - exchange.adapters
+        - exchange.adapters.base
+        - exchange.adapters.binance
     portfolio:
       level: INFO
       modules:
         - portfolio
+        - portfolio.manager
+        - portfolio.portfolio
+        - portfolio.assets
         - risk
-    cli:
+        - risk.manager
+        - risk.rules
+    trading:
       level: INFO
       modules:
-        - cli
-        - main.cli
+        - trading
+        - trading.execution
+        - trading.modes
+  
+  # 文件路径配置
   files:
-    main:
-      path: "app/trading_system.log"
+    system:
+      path: "system.log"
       level: INFO
     errors:
-      path: "app/errors.log"
+      path: "errors.log"
       level: ERROR
     strategy:
-      path: "components/strategy.log"
+      path: "strategy.log"
       level: INFO
     data:
-      path: "components/data.log"
+      path: "data.log"
       level: INFO
     exchange:
-      path: "components/exchange.log"
+      path: "exchange.log"
       level: INFO
     portfolio:
-      path: "components/portfolio.log"
+      path: "portfolio.log"
       level: INFO
-    cli:
-      path: "cli/cli.log"
+    trading:
+      path: "trading.log"
       level: INFO
+  
+  # 处理器配置
   handlers:
     console:
       enabled: true
@@ -171,13 +207,17 @@ logging:
         enabled: true
         capacity: 1000
         flush_interval: 5
+  
+  # 日志轮转策略
   rotation:
     strategy: size
     max_file_size: 10485760  # 10MB
     backup_count: 5
-    time_interval: D  # Daily rotation if using time strategy
+    time_interval: D  # 使用时间策略时的每日轮转
+  
+  # 其他日志选项
   async_write: true
-  combined_log: false  # We'll use our own combined log in app/trading_system.log
+  combined_log: true  # 启用合并日志
   summary:
     enabled: true
     format: json

@@ -41,7 +41,7 @@ SYMBOL="BTC/USDT"
 TIMEFRAME="1h"
 START_DATE="2023-01-01"
 END_DATE="2023-12-31"
-CONFIG="$PROJECT_ROOT/conf/bt_config.yaml"
+CONFIG="$PROJECT_ROOT/conf/config.yaml"
 DEBUG=""
 
 # Mode selection with interactive menu
