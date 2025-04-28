@@ -30,6 +30,24 @@ class TimeUtils:
     """Enhanced time processing utility class"""
     
     @staticmethod
+    def timeframe_to_seconds(timeframe: str) -> int:
+        """Convert timeframe to seconds"""
+        units = {'m': 60, 'h': 3600, 'd': 86400, 'w': 604800}
+        if not timeframe:
+            return 60  # Default to 1 minute
+            
+        # Extract number and unit
+        num = int(''.join(filter(str.isdigit, timeframe)))
+        unit = timeframe[-1].lower()
+        
+        # Check if unit is valid
+        if unit not in units:
+            logger.warning(f"Unknown timeframe unit: {unit}, using minutes")
+            unit = 'm'
+            
+        return num * units.get(unit, 60)
+    
+    @staticmethod
     def parse_timestamp(timestamp: Union[str, datetime, int, float, None], 
                     default_days_ago: int = 30) -> Optional[datetime]:
         """Parse various timestamp formats into a datetime object"""
@@ -74,6 +92,8 @@ class TimeUtils:
                 '%d-%m-%Y': None,
                 '%Y-%m-%d %H:%M:%S': None,
                 '%Y-%m-%dT%H:%M:%S': None,
+                '%Y-%m-%d %H:%M:%S%z': None,
+                '%Y-%m-%dT%H:%M:%S%z': None,
                 '%Y%m%d': None
             }
             

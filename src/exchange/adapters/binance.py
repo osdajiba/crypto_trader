@@ -15,8 +15,10 @@ from src.common.config import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.helpers import TimeUtils
 
+
 # Get or create logger
 logger = LogManager.get_logger("trading_system")
+
 
 def retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0):
     """Retry decorator with exponential backoff and jitter"""
@@ -78,6 +80,51 @@ def retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0):
     return decorator
 
 
+class TokenBucket:
+    """Token bucket for rate limiting with smooth request distribution"""
+    
+    def __init__(self, rate: float, capacity: int):
+        """
+        Initialize token bucket
+        
+        Args:
+            rate: Token refill rate (tokens per second)
+            capacity: Maximum bucket capacity
+        """
+        self.rate = rate  # tokens per second
+        self.capacity = capacity  # maximum tokens
+        self.tokens = capacity  # current tokens
+        self.last_refill = time.time()  # last refill timestamp
+    
+    async def consume(self, tokens: int = 1) -> float:
+        """
+        Consume tokens from the bucket, waiting if necessary
+        
+        Args:
+            tokens: Number of tokens to consume
+            
+        Returns:
+            float: Wait time in seconds (0 if no wait)
+        """
+        # Refill tokens based on elapsed time
+        now = time.time()
+        elapsed = now - self.last_refill
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
+        self.last_refill = now
+        
+        # If not enough tokens, calculate wait time
+        if self.tokens < tokens:
+            # Time needed to refill required tokens
+            wait_time = (tokens - self.tokens) / self.rate
+            await asyncio.sleep(wait_time)    # After waiting, we'll have exactly the tokens we need
+            self.tokens = 0
+            self.last_refill = time.time()
+            return wait_time
+        else:
+            self.tokens -= tokens    # Consume tokens and continue immediately
+            return 0
+        
+        
 class Binance:
     """Binance exchange interface optimized for high-latency networks"""
     
@@ -106,12 +153,16 @@ class Binance:
         self.rate_limit = self.config.get('api', 'rate_limits', 'requests', default=20)
         self.current_requests = 0
         self.rate_limit_reset = time.time() + 60
-        self.download_chunk_size = self.config.get('api', 'download_chunk_size', default=500)
+        self.download_chunk_size = self.config.get('api', 'download_chunk_size', default=5000)
         self.max_retry_attempts = self.config.get('network', 'connection', 'retry_attempts', default=3)
         self.retry_delay = self.config.get('network', 'connection', 'retry_delay', default=2.0)
         
         # WebSocket status tracking
         self.ws_subscriptions = {}
+    
+        self.rate_limit = self.config.get('api', 'rate_limits', 'requests', default=20)    # Set up rate limiting using token bucket
+        tokens_per_second = (self.rate_limit * 0.95) / 60.0    # Initialize with slightly lower rate to provide safety margin
+        self.token_bucket = TokenBucket(rate=tokens_per_second, capacity=self.rate_limit)
         
         logger.info("Binance interface initialized with high-latency network optimizations")
     
@@ -122,48 +173,48 @@ class Binance:
     
     def _build_params(self) -> Dict:
         """
-        Build CCXT parameters from configuration, enhancing security and network performance
+        从配置构建CCXT参数，增强安全性和网络性能
         
         Returns:
-        Dictionary of CCXT parameters
+        CCXT参数字典
         """
         params = {
             'apiKey': self.config.get('api', 'binance', 'api_key', default=''),
             'secret': self.config.get('api', 'binance', 'secret', default=''),
-            'timeout': self.config.get('api', 'timeout', default=60000),  # Increased to 60 seconds
+            'timeout': self.config.get('api', 'timeout', default=60000),  # 增加到60秒
             'enableRateLimit': self.config.get('api', 'enable_rate_limit', default=True),
             'options': {
                 'adjustForTimeDifference': self.config.get(
                     'api', 'binance', 'options', 'adjust_time_diff', default=True),
                 'recvWindow': self.config.get(
-                    'api', 'binance', 'options', 'recv_window', default=60000),  # Maximum value
+                    'api', 'binance', 'options', 'recv_window', default=60000),  # 最大值
                 'defaultType': self.config.get(
                     'api', 'binance', 'options', 'default_type', default='spot'),
-                'keepAlive': True,  # Enable TCP Keep-Alive
+                'keepAlive': True,  # 启用TCP Keep-Alive
             },
             'headers': {
-                'Connection': 'keep-alive',  # Important: keep connection open
-                'Keep-Alive': '60',          # Keep for 60 seconds
+                'Connection': 'keep-alive',  # 重要: 保持连接打开
+                'Keep-Alive': '60',          # 保持60秒
             }
         }
         
-        # Check if configuration explicitly enables or disables proxy
+        # 检查配置是否明确启用或禁用代理
         use_proxy = self.config.get('api', 'useproxy', default=None)
         
-        # If proxy not explicitly disabled, try to use proxy
+        # 如果没有明确禁用代理，尝试使用代理
         if use_proxy is True or use_proxy == "true":
-            # Get proxies from configuration
+            # 从配置中获取代理
             http_proxy = self.config.get('proxies', 'http', default=None)
             https_proxy = self.config.get('proxies', 'https', default=None)
             
             proxies = {}
             if http_proxy or https_proxy:
-                # Use proxies specified in configuration
+                # 使用配置中指定的代理
                 proxies = {
                     'http': http_proxy,
                     'https': https_proxy or http_proxy
                 }
-                logger.info(f"Using proxies specified in configuration: {proxies}")
+                logger.info(f"使用配置中指定的代理: {proxies}")
                 if proxies:
                     params['proxies'] = proxies
             
@@ -282,32 +333,49 @@ class Binance:
             self.async_exchange = None
     
     async def _handle_rate_limit(self) -> None:
-        """Manage rate limits for API requests, with support for high-latency environments"""
-        current_time = time.time()
+        """Manage rate limits for API requests with improved distribution"""
+        wait_time = await self.token_bucket.consume(1)    # Consume a token (wait if necessary)
+        if wait_time > 0:
+            logger.warning(f"Rate limit reached, waiting {wait_time:.2f} seconds")
         
-        # Check if rate limit window has reset
+        current_time = time.time()
         if current_time > self.rate_limit_reset:
             self.current_requests = 0
             self.rate_limit_reset = current_time + 60
         
-        # Check if rate limit reached
-        if self.current_requests >= self.rate_limit:
-            # Calculate sleep time
-            sleep_time = max(0, self.rate_limit_reset - current_time)
-            logger.warning(f"Rate limit reached, waiting {sleep_time:.2f} seconds")
-            await asyncio.sleep(sleep_time)
-            
-            # Reset counter
-            self.current_requests = 0
-            self.rate_limit_reset = time.time() + 60
+        # Instead of hitting the limit and waiting, try to spread requests evenly
+        elapsed_time = current_time - (self.rate_limit_reset - 60)
+        elapsed_ratio = elapsed_time / 60.0
         
-        # Increment request counter
+        # Calculate ideal max requests at this point in time. Calculate time to wait
+        ideal_max_requests = min(self.rate_limit, int(self.rate_limit * elapsed_ratio) + 1)
+        
+        if self.current_requests >= ideal_max_requests:
+            
+            time_per_request = 60.0 / self.rate_limit
+            wait_time = max(0.1, time_per_request - (random.random() * 0.1))  # Small jitter
+            
+            logger.debug(f"Smoothing API request rate, waiting {wait_time:.2f} seconds")
+            await asyncio.sleep(wait_time)
+        
+        # If we're very close to the limit, implement a longer wait
+        if self.current_requests >= self.rate_limit - 2:
+            remaining_time = max(0, self.rate_limit_reset - current_time)
+            if remaining_time > 0:
+                logger.warning(f"Rate limit nearly reached, waiting {remaining_time:.2f} seconds")
+                await asyncio.sleep(remaining_time)
+                
+                self.current_requests = 0    # Reset counter and window after waiting
+                self.rate_limit_reset = time.time() + 60
+                return
+        
         self.current_requests += 1
     
     async def _exponential_backoff(self, attempt: int) -> float:
         """Implement exponential backoff with jitter"""
         base_delay = 1.0
         max_delay = 30.0
+        
         # Calculate exponential backoff time with random jitter
         delay = min(max_delay, base_delay * (2 ** attempt)) 
         jitter = random.uniform(0.5, 1.0)  # 50-100% random jitter
@@ -323,13 +391,8 @@ class Binance:
             return pd.DataFrame()
         
         try:
-            # Create DataFrame
             df = pd.DataFrame(ohlcv_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            
-            # Convert timestamp to datetime
             df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-            
-            # Sort by timestamp
             df = df.sort_values('timestamp')
             
             return df
@@ -352,15 +415,10 @@ class Binance:
             ohlcv = self.exchange.fetch_ohlcv(
                 symbol=symbol, 
                 timeframe=timeframe, 
-                limit=limit,
-                params={
-                    'recvWindow': 60000,  # Maximum receive window
-                }
+                limit=limit
             )
-            
-            # Convert to DataFrame
+
             df = self._process_ohlcv_data(ohlcv)
-            
             if not df.empty:
                 logger.info(f"Successfully fetched {len(df)} latest records for {symbol} {timeframe}")
                 return df
@@ -386,13 +444,9 @@ class Binance:
                 return pd.DataFrame()
         
         try:
-            # Process dates
             start_dt = TimeUtils.parse_timestamp(start_date, default_days_ago=30)
             end_dt = TimeUtils.parse_timestamp(end_date, default_days_ago=0)
-            
             logger.info(f"Fetching historical data for {symbol} from {start_dt} to {end_dt}")
-            
-            # Initialize async exchange (if needed)
             if not self.async_exchange:
                 await self._init_async_exchange()
             
@@ -400,49 +454,65 @@ class Binance:
             chunks = self._get_date_chunks(start_dt, end_dt, timeframe)
             logger.info(f"Split request into {len(chunks)} chunks")
             
-            # Track progress
             all_data = []
-            chunks_processed = 0
-            tasks = []
             
-            # Process chunks concurrently, but limited by semaphore
-            for i, (chunk_start, chunk_end) in enumerate(chunks):
-                task = asyncio.create_task(
-                    self._fetch_chunk(i, chunk_start, chunk_end, symbol, timeframe)
-                )
-                tasks.append(task)
+            # Re-evaluate the chunking strategy for very large requests
+            if len(chunks) > 20:  # Arbitrary threshold
+                logger.warning(f"Large number of chunks ({len(chunks)}), implementing special handling")
+                
+                all_data = []
+                batch_size = 5  # Process 5 chunks at a time
+                
+                for i in range(0, len(chunks), batch_size):
+                    batch_chunks = chunks[i:i+batch_size]
+                    logger.info(f"Processing batch {i//batch_size + 1}/{(len(chunks) + batch_size - 1)//batch_size} ({len(batch_chunks)} chunks)")
+                    
+                    # Create tasks for this batch
+                    batch_tasks = []
+                    for j, (chunk_start, chunk_end) in enumerate(batch_chunks):
+                        task = asyncio.create_task(
+                            self._fetch_chunk(i+j, chunk_start, chunk_end, symbol, timeframe)
+                        )
+                        batch_tasks.append(task)
+                    
+                    batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                    for result in batch_results:
+                        if isinstance(result, Exception):
+                            logger.error(f"Chunk processing failed: {str(result)}")
+                        elif isinstance(result, list) and result:
+                            all_data.extend(result)
+                    
+                    # Pause between batches to avoid rate limit issues
+                    if i + batch_size < len(chunks):
+                        pause_time = 3  # 3 seconds between batches
+                        logger.info(f"Pausing {pause_time} seconds between batch processing")
+                        await asyncio.sleep(pause_time)
+            else:
+                tasks = []
+                # Process chunks concurrently, but limited by semaphore
+                for i, (chunk_start, chunk_end) in enumerate(chunks):
+                    task = asyncio.create_task(self._fetch_chunk(i, chunk_start, chunk_end, symbol, timeframe))
+                    tasks.append(task)
+        
+                chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
+                for result in chunk_results:
+                    if isinstance(result, Exception):
+                        logger.error(f"Chunk processing failed: {str(result)}")
+                    elif isinstance(result, list) and result:
+                        all_data.extend(result)
             
-            # Wait for all tasks to complete
-            chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Process results
-            for result in chunk_results:
-                if isinstance(result, Exception):
-                    logger.error(f"Chunk processing failed: {str(result)}")
-                elif isinstance(result, list) and result:
-                    all_data.extend(result)
-            
-            # Process all data
             if not all_data:
                 logger.warning(f"No historical data found for {symbol}")
                 return pd.DataFrame()
-            
-            # Convert to DataFrame
             df = self._process_ohlcv_data(all_data)
             
-            # Filter by date range
             if not df.empty:
                 # Ensure datetime column is datetime type
                 if 'datetime' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['datetime']):
                     df['datetime'] = pd.to_datetime(df['datetime'])
-                
                 df = df[(df['datetime'] >= start_dt) & (df['datetime'] <= end_dt)]
-                
-                # Remove duplicates
                 if 'datetime' in df.columns:
                     df = df.drop_duplicates(subset=['datetime'])
-                    
-                # Sort by timestamp
                 df = df.sort_values('datetime')
             
             logger.info(f"Downloaded {len(df)} candle data points for {symbol}")
@@ -454,24 +524,54 @@ class Binance:
             return pd.DataFrame()
     
     async def _fetch_chunk(self, chunk_index: int, chunk_start: datetime, 
-                          chunk_end: datetime, symbol: str, timeframe: str) -> List:
-        """Fetch a single historical data chunk with retries and rate limiting"""
+                        chunk_end: datetime, symbol: str, timeframe: str) -> List:
+        """Fetch a single historical data chunk with retries and improved rate limiting"""
         # Use semaphore to limit concurrency
         async with self.request_semaphore:
+            # Calculate chunk durations and expected data points to determine priority
+            chunk_duration = (chunk_end - chunk_start).total_seconds()
+            seconds_per_candle = TimeUtils.timeframe_to_seconds(timeframe)
+            expected_points = int(chunk_duration / seconds_per_candle)
+            
+            # If this is a large chunk, further subdivide it to avoid rate limit issues
+            if expected_points > self.download_chunk_size / 2 and chunk_duration > 86400:  # More than half max size and >1 day
+                logger.debug(f"Splitting large chunk {chunk_index+1} into smaller pieces")
+                
+                mid_point = chunk_start + timedelta(seconds=chunk_duration/2)
+                
+                # Process first half
+                first_half = await self._fetch_chunk(
+                    chunk_index * 2, 
+                    chunk_start, 
+                    mid_point, 
+                    symbol, 
+                    timeframe
+                )
+                
+                await asyncio.sleep(0.5)    # Small delay between sub-chunks
+                
+                # Process second half
+                second_half = await self._fetch_chunk(
+                    chunk_index * 2 + 1, 
+                    mid_point, 
+                    chunk_end, 
+                    symbol, 
+                    timeframe
+                )
+                
+                return first_half + second_half
+            
+            # Regular chunk processing with retries
             for retry in range(self.max_retry_attempts):
                 try:
-                    # Handle rate limits
                     await self._handle_rate_limit()
                     
-                    # Convert to millisecond timestamps
                     chunk_since = int(chunk_start.timestamp() * 1000)
                     chunk_until = int(chunk_end.timestamp() * 1000)
                     
-                    # Log progress
                     if chunk_index == 0 or chunk_index % 5 == 0:
                         logger.info(f"Fetching chunk {chunk_index+1}: {chunk_start} to {chunk_end}")
                     
-                    # Get data for this chunk
                     exchange = self.async_exchange if self.async_exchange else self.exchange
                     
                     ohlcv = await exchange.fetch_ohlcv(
@@ -485,46 +585,70 @@ class Binance:
                         }
                     )
                     
-                    # Check if we got data
                     if not ohlcv or len(ohlcv) == 0:
                         logger.debug(f"Chunk {chunk_index+1} returned no data")
                         return []
                     
                     logger.debug(f"Chunk {chunk_index+1} successfully fetched {len(ohlcv)} records")
                     
-                    # Short delay to avoid request storms
-                    await asyncio.sleep(0.2)
+                    # Adaptive delay based on how many records we got relative to limit
+                    ratio = len(ohlcv) / self.download_chunk_size
+                    delay = 0.2 + (0.5 * ratio) if ratio > 0.8 else 0.2
+                    await asyncio.sleep(delay)
                     
-                    # Success, return data
                     return ohlcv
+                    
+                except ccxt.RateLimitExceeded as e:
+                    # Special handling for explicit rate limit errors
+                    logger.warning(f"Rate limit exceeded on chunk {chunk_index+1}, attempt {retry+1}")
+                    wait_time = 60.0  # Full minute wait
+                    logger.warning(f"Rate limit reached, waiting {wait_time:.2f} seconds")
+                    await asyncio.sleep(wait_time)
+                    self.current_requests = 0
+                    self.rate_limit_reset = time.time() + 60
                     
                 except Exception as e:
                     logger.warning(f"Chunk {chunk_index+1}, attempt {retry+1} failed: {str(e)}")
                     if retry < self.max_retry_attempts - 1:
-                        # Use exponential backoff
                         await self._exponential_backoff(retry)
             
-            # All retries failed
             logger.error(f"All retry attempts for chunk {chunk_index+1} failed")
             return []
     
     def _get_date_chunks(self, start_dt: datetime, end_dt: datetime, 
                         timeframe: str, chunk_size_days: Optional[int] = None) -> List[Tuple[datetime, datetime]]:
-        """Break date range into manageable chunks, optimized for high-latency networks"""
-        # Determine chunk size based on timeframe - reduce size for high-latency
-        if chunk_size_days is None:
-            if timeframe in ['1m', '5m']:
-                chunk_size = timedelta(hours=12)  # Reduced to half day
-            elif timeframe in ['15m', '30m']:
-                chunk_size = timedelta(days=1)    # Reduced to 1 day
-            elif timeframe == '1h':
-                chunk_size = timedelta(days=3)    # Reduced to 3 days
-            else:
-                chunk_size = timedelta(days=7)    # Reduced to 7 days
-        else:
-            chunk_size = timedelta(days=chunk_size_days)
+        """Break date range into manageable chunks with adaptive sizing based on timeframe"""
+        # Calculate total time span and expected data points
+        total_seconds = (end_dt - start_dt).total_seconds()
+        seconds_per_candle = TimeUtils.timeframe_to_seconds(timeframe)
+        expected_candles = total_seconds / seconds_per_candle
         
-        # Create chunks
+        # Determine optimal chunk size based on timeframe and total expected candles
+        # Aim for chunks that will yield no more than ~70% of download_chunk_size
+        target_candles_per_chunk = self.download_chunk_size * 0.7
+        
+        # Calculate ideal chunk size in seconds
+        ideal_chunk_seconds = target_candles_per_chunk * seconds_per_candle
+        safety_factor = 0.8
+        ideal_chunk_seconds *= safety_factor    # Add a safety factor to account for API inconsistencies
+        ideal_chunk_days = max(0.5, min(30, ideal_chunk_seconds / 86400))    # Convert to days for easier handling but enforce reasonable bounds
+
+        if chunk_size_days is not None:
+            chunk_size = timedelta(days=chunk_size_days)
+        else:
+            # Round to a half-day or full day for cleaner chunks
+            if ideal_chunk_days < 1:
+                chunk_size = timedelta(hours=12)
+            else:
+                chunk_size = timedelta(days=round(ideal_chunk_days))
+        
+        # For very small timeframes with expected high data volume, use smaller chunks
+        if timeframe in ['1m', '5m'] and expected_candles > 5000:
+            chunk_size = min(chunk_size, timedelta(hours=12))
+        elif timeframe in ['15m', '30m'] and expected_candles > 3000:
+            chunk_size = min(chunk_size, timedelta(days=1))
+        logger.info(f"Using {chunk_size} chunk size for {timeframe} data from {start_dt} to {end_dt}")
+
         chunks = []
         current_start = start_dt
         
@@ -532,6 +656,7 @@ class Binance:
             current_end = min(current_start + chunk_size, end_dt)
             chunks.append((current_start, current_end))
             current_start = current_end
+        logger.info(f"Split request into {len(chunks)} chunks for {expected_candles:.0f} expected data points")
         
         return chunks
         

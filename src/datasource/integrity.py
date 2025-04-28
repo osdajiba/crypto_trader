@@ -8,7 +8,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
 
-from common.log_manager import LogManager
+from src.common.log_manager import LogManager
 
 
 class DataIntegrityChecker:

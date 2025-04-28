@@ -109,13 +109,16 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
             "module": record.module,
-            "line": record.lineno
+            "filename": record.filename,  # 新增
+            "line": record.lineno,
+            "function": record.funcName,  # 新增
+            "pathname": record.pathname   # 新增完整路径
         }
         
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
             
-        return json.dumps(log_entry)
+        return json.dumps(log_entry, ensure_ascii=False)
 
 
 class LogManager:
@@ -183,8 +186,8 @@ class LogManager:
         # Basic defaults - will be overridden by setup
         self.configured_loggers = set()
         self.base_path = Path(f"./logs")
-        self.format_str = '%(asctime)s | %(levelname)-8s | %(name)-25s | %(message)s'
-        self.date_format = '%Y-%m-%d %H:%M:%S'
+        self.format_str = "%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"
+        self.date_format = '%Y-%m-%d %H:%M:%S%z'
         self.default_level = logging.INFO
         self.log_to_console = True
         self.log_to_file = False
@@ -219,15 +222,14 @@ class LogManager:
     def _setup_logging(self, config):
         """Configure logging from a config object"""
         try:
-            from common.config import ConfigManager
+            from src.common.config import ConfigManager
             if not isinstance(config, ConfigManager):
                 raise ValueError("Config must be a ConfigManager instance")
                 
             self.config = config
             
             # Get current date
-            if not self.date_str:
-                self.date_str = datetime.now().strftime('%Y-%m-%d')
+            self.date_str = datetime.now().strftime('%Y-%m-%d')
             self.base_path = Path(config.get("logging", "base_path", default=f"./logs"))
             
             # Ensure base directory exists
@@ -242,10 +244,10 @@ class LogManager:
             
             # Get formatting settings
             self.format_str = config.get("logging", "format", 
-                default="%(asctime)s | %(levelname)-8s | %(name)-25s | %(message)s")
+                default="%(asctime)s | %(levelname)-8s | %(message)s")
             self.detailed_format = config.get("logging", "detailed_format", 
-                default="%(asctime)s | %(levelname)-8s | %(name)-25s | [%(filename)s:%(lineno)d] | %(message)s")
-            self.date_format = config.get("logging", "date_format", default='%Y-%m-%d %H:%M:%S')
+                default="%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
+            self.date_format = config.get("logging", "date_format", default='%Y-%m-%d %H:%M:%S%z')
             
             # Default level
             self.default_level = self._get_log_level(config.get("logging", "level", default="INFO"))
@@ -307,11 +309,19 @@ class LogManager:
                 ]
             },
             "exchange": {
-                "level": config.get("logging", "level", default="WARNING"),
+                "level": "DEBUG",  # 改为DEBUG级别获取更详细日志
                 "modules": [
-                    "exchange", "exchange.adapters", "exchange.adapters.base", 
+                    "exchange", 
+                    "exchange.adapters",
                     "exchange.adapters.binance"
-                ]
+                ],
+                "handlers": {
+                    "file": {
+                        "path": "exchange_errors.log",
+                        "level": "ERROR",
+                        "formatter": "json"  # 使用JSON格式记录错误
+                    }
+                }
             },
             "portfolio": {
                 "level": config.get("logging", "level", default="INFO"),
@@ -794,7 +804,7 @@ class LogInitializer:
             syslog_handler = SysLogHandler(address=(syslog_host, syslog_port), facility=facility)
             
             # Format for syslog (no timestamps since syslog adds those)
-            formatter = logging.Formatter('%(name)s[%(process)d]: %(levelname)s %(message)s')
+            formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
             syslog_handler.setFormatter(formatter)
             
             # Add to root logger
@@ -828,8 +838,8 @@ class LogInitializer:
             else:
                 handler = self.log_manager._create_file_handler(summary_path)
                 formatter = logging.Formatter(self.config.get("logging", "format", 
-                    default="%(asctime)s | %(levelname)-8s | %(name)-25s | %(message)s"),
-                    datefmt=self.config.get("logging", "date_format", default='%Y-%m-%d %H:%M:%S'))
+                    default="%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"),
+                    datefmt=self.config.get("logging", "date_format", default='%Y-%m-%d %H:%M:%S%z'))
                 handler.setFormatter(formatter)
             
             summary_logger.addHandler(handler)
@@ -842,3 +852,14 @@ class LogInitializer:
     def get_logger(self, module_name):
         """Get logger mapped to appropriate category"""
         return LogManager.get_logger(module_name)
+
+    def log_api_error(self, module_name, error, request_data=None):
+        """专用记录API错误的日志方法"""
+        logger = self._configure_logger(module_name)
+        log_data = {
+            "type": "API_ERROR",
+            "error": str(error),
+            "code": getattr(error, 'code', None),
+            "request": request_data
+        }
+        logger.error(json.dumps(log_data, ensure_ascii=False))

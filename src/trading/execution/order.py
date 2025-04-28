@@ -8,7 +8,7 @@ import uuid
 from collections import defaultdict
 from typing import Callable, Optional
 
-from common.log_manager import LogManager
+from src.common.log_manager import LogManager
 
 
 # 定义枚举类型

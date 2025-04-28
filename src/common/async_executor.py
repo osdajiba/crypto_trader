@@ -74,7 +74,7 @@ class AsyncExecutor:
             try:
                 # Try to use LogManager 
                 try:
-                    from common.log_manager import LogManager
+                    from src.common.log_manager import LogManager
                     self._logger = LogManager.get_logger("system.async_executor")
                 except (ImportError, RuntimeError):
                     # Try alternative import path
@@ -112,7 +112,7 @@ class AsyncExecutor:
         logger = logging.getLogger("system.async_executor")
         if not logger.handlers:  # Only add handler if none exists
             handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
             handler.setFormatter(formatter)
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)

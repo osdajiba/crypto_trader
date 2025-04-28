@@ -391,3 +391,75 @@ def test_connection(url: str = 'https://api.binance.com/api/v3/ping',
     except Exception as e:
         logger.debug(f"Connection test failed: {e}")
         return False
+    
+    
+def main():
+    import time
+    
+    print("=== Testing ProxyDetector ===")
+    
+    # Initialize with a test URL
+    test_url = 'https://api.binance.com/api/v3/ping'
+    detector = ProxyDetector(test_url=test_url)
+    
+    # Test environment variable checking
+    print("\n--- Testing Environment Variable Detection ---")
+    os.environ['HTTP_PROXY'] = 'http://proxy.example.com:8080'
+    os.environ['HTTPS_PROXY'] = 'https://proxy.example.com:8080'
+    env_proxies = detector._check_environment_variables()
+    print(f"Detected environment proxies: {env_proxies}")
+    del os.environ['HTTP_PROXY']
+    del os.environ['HTTPS_PROXY']
+    
+    # Test system proxy detection (will vary by platform)
+    print("\n--- Testing System Proxy Detection ---")
+    system_proxies = detector._check_system_proxy()
+    print(f"Detected system proxies: {system_proxies}")
+    
+    # Test common proxy port detection
+    print("\n--- Testing Common Proxy Port Detection ---")
+    common_port_proxy = detector._check_common_proxy_port(7890)  # Common proxy port
+    print(f"Detected common port proxy: {common_port_proxy}")
+    
+    # Test requests proxy detection
+    print("\n--- Testing Requests Proxy Detection ---")
+    requests_proxies = detector._check_requests_proxy()
+    print(f"Detected requests proxies: {requests_proxies}")
+    
+    # Test proxy URL parsing
+    print("\n--- Testing Proxy URL Parsing ---")
+    proxy_info = detector.get_proxy_info('http://user:pass@proxy.example.com:8080')
+    print(f"Parsed proxy info: {proxy_info}")
+    
+    # Test proxy testing
+    print("\n--- Testing Proxy Testing ---")
+    test_proxy = {'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'}
+    is_working = detector.test_proxy(test_proxy)
+    print(f"Proxy test result: {'Working' if is_working else 'Not working'}")
+    
+    # Test full proxy detection
+    print("\n--- Testing Full Proxy Detection ---")
+    start_time = time.time()
+    detected_proxy = detector.detect_proxy(
+        check_env=True,
+        check_system=True,
+        check_common_ports=True
+    )
+    elapsed = time.time() - start_time
+    print(f"Detected proxy: {detected_proxy}")
+    print(f"Detection took {elapsed:.2f} seconds")
+    
+    # Test convenience functions
+    print("\n--- Testing Convenience Functions ---")
+    print("Testing detect_proxy():")
+    proxy = detect_proxy()
+    print(f"Detected proxy: {proxy}")
+    
+    print("\nTesting test_connection():")
+    connection_ok = test_connection()
+    print(f"Connection test: {'Success' if connection_ok else 'Failed'}")
+    
+    print("\n=== All Tests Completed ===")
+
+if __name__ == "__main__":
+    main()

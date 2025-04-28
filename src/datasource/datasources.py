@@ -59,24 +59,6 @@ class DataSource:
             await self.executor.close()
         
     @staticmethod
-    def timeframe_to_seconds(timeframe: str) -> int:
-        """Convert timeframe to seconds"""
-        units = {'m': 60, 'h': 3600, 'd': 86400, 'w': 604800}
-        if not timeframe:
-            return 60  # Default to 1 minute
-            
-        # Extract number and unit
-        num = int(''.join(filter(str.isdigit, timeframe)))
-        unit = timeframe[-1].lower()
-        
-        # Check if unit is valid
-        if unit not in units:
-            logger.warning(f"Unknown timeframe unit: {unit}, using minutes")
-            unit = 'm'
-            
-        return num * units.get(unit, 60)
-        
-    @staticmethod
     def get_optimal_data_ranges(start_dt: datetime, end_dt: datetime, 
                               timeframe: str, max_points: int = 1000) -> List[Tuple[datetime, datetime]]:
         """
@@ -92,7 +74,7 @@ class DataSource:
             List[Tuple]: List of time ranges
         """
         # Calculate seconds per timeframe
-        seconds_per_candle = DataSource.timeframe_to_seconds(timeframe)
+        seconds_per_candle = TimeUtils.timeframe_to_seconds(timeframe)
         
         # Calculate total seconds
         total_seconds = (end_dt - start_dt).total_seconds()

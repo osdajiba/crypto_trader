@@ -44,6 +44,8 @@ db/
 data/
 venv/
 cache/
+reports/
+*.json
 *.log
 *.parquet
 

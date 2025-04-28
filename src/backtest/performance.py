@@ -6,7 +6,7 @@ from typing import Dict, Optional, Any
 import scipy.stats as stats
 from dataclasses import dataclass
 
-from common.log_manager import LogManager
+from src.common.log_manager import LogManager
 
 @dataclass
 class PerformanceMetrics:
@@ -120,44 +120,36 @@ class PerformanceMonitor:
             self.performance_metrics.losing_trades += 1
             self.performance_metrics.total_loss += abs(profit_loss)
     
-    def update_equity_curve(
-        self, 
-        timestamp: pd.Timestamp, 
-        current_balance: float
-    ):
-        """
-        Update equity curve with NumPy-based tracking
+    def update_equity_curve(self,timestamp: pd.Timestamp,current_balance: float,check_consistency: bool = True):
+        if not isinstance(timestamp, pd.Timestamp):
+            raise TypeError(f"timestamp must be a pandas.Timestamp, but got {type(timestamp)}")
+        if timestamp.tz is None:
+            raise ValueError("timestamp must be timezone-aware")
+    
+        timestamp_utc = timestamp.tz_convert('UTC')    # Convert to UTC
+        np_timestamp = np.datetime64(timestamp_utc.tz_localize(None))    # Convert to NumPy-compatible format
         
-        Args:
-            timestamp (pd.Timestamp): Current timestamp
-            current_balance (float): Current portfolio balance
-        """
+        # Time order check with proper timezone handling
+        if check_consistency and len(self.equity_curve['timestamps']) > 0:
+            last_time = pd.Timestamp(self.equity_curve['timestamps'][-1], tz='UTC')  # Make tz-aware
+            if timestamp_utc < last_time:
+                raise ValueError(f"Time order error! New timestamp {timestamp_utc} is earlier than last recorded {last_time}")
+        
         # Calculate returns
-        last_balance = (
-            self.equity_curve['balance'][-1] 
-            if len(self.equity_curve['balance']) > 0 
-            else self.initial_balance
-        )
-        daily_return = (current_balance - last_balance) / last_balance
-        cumulative_return = current_balance / self.initial_balance - 1
-        
-        # Append to NumPy arrays
-        self.equity_curve['timestamps'] = np.append(
-            self.equity_curve['timestamps'], 
-            np.datetime64(timestamp)
-        )
-        self.equity_curve['balance'] = np.append(
-            self.equity_curve['balance'], 
-            current_balance
-        )
-        self.equity_curve['daily_return'] = np.append(
-            self.equity_curve['daily_return'], 
-            daily_return
-        )
-        self.equity_curve['cumulative_return'] = np.append(
-            self.equity_curve['cumulative_return'], 
-            cumulative_return
-        )
+        last_balance = self.equity_curve['balance'][-1] if len(self.equity_curve['balance']) > 0 else self.initial_balance
+        daily_return = 0.0 if last_balance == 0 else (current_balance - last_balance) / last_balance
+        updates = {
+            'timestamps': np_timestamp,
+            'balance': np.float64(current_balance),
+            'daily_return': np.float64(daily_return),
+            'cumulative_return': np.float64(current_balance / self.initial_balance - 1)
+        }
+        for key, value in updates.items():
+            self.equity_curve[key] = np.append(self.equity_curve[key], value)
+            
+        if len(self.equity_curve['timestamps']) % 1000 == 0:
+            for key in self.equity_curve:
+                self.equity_curve[key] = np.copy(self.equity_curve[key])
     
     def calculate_performance_metrics(self):
         """

@@ -4,8 +4,9 @@ import pandas as pd
 import asyncio
 from typing import Dict, List, Any, Optional, Set
 from abc import ABC, abstractmethod
+from datetime import datetime
 
-from common.log_manager import LogManager
+from src.common.log_manager import LogManager
 
 
 class RiskValidationError(Exception):
@@ -229,19 +230,11 @@ class BacktestRiskManager(BaseRiskManager):
         
         # Backtest-specific state
         self._portfolio_equity = []
-        self._max_equity = 0
-        self._current_equity = 0
         self._current_positions = {}
         self._risk_events = []
-    
-    async def initialize(self) -> None:
-        """Initialize the risk manager"""
-        await super().initialize()
-        
-        # Initialize equity with starting capital
-        initial_capital = self._config.get("trading", "capital", "initial", default=100000) if self._config else 100000
-        self._current_equity = initial_capital
-        self._max_equity = initial_capital
+        initial_capital = self._config.get("trading", "capital", "initial", default=100000.0)
+        self._current_equity = float(initial_capital)  # Ensure it's a float
+        self._max_equity = self._current_equity
         
         # Add initial equity point
         self._portfolio_equity.append({
@@ -253,30 +246,24 @@ class BacktestRiskManager(BaseRiskManager):
         self._logger.info(f"BacktestRiskManager initialized with {initial_capital} initial capital")
     
     async def validate_signals(self, signals: pd.DataFrame) -> pd.DataFrame:
-        """
-        Validate trading signals for backtesting
-        
-        Args:
-            signals: Trading signals to validate
-            
-        Returns:
-            pd.DataFrame: Validated trading signals
-        """
+        """Validate trading signals for backtesting"""
         if signals.empty:
             return signals
-            
+
         # Apply risk filtering to create validated signals
         valid_signals = signals.copy()
-        
+
         try:
             # Check if risk is already breached (stop trading if true)
             if self._risk_breached:
                 self._logger.warning("Risk limits already breached, rejecting all new long positions")
-                # When risk is breached, only allow closing positions (sell signals)
-                valid_signals = valid_signals[valid_signals['action'].str.lower() == 'sell'].copy()
-                return valid_signals
-            
-            # Apply signal filters one by one
+                return valid_signals[valid_signals['action'].str.lower() == 'sell'].copy()
+
+            # Check if we have valid equity value
+            if not hasattr(self, '_current_equity') or self._current_equity <= 0:
+                self._logger.error("Invalid portfolio equity value - cannot validate position sizing")
+                return pd.DataFrame()  # Return empty dataframe to reject all signals
+
             drop_indices = []
             
             for idx, signal in valid_signals.iterrows():
@@ -291,17 +278,20 @@ class BacktestRiskManager(BaseRiskManager):
                     
                 # Apply position limits for buy orders only (don't restrict selling)
                 if action == 'buy':
-                    # Apply position allocation limit
+                    # Apply position allocation limit with safe division
                     max_allocation = self.get_risk_limit('max_position_size', 0.1)
                     if max_allocation < 1.0 and 'quantity' in signal and 'price' in signal:
-                        # Calculate allocation as fraction of total portfolio
-                        new_allocation = signal['quantity'] * signal['price'] / self._current_equity
-                        
-                        if new_allocation > max_allocation:
-                            self._logger.warning(
-                                f"Signal for {symbol} exceeds max position allocation "
-                                f"({new_allocation:.2%} > {max_allocation:.2%})"
-                            )
+                        try:
+                            new_allocation = signal['quantity'] * signal['price'] / self._current_equity
+                            if new_allocation > max_allocation:
+                                self._logger.warning(
+                                    f"Signal for {symbol} exceeds max position allocation "
+                                    f"({new_allocation:.2%} > {max_allocation:.2%})"
+                                )
+                                drop_indices.append(idx)
+                                continue
+                        except ZeroDivisionError:
+                            self._logger.error("Division by zero in position allocation calculation")
                             drop_indices.append(idx)
                             continue
                             
@@ -319,27 +309,28 @@ class BacktestRiskManager(BaseRiskManager):
             if drop_indices:
                 valid_signals = valid_signals.drop(drop_indices)
             
-            # Update signal quantity based on risk limits
+            # Update signal quantity based on risk limits with safe division
             if 'quantity' in valid_signals.columns and 'price' in valid_signals.columns:
                 for idx, signal in valid_signals.iterrows():
-                    if signal['action'].lower() == 'buy':
-                        # Calculate risk-adjusted position size
+                    if signal['action'].lower() == 'buy' and self._current_equity > 0:
                         risk_per_trade = self.get_risk_limit('risk_per_trade', 0.01)
-                        adjusted_quantity = risk_per_trade * self._current_equity / signal['price']
-                        
-                        # Ensure within min/max quantity
-                        min_quantity = self.get_risk_limit('min_trade_quantity', 0.001)
-                        max_quantity = self.get_risk_limit('max_trade_quantity', float('inf'))
-                        
-                        valid_signals.at[idx, 'quantity'] = max(
-                            min_quantity, 
-                            min(adjusted_quantity, max_quantity, signal['quantity'])
-                        )
+                        try:
+                            adjusted_quantity = risk_per_trade * self._current_equity / signal['price']
+                            min_quantity = self.get_risk_limit('min_trade_quantity', 0.001)
+                            max_quantity = self.get_risk_limit('max_trade_quantity', float('inf'))
+                            
+                            valid_signals.at[idx, 'quantity'] = max(
+                                min_quantity, 
+                                min(adjusted_quantity, max_quantity, signal['quantity'])
+                            )
+                        except ZeroDivisionError:
+                            self._logger.error(f"Zero price for {signal.get('symbol', 'unknown')}, skipping quantity adjustment")
+                            continue
             
             return valid_signals
             
         except Exception as e:
-            self._logger.error(f"Error during signal validation: {e}")
+            self._logger.error(f"Error during signal validation: {e}", exc_info=True)
             return pd.DataFrame()
     
     async def execute_risk_control(self) -> None:
@@ -540,11 +531,9 @@ class LiveRiskManager(BaseRiskManager):
     async def initialize(self) -> None:
         """Initialize the risk manager"""
         await super().initialize()
-        
-        # Initialize equity with starting capital
-        initial_capital = self._config.get("trading", "capital", "initial", default=100000) if self._config else 100000
-        self._current_equity = initial_capital
-        self._max_equity = initial_capital
+        initial_capital = self._config.get("trading", {}).get("capital", {}).get("initial", 100000)
+        self._current_equity = float(initial_capital)  # Ensure it's a float
+        self._max_equity = self._current_equity
         
         # Add initial equity point
         self._portfolio_equity.append({

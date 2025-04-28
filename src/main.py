@@ -9,16 +9,15 @@ import argparse
 import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional
-from core.core import TradingCore
 
 # Add project root to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 sys.path.append(project_root)
 
-from common.config import ConfigManager
-from common.log_manager import LogManager, LogInitializer
-from common.cli import *
+from src.common.config import ConfigManager
+from src.common.log_manager import LogManager, LogInitializer
+from src.core.core import TradingCore
 
 
 class TradingSystemLauncher:
@@ -210,20 +209,13 @@ class TradingSystemLauncher:
             # Interactive mode - prompt for missing critical options
             if not self.args.mode:
                 self.args.mode = self.prompt_mode_selection()
-                
             if self.args.mode == "backtest" and not getattr(self.args, 'backtest_engine', None):
                 self.args.backtest_engine = self.prompt_backtest_engine_selection()
-            
-            # Initialize progress display
-            progress_display = setup_progress_display(self.args.verbose)
-            
+
             # Run the trading core
             result = self.run_trading_core()
-            
-            # Display results
-            display_results(result)
-            
             self.logger.info("Trading system execution completed")
+            
             return result
             
         except KeyboardInterrupt:
