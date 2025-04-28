@@ -48,8 +48,8 @@ cache/
 *.parquet
 
 # 忽略特定配置文件
-config/config.yaml
-config/autosave/
+conf/config.yaml
+conf/autosave/
 
 # 敏感文件
 src/strategy/rotation.py
