@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# src/datasource/downloader.py
+# src/datasource/engine.py
 
 import asyncio
 import aiohttp
@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 
 from src.common.log_manager import LogManager
 
-class DataDownloader:
+class DataEngine:
     """Optimized trading data downloader for reliable data acquisition"""
     
     def __init__(self, 
@@ -93,7 +93,7 @@ class DataDownloader:
             connector=conn,
             timeout=timeout,
             headers={
-                'User-Agent': 'OptimizedDataDownloader/1.0',
+                'User-Agent': 'OptimizedDataEngine/1.0',
                 'Accept': 'application/json',
                 'Connection': 'keep-alive'
             }

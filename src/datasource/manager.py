@@ -14,7 +14,7 @@ from src.common.log_manager import LogManager
 from src.common.helpers import TimeUtils
 from src.datasource.sources import DataSource, DataSourceFactory
 from src.datasource.integrity import DataIntegrityChecker
-from src.datasource.downloader import DataDownloader
+from src.datasource.engine import DataEngine
 from src.datasource.processor import DataProcessor
 
 
@@ -102,7 +102,7 @@ class DataManager:
             self.logger.error(f"Error initializing data sources: {str(e)}")
             raise
     
-    def _create_downloader(self) -> DataDownloader:
+    def _create_downloader(self) -> DataEngine:
         """Create and initialize data downloader"""
         api_key = self.config.get("api", "binance", "api_key", default=None)
         api_secret = self.config.get("api", "binance", "secret", default=None)
@@ -121,7 +121,7 @@ class DataManager:
         # Check if using futures
         use_futures = self.config.get("api", "binance", "options", "default_type", default="spot") == "future"
         
-        downloader = DataDownloader(
+        downloader = DataEngine(
             base_url=base_url,
             futures_url=futures_url,
             api_key=api_key,

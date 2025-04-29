@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# src/backtest/performance.py
+# src/trading/performance/manager.py
 
 import pandas as pd
 import numpy as np
@@ -25,7 +25,7 @@ class PerformanceMetrics:
     sharpe_ratio: float = 0.0
     sortino_ratio: float = 0.0
 
-class PerformanceMonitor:
+class PerformanceManager:
     """
     Advanced Performance Monitoring System with Optimized Metrics Calculation
     """

@@ -8,10 +8,10 @@ from datetime import datetime
 from src.trading.modes.base import BaseTradingMode
 from src.trading.execution.engine import ExecutionEngine
 from src.risk.manager import BacktestRiskManager
-from src.backtest.performance import PerformanceMonitor
+from src.trading.performance.manager import PerformanceManager
 
 
-class BacktestTradingMode(BaseTradingMode):
+class BacktestMode(BaseTradingMode):
     """Backtesting trading mode implementation"""
     
     async def initialize(self) -> None:
@@ -39,7 +39,7 @@ class BacktestTradingMode(BaseTradingMode):
         # Initialize performance monitoring
         if not self.performance_monitor:
             initial_capital = self.config.get("trading", "capital", "initial", default=100000)
-            self.performance_monitor = PerformanceMonitor(
+            self.performance_monitor = PerformanceManager(
                 config=self.config,
                 initial_balance=initial_capital
             )

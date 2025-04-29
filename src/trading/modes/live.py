@@ -10,7 +10,7 @@ from src.trading.modes.base import BaseTradingMode
 from src.trading.execution.engine import ExecutionEngine
 
 
-class LiveTradingMode(BaseTradingMode):
+class LiveMode(BaseTradingMode):
     """Live trading mode implementation with exchange connectivity"""
     
     async def initialize(self) -> None:

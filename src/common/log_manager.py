@@ -364,7 +364,6 @@ class LogManager:
                 "modules": [
                     "strategy", "strategy.base", "strategy.factor_lib", "strategy.registry",
                     "strategy.implementations", "strategy.implementations.dual_ma",
-                    "backtest", "backtest.engine", "backtest.performance"
                 ]
             },
             "data": {
@@ -402,6 +401,7 @@ class LogManager:
                 "modules": [
                     "trading", "trading.execution", "trading.execution.manager", 
                     "trading.execution.order", "trading.modes", "trading.modes.backtest"
+                    "trading.performance.manager"
                 ]
             }
         }

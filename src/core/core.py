@@ -9,6 +9,7 @@ from src.common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
 from src.trading.modes.base import TradingModeFactory
 
+
 class TradingCore:
     """Core coordinator for multi-asset concurrent trading system"""
     

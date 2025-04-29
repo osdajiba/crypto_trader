@@ -10,7 +10,7 @@ from src.trading.modes.base import BaseTradingMode
 from src.trading.execution.engine import ExecutionEngine
 
 
-class PaperTradingMode(BaseTradingMode):
+class PaperMode(BaseTradingMode):
     """Paper trading mode implementation"""
     
     async def initialize(self) -> None:

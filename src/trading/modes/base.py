@@ -17,7 +17,7 @@ from src.common.abstract_factory import AbstractFactory, register_factory_class
 from src.common.helpers import TradingMode
 from src.datasource.manager import DataManager
 from src.risk.manager import RiskManagerFactory
-from src.backtest.performance import PerformanceMonitor
+from src.trading.performance.manager import PerformanceManager
 from src.strategy.base import StrategyFactory
 from src.trading.execution.order import Direction
 
@@ -31,7 +31,7 @@ class BaseTradingMode(ABC):
         data_manager: Optional[DataManager] = None,
         strategy_factory: Optional[StrategyFactory] = None,
         risk_manager: Optional[RiskManagerFactory] = None,
-        performance_monitor: Optional[PerformanceMonitor] = None
+        performance_monitor: Optional[PerformanceManager] = None
     ):
         """
         Initialize the trading mode base class
@@ -88,9 +88,9 @@ class BaseTradingMode(ABC):
         """Create risk manager"""
         return RiskManagerFactory.create_risk_manager(self.mode_name, self.config)
         
-    def _create_performance_monitor(self) -> PerformanceMonitor:
+    def _create_performance_monitor(self) -> PerformanceManager:
         """Create performance monitor"""
-        return PerformanceMonitor(config=self.config)
+        return PerformanceManager(config=self.config)
     
     def _get_source_type(self) -> str:
         """Get data source type based on mode"""
@@ -652,15 +652,15 @@ class TradingModeFactory(AbstractFactory):
     
     def _register_default_modes(self):
         """Register default trading modes"""
-        self.register(TradingMode.BACKTEST.value, "src.trading.modes.backtest.BacktestTradingMode", {
+        self.register(TradingMode.BACKTEST.value, "src.trading.modes.backtest.BacktestMode", {
             "description": "Historical data backtesting",
             "features": ["historical_data", "performance_analysis"]
         })
-        self.register(TradingMode.PAPER.value, "src.trading.modes.paper.PaperTradingMode", {
+        self.register(TradingMode.PAPER.value, "src.trading.modes.paper.PaperMode", {
             "description": "Paper trading (uses real market data without real funds)",
             "features": ["real_time_data", "virtual_execution"]
         })
-        self.register(TradingMode.LIVE.value, "src.trading.modes.live.LiveTradingMode", {
+        self.register(TradingMode.LIVE.value, "src.trading.modes.live.LiveMode", {
             "description": "Live trading (uses real funds on exchange)",
             "features": ["real_time_data", "real_execution", "risk_management"]
         })
@@ -763,13 +763,13 @@ class TradingModeFactory(AbstractFactory):
 
 
 # Example of using decorator in trading mode implementation
-@register_factory_class('trading_mode_factory', 'custom_mode', 
-                       description="Custom trading mode",
-                       features=["feature1", "feature2"])
-class CustomTradingMode(BaseTradingMode):
-    """
-    Custom trading mode demonstrating automatic registration
+# @register_factory_class('trading_mode_factory', 'custom_mode', 
+#                        description="Custom trading mode",
+#                        features=["feature1", "feature2"])
+# class CustomTradingMode(BaseTradingMode):
+#     """
+#     Custom trading mode demonstrating automatic registration
     
-    Note: This class should be defined in a separate file, shown here as an example
-    """
-    pass
+#     Note: This class should be defined in a separate file, shown here as an example
+#     """
+#     pass
