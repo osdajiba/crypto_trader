@@ -1,29 +1,22 @@
 #!/usr/bin/env python3
-# src/backtest/market_replay.py
+# src/backtest/engine/ohlcv.py
 
-import asyncio
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List, Tuple
 import time
-import traceback
 
-from src.common.config import ConfigManager
-from src.backtest.base import BaseBacktestEngine, register_backtest_engine
+from src.common.abstract_factory import register_factory_class
+from src.backtest.engine.base import BaseBacktestEngine
 
 
-@register_backtest_engine('ohlcv', 
-    description="OHLCV Backtest Engine for vectorized backtesting",
+@register_factory_class('backtest_factory', 'ohlcv', 
+    description="OHLCV Engine for vectorized backtesting",
     category="backtest")
 class OHLCVEngine(BaseBacktestEngine):
-    """
-    OHLCV Backtest Engine
+    """OHLCV Engine for vectorized backtesting on OHLCV data"""
     
-    Performs vectorized backtest operations on OHLCV data,
-    processing all data at once for maximum performance.
-    """
-    
-    def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, config, params=None):
         """Initialize OHLCV backtest engine"""
         super().__init__(config, params)
         
@@ -36,20 +29,14 @@ class OHLCVEngine(BaseBacktestEngine):
         self.factor_values = {}  # Symbol -> Factor -> Series
 
     async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-        """
-        Run market replay backtest, processing data sequentially
-        
-        Args:
-            data: Dictionary of symbol -> DataFrame
-            
-        Returns:
-            Dict: Backtest results with baseline data
-        """
+        """Run vectorized backtest on OHLCV data"""
         if not self._is_initialized:
             await self.initialize()
         
         start_time = time.time()
         self._is_running = True
+        
+        # Initialize portfolio state
         self.cash = self.initial_capital
         self.positions = {}
         self.trades = []
@@ -63,94 +50,26 @@ class OHLCVEngine(BaseBacktestEngine):
         }
         
         try:
-            # Prepare initial data buffers
-            sufficient_data = await self.prepare_data(data)
-            if not sufficient_data:
-                self.logger.warning("Insufficient data for backtest")
-                return {'error': 'Insufficient data for backtest'}
+            # Calculate all factors for each symbol in vectorized manner
+            for symbol, df in data.items():
+                if not df.empty:
+                    await self._calculate_all_factors(df, symbol)
             
-            # Get common timeline for all symbols
-            timeline = self._get_common_timeline(data)
-            self.logger.info(f"Running market replay with {len(timeline)} time points")
-            
-            # Track signals by symbol
+            # Generate signals in vectorized manner
             all_signals = {}
-            
-            # NEW: Track baseline performance (underlying asset prices)
-            baseline_history = []
-            
-            # Get main symbol (first in list if multiple)
-            symbols = list(data.keys())
-            main_symbol = symbols[0] if symbols else None
-            self.logger.info(f"Using {main_symbol} as the baseline asset")
-            
-            # Process each time point sequentially
-            self.logger.info("Beginning market replay simulation")
-            for i, timestamp in enumerate(timeline):
-                if not self._is_running:
-                    self.logger.info("Backtest stopped early")
-                    break
-                
-                # Get data for current timestamp across all symbols
-                current_data = self._get_data_at_timestamp(data, timestamp)
-                
-                # Update portfolio value based on current prices
-                portfolio_value = self._calculate_portfolio_value(current_data)
-                self.portfolio_history.append({
-                    'timestamp': timestamp,
-                    'cash': self.cash,
-                    'portfolio_value': portfolio_value
-                })
-                
-                # NEW: Track baseline (underlying asset) price
-                if main_symbol in current_data and not current_data[main_symbol].empty:
-                    baseline_price = current_data[main_symbol]['close'].iloc[0]
-                    baseline_history.append({
-                        'timestamp': timestamp,
-                        'price': baseline_price
-                    })
-                
-                # Process each symbol's data point
-                for symbol, data_point in current_data.items():
-                    # Process data through strategy
-                    signals = await self.process_data_point(data_point, symbol)
-                    
-                    # Store signals
+            for symbol, df in data.items():
+                if not df.empty:
+                    signals = await self._generate_signals_vectorized(df, symbol)
                     if not signals.empty:
-                        if symbol not in all_signals:
-                            all_signals[symbol] = []
-                        all_signals[symbol].append(signals)
-                        
-                        # Execute signals
-                        new_trades = self._execute_signals(signals, current_data)
-                        self.trades.extend(new_trades)
-                
-                # Log progress
-                if i % 100 == 0:
-                    self.logger.debug(f"Processed {i}/{len(timeline)} time points")
-                
-                # Simulate real-time delay if specified
-                if self.replay_speed > 0 and i % 10 == 0:
-                    await asyncio.sleep(self.replay_speed / 1000)  # Convert to seconds
+                        all_signals[symbol] = signals
             
-            # Combine signals
-            for symbol, signals_list in all_signals.items():
-                if signals_list:
-                    results['signals'][symbol] = pd.concat(signals_list)
-                else:
-                    results['signals'][symbol] = pd.DataFrame()
+            # Simulate portfolio
+            trades, equity_curve = self._simulate_portfolio(all_signals, data)
             
-            # Create equity curve
-            if self.portfolio_history:
-                results['equity_curve'] = pd.DataFrame(self.portfolio_history)
-            
-            # NEW: Add baseline prices to results
-            if baseline_history:
-                results['baseline_prices'] = pd.DataFrame(baseline_history)
-                self.logger.info(f"Stored {len(baseline_history)} baseline price points")
-            
-            # Store trades
-            results['trades'] = self.trades
+            # Store results
+            results['signals'] = all_signals
+            results['trades'] = trades
+            results['equity_curve'] = equity_curve
             
             # Calculate metrics
             execution_time = time.time() - start_time
@@ -159,58 +78,47 @@ class OHLCVEngine(BaseBacktestEngine):
             # Calculate final portfolio value
             final_value = self.portfolio_history[-1]['portfolio_value'] if self.portfolio_history else self.initial_capital
             
-            # NEW: Calculate baseline performance metrics
-            if baseline_history:
-                initial_price = baseline_history[0]['price']
-                final_price = baseline_history[-1]['price']
-                
+            # Calculate baseline performance (buy & hold)
+            main_symbol = list(data.keys())[0] if data else None
+            if main_symbol and main_symbol in data and not data[main_symbol].empty:
+                initial_price = data[main_symbol]['close'].iloc[0]
+                final_price = data[main_symbol]['close'].iloc[-1]
                 baseline_return = (final_price - initial_price) / initial_price
                 baseline_return_pct = baseline_return * 100
                 
-                # Add baseline metrics to results
-                results['metrics']['baseline_initial_price'] = initial_price
-                results['metrics']['baseline_final_price'] = final_price
-                results['metrics']['baseline_return_pct'] = baseline_return_pct
-                
                 # Calculate alpha (strategy outperformance)
                 strategy_return_pct = ((final_value / self.initial_capital) - 1) * 100
-                results['metrics']['alpha'] = strategy_return_pct - baseline_return_pct
+                
+                results['metrics'].update({
+                    'baseline_initial_price': initial_price,
+                    'baseline_final_price': final_price,
+                    'baseline_return_pct': baseline_return_pct,
+                    'alpha': strategy_return_pct - baseline_return_pct
+                })
             
-            # Calculate performance metrics
-            results['metrics'] = {
+            # Add performance metrics
+            results['metrics'].update({
                 **self.metrics,
                 'initial_capital': self.initial_capital,
                 'final_value': final_value,
                 'total_return': final_value - self.initial_capital,
                 'total_return_pct': ((final_value / self.initial_capital) - 1) * 100,
-                'total_trades': len(self.trades),
-                'symbols_traded': len(set(trade['symbol'] for trade in self.trades)) if self.trades else 0
-            }
+                'total_trades': len(trades),
+                'symbols_traded': len(set(trade['symbol'] for trade in trades)) if trades else 0
+            })
             
-            # Calculate additional metrics if equity curve exists
-            if not results['equity_curve'].empty:
-                results['metrics'].update(self._calculate_advanced_metrics(results['equity_curve']))
-            
-            self.logger.info(f"Market replay completed in {execution_time:.2f}s, "
-                        f"processed {self.metrics.get('data_points_processed', 0)} data points, "
-                        f"generated {len(self.trades)} trades")
+            self.logger.info(f"OHLCV vectorized backtest completed in {execution_time:.2f}s")
             
             return results
             
         except Exception as e:
-            self.logger.error(f"Error during market replay: {str(e)}\n{traceback.format_exc()}")
-            return {'error': str(e)}
+            self.logger.error(f"Error during OHLCV backtest: {str(e)}")
+            return {'error': str(e), 'metrics': self.metrics}
         finally:
             self._is_running = False
     
     async def _calculate_all_factors(self, data: pd.DataFrame, symbol: str) -> None:
-        """
-        Calculate all factors for a symbol's data in vectorized manner
-        
-        Args:
-            data: Full historical data
-            symbol: Symbol
-        """
+        """Calculate all factors for a symbol's data in vectorized manner"""
         if not self.strategy or not hasattr(self.strategy, '_factor_registry'):
             return
             
@@ -232,17 +140,7 @@ class OHLCVEngine(BaseBacktestEngine):
                 self.logger.error(f"Error calculating factor '{factor_name}' for {symbol}: {str(e)}")
     
     def _calculate_factor_vectorized(self, data: pd.DataFrame, factor_name: str, symbol: str) -> Optional[pd.Series]:
-        """
-        Calculate factor values for entire dataset
-        
-        Args:
-            data: Full historical data
-            factor_name: Factor name
-            symbol: Symbol
-            
-        Returns:
-            pd.Series: Factor values or None if error
-        """
+        """Calculate factor values for entire dataset"""
         # Check if already calculated
         if symbol in self.factor_values and factor_name in self.factor_values[symbol]:
             return self.factor_values[symbol][factor_name]
@@ -276,16 +174,7 @@ class OHLCVEngine(BaseBacktestEngine):
             return None
     
     async def _generate_signals_vectorized(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
-        """
-        Generate signals for entire dataset at once
-        
-        Args:
-            data: Processed data
-            symbol: Symbol
-            
-        Returns:
-            pd.DataFrame: Signals
-        """
+        """Generate signals for entire dataset at once"""
         try:
             # Check if strategy has vectorized signal generation
             if hasattr(self.strategy, '_generate_signals_vectorized'):
@@ -298,8 +187,7 @@ class OHLCVEngine(BaseBacktestEngine):
                 
                 return signals
             
-            # If no vectorized method, use regular strategy logic but apply to the entire dataset
-            # Add factor columns to dataset
+            # Enrich data with factor values
             enriched_data = data.copy()
             for factor_name, factor_values in self.factor_values.get(symbol, {}).items():
                 factor_column = f"factor_{factor_name}"
@@ -315,20 +203,8 @@ class OHLCVEngine(BaseBacktestEngine):
             return pd.DataFrame()
     
     async def _apply_strategy_vectorized(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
-        """
-        Apply strategy logic to entire dataset
-        
-        Args:
-            data: Dataset with factor values
-            symbol: Symbol
-            
-        Returns:
-            pd.DataFrame: Signals
-        """
-        # This is a generic implementation that needs to be customized
-        # for the specific strategy logic
-        
-        # For strategies like DualMA, we'd calculate crossovers directly
+        """Apply strategy logic to entire dataset"""
+        # For strategies with specific factors (e.g. dual MA), optimize signal generation
         if 'factor_short_ma' in data.columns and 'factor_long_ma' in data.columns:
             # Create signal DataFrame
             signals = pd.DataFrame(index=data.index)
@@ -357,8 +233,7 @@ class OHLCVEngine(BaseBacktestEngine):
             
             return signals
         
-        # For other strategies, we might need to process data point by point
-        # This is less efficient but more general
+        # For other strategies, fallback to point-by-point processing
         signals_list = []
         for i in range(len(data)):
             data_point = data.iloc[[i]]
@@ -371,16 +246,7 @@ class OHLCVEngine(BaseBacktestEngine):
         return pd.DataFrame()
     
     def _simulate_portfolio(self, all_signals: Dict[str, pd.DataFrame], price_data: Dict[str, pd.DataFrame]) -> Tuple[List[Dict], pd.DataFrame]:
-        """
-        Simulate portfolio performance based on generated signals
-        
-        Args:
-            all_signals: Dictionary of symbol -> signals DataFrame
-            price_data: Dictionary of symbol -> price DataFrame
-            
-        Returns:
-            Tuple[List[Dict], pd.DataFrame]: Trades and equity curve
-        """
+        """Simulate portfolio performance based on generated signals"""
         # Initialize portfolio
         portfolio = {
             'cash': self.initial_capital,
@@ -416,7 +282,7 @@ class OHLCVEngine(BaseBacktestEngine):
                             signal_by_time[timestamp] = []
                         signal_by_time[timestamp].append(signal.to_dict())
             
-            # Initialize portfolio history
+            # Simulate each timestamp sequentially
             for timestamp in timeline:
                 # Get current prices
                 current_prices = {}
@@ -455,6 +321,9 @@ class OHLCVEngine(BaseBacktestEngine):
                 equity_curve['return'] = equity_curve['portfolio_value'].pct_change()
                 equity_curve['cumulative_return'] = (1 + equity_curve['return'].fillna(0)).cumprod() - 1
             
+            # Store for class access
+            self.portfolio_history = portfolio['history']
+            
             return portfolio['trades'], equity_curve
             
         except Exception as e:
@@ -462,14 +331,7 @@ class OHLCVEngine(BaseBacktestEngine):
             return [], pd.DataFrame()
     
     def _execute_signal(self, signal: Dict, current_prices: Dict[str, float], portfolio: Dict) -> None:
-        """
-        Execute a trading signal
-        
-        Args:
-            signal: Signal dictionary
-            current_prices: Current prices by symbol
-            portfolio: Portfolio state
-        """
+        """Execute a trading signal"""
         symbol = signal['symbol']
         action = signal['action'].lower()
         timestamp = signal.get('timestamp')

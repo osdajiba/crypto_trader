@@ -652,7 +652,7 @@ class TradingModeFactory(AbstractFactory):
     
     def _register_default_modes(self):
         """Register default trading modes"""
-        self.register(TradingMode.BACKTEST.value, "src.trading.modes.backtest.BacktestMode", {
+        self.register(TradingMode.BACKTEST.value, "src.backtest.mode.BacktestMode", {
             "description": "Historical data backtesting",
             "features": ["historical_data", "performance_analysis"]
         })

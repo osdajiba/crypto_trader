@@ -1,30 +1,27 @@
 #!/usr/bin/env python3
-# src/backtest/market_replay.py
+# src/backtest/engine/market_replay.py
 
 import asyncio
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List
 import time
-import traceback
 
-from src.common.config import ConfigManager
-from src.backtest.base import BaseBacktestEngine, register_backtest_engine
-
+from src.common.abstract_factory import register_factory_class
+from src.backtest.engine.base import BaseBacktestEngine
 
 
-@register_backtest_engine('market_replay', 
+@register_factory_class('backtest_factory', 'market_replay', 
     description="Market Replay Backtest Engine for sequential data processing",
     category="backtest")
 class MarketReplayEngine(BaseBacktestEngine):
     """
     Market Replay Backtest Engine
     
-    Processes data sequentially, one data point at a time,
-    simulating real-time market conditions with position tracking.
+    Processes data sequentially, simulating real-time market conditions with position tracking.
     """
     
-    def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
+    def __init__(self, config, params=None):
         """Initialize market replay backtest engine"""
         super().__init__(config, params)
         
@@ -41,15 +38,7 @@ class MarketReplayEngine(BaseBacktestEngine):
         self.portfolio_history = []  # Snapshots of portfolio value over time
 
     async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-        """
-        Run market replay backtest, processing data sequentially
-        
-        Args:
-            data: Dictionary of symbol -> DataFrame
-            
-        Returns:
-            Dict: Backtest results with baseline data
-        """
+        """Run market replay backtest, processing data sequentially"""
         if not self._is_initialized:
             await self.initialize()
         
@@ -81,7 +70,7 @@ class MarketReplayEngine(BaseBacktestEngine):
             # Track signals by symbol
             all_signals = {}
             
-            # NEW: Track baseline performance (underlying asset prices)
+            # Track baseline performance (underlying asset prices)
             baseline_history = []
             
             # Get main symbol (first in list if multiple)
@@ -107,7 +96,7 @@ class MarketReplayEngine(BaseBacktestEngine):
                     'portfolio_value': portfolio_value
                 })
                 
-                # NEW: Track baseline (underlying asset) price
+                # Track baseline (underlying asset) price
                 if main_symbol in current_data and not current_data[main_symbol].empty:
                     baseline_price = current_data[main_symbol]['close'].iloc[0]
                     baseline_history.append({
@@ -149,7 +138,7 @@ class MarketReplayEngine(BaseBacktestEngine):
             if self.portfolio_history:
                 results['equity_curve'] = pd.DataFrame(self.portfolio_history)
             
-            # NEW: Add baseline prices to results
+            # Add baseline prices to results
             if baseline_history:
                 results['baseline_prices'] = pd.DataFrame(baseline_history)
                 self.logger.info(f"Stored {len(baseline_history)} baseline price points")
@@ -164,7 +153,7 @@ class MarketReplayEngine(BaseBacktestEngine):
             # Calculate final portfolio value
             final_value = self.portfolio_history[-1]['portfolio_value'] if self.portfolio_history else self.initial_capital
             
-            # NEW: Calculate baseline performance metrics
+            # Calculate baseline performance metrics
             if baseline_history:
                 initial_price = baseline_history[0]['price']
                 final_price = baseline_history[-1]['price']
@@ -192,32 +181,18 @@ class MarketReplayEngine(BaseBacktestEngine):
                 'symbols_traded': len(set(trade['symbol'] for trade in self.trades)) if self.trades else 0
             }
             
-            # Calculate additional metrics if equity curve exists
-            if not results['equity_curve'].empty:
-                results['metrics'].update(self._calculate_advanced_metrics(results['equity_curve']))
-            
-            self.logger.info(f"Market replay completed in {execution_time:.2f}s, "
-                        f"processed {self.metrics.get('data_points_processed', 0)} data points, "
-                        f"generated {len(self.trades)} trades")
+            self.logger.info(f"Market replay completed in {execution_time:.2f}s")
             
             return results
             
         except Exception as e:
-            self.logger.error(f"Error during market replay: {str(e)}\n{traceback.format_exc()}")
+            self.logger.error(f"Error during market replay: {str(e)}")
             return {'error': str(e)}
         finally:
             self._is_running = False
 
     def _get_common_timeline(self, data: Dict[str, pd.DataFrame]) -> List:
-        """
-        Extract a common timeline from all data sources
-        
-        Args:
-            data: Dictionary of symbol -> DataFrame
-            
-        Returns:
-            List: Sorted unique timestamps
-        """
+        """Extract a common timeline from all data sources"""
         # Extract all timestamps
         all_timestamps = []
         for df in data.values():
@@ -230,16 +205,7 @@ class MarketReplayEngine(BaseBacktestEngine):
         return sorted(set(all_timestamps))
     
     def _get_data_at_timestamp(self, data: Dict[str, pd.DataFrame], timestamp) -> Dict[str, pd.DataFrame]:
-        """
-        Get data for all symbols at a specific timestamp
-        
-        Args:
-            data: Dictionary of symbol -> DataFrame
-            timestamp: Timestamp to get data for
-            
-        Returns:
-            Dict: Symbol -> DataFrame with data at timestamp
-        """
+        """Get data for all symbols at a specific timestamp"""
         result = {}
         
         for symbol, df in data.items():
@@ -255,16 +221,7 @@ class MarketReplayEngine(BaseBacktestEngine):
         return result
     
     def _execute_signals(self, signals: pd.DataFrame, current_data: Dict[str, pd.DataFrame]) -> List[Dict]:
-        """
-        Execute trading signals and return transactions
-        
-        Args:
-            signals: DataFrame with signals
-            current_data: Current market data
-            
-        Returns:
-            List: Trade records
-        """
+        """Execute trading signals and return transactions"""
         if signals.empty:
             return []
         
@@ -369,15 +326,7 @@ class MarketReplayEngine(BaseBacktestEngine):
         return trades
     
     def _calculate_portfolio_value(self, current_data: Dict[str, pd.DataFrame]) -> float:
-        """
-        Calculate current portfolio value
-        
-        Args:
-            current_data: Current market data
-            
-        Returns:
-            float: Portfolio value (cash + positions)
-        """
+        """Calculate current portfolio value"""
         portfolio_value = self.cash
         
         # Add position values
@@ -399,4 +348,3 @@ class MarketReplayEngine(BaseBacktestEngine):
         
         # Call parent shutdown
         await super().shutdown()
-        

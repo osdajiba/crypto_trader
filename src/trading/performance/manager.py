@@ -175,7 +175,7 @@ class PerformanceManager:
             returns = self.equity_curve['daily_return']
             
             # Risk-free rate from configuration
-            risk_free_rate = self.config.get('risk_free_rate', 0.02)
+            risk_free_rate = self.config.get('strategy', 'risk_free_rate', default=0.04)
             
             # Annualized return and volatility
             annualized_return = (1 + returns.mean()) ** 252 - 1

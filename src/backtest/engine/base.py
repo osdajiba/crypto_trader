@@ -1,48 +1,37 @@
 #!/usr/bin/env python3
-# src/backtest/base.py
+# src/backtest/engine/base.py
 
 import asyncio
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, Optional, Type
+from typing import Dict, Any, Optional, List
 from collections import deque
 import time
 import traceback
 
-from src.common.abstract_factory import AbstractFactory, register_factory_class
+from src.common.abstract_factory import register_factory_class
 from src.common.async_executor import AsyncExecutor
 from src.common.config import ConfigManager
 from src.common.log_manager import LogManager
-from src.strategy.base import StrategyFactory
 
 
 class BaseBacktestEngine:
-    """
-    Base backtest engine with efficient factor-based data management
-    """
+    """Base backtest engine with efficient data management"""
     
     def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
-        """
-        Initialize backtest engine
-        
-        Args:
-            config: Configuration manager
-            params: Backtest parameters
-        """
+        """Initialize backtest engine"""
         self.config = config
         self.params = params or {}
         self.logger = LogManager.get_logger(f"backtest.{self.__class__.__name__.lower()}")
         self.strategy = None
-        self.executor = AsyncExecutor()  # Get singleton instance
+        self.executor = AsyncExecutor()
         
         # Data management
-        self.data_buffers = {}  # Symbol -> DataFrame
-        self.factor_cache = {}  # Symbol -> {Factor -> Series}
-        self.has_sufficient_history = {}  # Symbol -> bool
-        
-        # Use deque for efficient window management
-        self.data_queues = {}  # Symbol -> deque of data points
-        self.required_window_size = 0  # Will be determined from strategy
+        self.data_buffers = {}
+        self.factor_cache = {}
+        self.has_sufficient_history = {}
+        self.data_queues = {}
+        self.required_window_size = 0
         
         # Performance tracking
         self.metrics = {
@@ -61,19 +50,14 @@ class BaseBacktestEngine:
             return
             
         self.logger.info("Initializing backtest engine")
-        
-        # Start async executor
         await self.executor.start()
-        
-        # Load strategy
         await self._load_strategy()
         
-        # Get required window size from strategy factors
         if self.strategy:
             self._update_required_window_size()
         
         self._is_initialized = True
-        self.logger.info(f"Backtest initialization complete, required window size: {self.required_window_size}")
+        self.logger.info(f"Backtest initialization complete, window size: {self.required_window_size}")
     
     def _update_required_window_size(self) -> None:
         """Determine required window size from strategy factors"""
@@ -81,7 +65,6 @@ class BaseBacktestEngine:
             self.required_window_size = 30  # Default
             return
             
-        # Find maximum window size from factors
         max_window = 0
         for name, info in self.strategy._factor_registry.items():
             window_size = info.get('window_size', 0)
@@ -97,10 +80,7 @@ class BaseBacktestEngine:
                         dep_window += 1
                     max_window = max(max_window, dep_window)
         
-        # Set required window size (minimum 2)
         self.required_window_size = max(max_window, 2)
-        
-        self.logger.info(f"Required window size determined from factors: {self.required_window_size}")
     
     async def _load_strategy(self) -> None:
         """Load strategy from parameters"""
@@ -111,13 +91,11 @@ class BaseBacktestEngine:
         strategy_params = self.params.get('strategy_params', {})
         
         try:
-            # Get strategy factory
+            # Import here to avoid circular imports
+            from src.strategy.base import StrategyFactory
+            
             factory = StrategyFactory.get_instance(self.config)
-            
-            # Create strategy
             self.strategy = await factory.create(strategy_name, strategy_params)
-            
-            # Initialize strategy
             await self.strategy.initialize()
             
             self.logger.info(f"Strategy '{strategy_name}' loaded and initialized")
@@ -126,15 +104,7 @@ class BaseBacktestEngine:
             raise
     
     async def prepare_data(self, data: Dict[str, pd.DataFrame]) -> bool:
-        """
-        Prepare and validate data for backtesting
-        
-        Args:
-            data: Dictionary of symbol -> DataFrame
-            
-        Returns:
-            bool: True if data is valid and sufficient
-        """
+        """Prepare and validate data for backtesting"""
         if not data:
             self.logger.warning("No data provided for backtest")
             return False
@@ -153,6 +123,7 @@ class BaseBacktestEngine:
                 self.logger.warning(f"Empty data for {symbol}")
                 sufficient_data = False
                 continue
+                
             df[symbol] = symbol
             
             # Initialize buffers
@@ -163,10 +134,8 @@ class BaseBacktestEngine:
             
             # Preload data if sufficient history exists
             if len(df) >= self.required_window_size:
-                # Take the most recent required_window_size rows for initial buffer
                 initial_data = df.iloc[-self.required_window_size:]
                 
-                # Store in deque and dataframe
                 for _, row in initial_data.iterrows():
                     self.data_queues[symbol].append(pd.DataFrame([row]))
                 
@@ -209,20 +178,9 @@ class BaseBacktestEngine:
                     
                 except Exception as e:
                     self.logger.error(f"Error calculating factor '{factor_name}' for {symbol}: {str(e)}")
-        
-        self.logger.info("Precalculated factors for all symbols with sufficient history")
     
     async def process_data_point(self, data_point: pd.DataFrame, symbol: str) -> pd.DataFrame:
-        """
-        Process a single data point for a symbol
-        
-        Args:
-            data_point: New data point
-            symbol: Symbol
-            
-        Returns:
-            DataFrame: Generated signals or empty DataFrame
-        """
+        """Process a single data point for a symbol"""
         if not self._is_initialized:
             await self.initialize()
         
@@ -236,7 +194,7 @@ class BaseBacktestEngine:
             if not sufficient_history:
                 self.logger.debug(f"Still collecting data for {symbol}, "
                                 f"{len(self.data_queues.get(symbol, deque()))} of "
-                                f"{self.required_window_size} required data points")
+                                f"{self.required_window_size} required")
                 return pd.DataFrame()  # Not enough data yet
             
             # Process data with strategy
@@ -254,16 +212,7 @@ class BaseBacktestEngine:
             return pd.DataFrame()
     
     async def _add_data_point(self, data_point: pd.DataFrame, symbol: str) -> bool:
-        """
-        Add a data point to the buffer
-        
-        Args:
-            data_point: New data point
-            symbol: Symbol
-            
-        Returns:
-            bool: True if we have sufficient history
-        """
+        """Add a data point to the buffer"""
         # Initialize buffers if needed
         if symbol not in self.data_buffers:
             self.data_buffers[symbol] = pd.DataFrame()
@@ -288,15 +237,7 @@ class BaseBacktestEngine:
         return self.has_sufficient_history[symbol]
     
     async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-        """
-        Run backtest on all data
-        
-        Args:
-            data: Dictionary of symbol -> DataFrame
-            
-        Returns:
-            Dict: Backtest results
-        """
+        """Run backtest on all data"""
         if not self._is_initialized:
             await self.initialize()
         
@@ -389,87 +330,3 @@ class BaseBacktestEngine:
         self._is_running = False
         
         self.logger.info("Backtest engine shut down")
-
-
-class BacktestFactory(AbstractFactory):
-    """Factory for creating backtest engines"""
-    
-    def __init__(self, config):
-        """Initialize backtest factory"""
-        super().__init__(config)
-        self.default_engine = config.get("backtest", "engine", default="standard")
-        
-        # Register default backtest engines
-        self._register_default_engines()
-    
-    def _register_default_engines(self):
-        """Register default backtest engines"""
-        # Register standard backtest engine
-        self.register("standard", "src.backtest.base.BaseBacktestEngine", {
-            "description": "Standard Backtest Engine with factor-based data management"
-        })
-        
-        # Register any additional engines
-        try:
-            self.register("ohlcv", "src.backtest.ohlcv.OHLCVEngine", {
-                "description": "OHLCV Backtest Engine"
-            })
-            self.register("market_replay", "src.backtest.market_replay.MarketReplayEngine", {
-                "description": "Market Replay Backtest Engine"
-            })
-        except Exception as e:
-            self.logger.debug(f"Optional engines not registered: {e}")
-    
-    async def _get_concrete_class(self, name: str) -> Type[BaseBacktestEngine]:
-        """
-        Get concrete backtest engine class
-        
-        Args:
-            name: Engine name
-            
-        Returns:
-            Type[BaseBacktestEngine]: Backtest engine class
-        """
-        return await self._load_class_from_path(name, BaseBacktestEngine)
-    
-    async def _resolve_name(self, name: Optional[str]) -> str:
-        """
-        Resolve engine name with default fallback
-        
-        Args:
-            name: Engine name
-            
-        Returns:
-            str: Resolved engine name
-        """
-        name = name or self.default_engine
-        if not name:
-            raise ValueError("No engine name provided and no default in config")
-        return name.lower()
-    
-    async def create_engine(self, engine_name: str, params: Optional[Dict[str, Any]] = None) -> BaseBacktestEngine:
-        """
-        Create and initialize backtest engine
-        
-        Args:
-            engine_name: Engine name
-            params: Engine parameters
-            
-        Returns:
-            BaseBacktestEngine: Initialized backtest engine
-        """
-        engine = await self.create(engine_name, params)
-        await engine.initialize()
-        return engine
-
-
-# Decorator for registering backtest engines
-def register_backtest_engine(name: Optional[str] = None, **metadata):
-    """
-    Decorator for registering backtest engines
-    
-    Args:
-        name: Engine name (defaults to class name without 'Engine' suffix)
-        **metadata: Additional metadata
-    """
-    return register_factory_class('backtest_factory', name, **metadata)
