@@ -16,10 +16,10 @@ from src.common.log_manager import LogManager
 from src.common.abstract_factory import AbstractFactory, register_factory_class
 from src.common.helpers import TradingMode
 from src.datasource.manager import DataManager
-from src.risk.manager import RiskManagerFactory
-from src.trading.performance.manager import PerformanceManager
+from src.portfolio.risk import RiskManagerFactory
+from src.portfolio.performance import PerformanceManager
 from src.strategy.base import StrategyFactory
-from src.trading.execution.order import Direction
+from src.portfolio.execution.order import Direction
 
 
 class BaseTradingMode(ABC):

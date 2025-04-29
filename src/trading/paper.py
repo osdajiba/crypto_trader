@@ -6,8 +6,8 @@ import asyncio
 import pandas as pd
 from datetime import datetime
 
-from src.trading.modes.base import BaseTradingMode
-from src.trading.execution.engine import ExecutionEngine
+from src.trading.base import BaseTradingMode
+from src.portfolio.execution.engine import ExecutionEngine
 
 
 class PaperMode(BaseTradingMode):

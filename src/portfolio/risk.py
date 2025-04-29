@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# src/risk/manager.py
+# src/portfolio/risk.py
 
 import pandas as pd
 import asyncio

@@ -8,10 +8,10 @@ from datetime import datetime
 import os
 from pathlib import Path
 
-from src.trading.modes.base import BaseTradingMode
-from src.trading.execution.engine import ExecutionEngine
-from src.risk.manager import BacktestRiskManager
-from src.trading.performance.manager import PerformanceManager
+from src.trading.base import BaseTradingMode
+from src.portfolio.execution.engine import ExecutionEngine
+from src.portfolio.risk import BacktestRiskManager
+from src.portfolio.performance import PerformanceManager
 from src.backtest.factory import get_backtest_factory
 from src.common.config import ConfigManager
 
