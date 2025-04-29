@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/portfolio/fund.py
 
 from .base import Asset

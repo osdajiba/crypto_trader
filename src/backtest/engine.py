@@ -1,13 +1,15 @@
-# src/backtest/base_backtest_engine.py
+#!/usr/bin/env python3
+# src/backtest/engine.py
 
 import asyncio
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, Optional, List, Type, Callable, Union, Set
+from typing import Dict, Any, Optional, List, Type, Callable, Union, Set, Tuple
 from collections import deque
 import time
 import traceback
 
+from src.backtest.engine import BaseBacktestEngine, register_backtest_engine
 from src.common.abstract_factory import AbstractFactory, register_factory_class
 from src.common.async_executor import AsyncExecutor
 from src.common.config import ConfigManager
@@ -474,18 +476,6 @@ def register_backtest_engine(name: Optional[str] = None, **metadata):
     return register_factory_class('backtest_factory', name, **metadata)
 
 
-# src/backtest/market_replay_backtest_engine.py
-
-import pandas as pd
-import asyncio
-from typing import Dict, Any, Optional, List, Tuple
-import time
-import traceback
-
-from src.backtest.engine import BaseBacktestEngine, register_backtest_engine
-from src.common.config import ConfigManager
-
-
 @register_backtest_engine('market_replay', 
     description="Market Replay Backtest Engine for sequential data processing",
     category="backtest")
@@ -918,19 +908,6 @@ class MarketReplayBacktestEngine(BaseBacktestEngine):
         # Call parent shutdown
         await super().shutdown()
         
-
-# src/backtest/ohlcv_backtest_engine.py
-
-import asyncio
-import pandas as pd
-import numpy as np
-from typing import Dict, Any, Optional, List, Tuple
-import time
-import traceback
-
-from src.backtest.engine import BaseBacktestEngine, register_backtest_engine
-from src.common.config import ConfigManager
-
 
 @register_backtest_engine('ohlcv', 
     description="OHLCV Backtest Engine for vectorized backtesting",
@@ -1527,8 +1504,8 @@ class OHLCVBacktestEngine(BaseBacktestEngine):
             metrics['total_trades'] = len(trades)
             if trades:
                 # Calculate win rate
-                buy_trades = {t['timestamp'].strftime('%Y-%m-%d %H:%M:%S'): t for t in trades if t['action'] == 'buy'}
-                sell_trades = {t['timestamp'].strftime('%Y-%m-%d %H:%M:%S'): t for t in trades if t['action'] == 'sell'}
+                buy_trades = {t['timestamp'].strftime('%Y-%m-%d %H:%M:%S%z'): t for t in trades if t['action'] == 'buy'}
+                sell_trades = {t['timestamp'].strftime('%Y-%m-%d %H:%M:%S%z'): t for t in trades if t['action'] == 'sell'}
                 
                 # This is a simplified calculation - it doesn't account for matching buys/sells
                 if buy_trades and sell_trades:

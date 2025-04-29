@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/core/core.py
 
 import asyncio
@@ -11,19 +12,15 @@ from src.trading.modes.base import TradingModeFactory
 class TradingCore:
     """Core coordinator for multi-asset concurrent trading system"""
     
-    def __init__(self, config: ConfigManager, mode: str = None, backtest_engine: str = None):
+    def __init__(self, config: ConfigManager):
         """
         Initialize the trading core with configuration and mode.
         """
         self.config = config
         self.logger = LogManager.get_logger(name="trading_system")
         
-        self.mode = mode if mode is not None else config.get("system", "operational_mode", default="backtest")
-        self.backtest_engine = backtest_engine if backtest_engine is not None else config.get("backtest", "engine_type", default="ohlcv")
-        
-        # Store backtest engine type in config if specified
-        if backtest_engine is not None:
-            self.config.set("backtest", "engine_type", backtest_engine)
+        self.mode = config.get("system", "operational_mode", default="backtest")
+        self.backtest_engine = config.get("backtest", "engine", default="ohlcv")
         
         self.async_exec = AsyncExecutor()
         self._running = False

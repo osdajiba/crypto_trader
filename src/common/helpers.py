@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/common/helpers.py
 
 import pytz
@@ -90,9 +91,13 @@ class TimeUtils:
                 '%Y/%m/%d': None,
                 '%m/%d/%Y': None,
                 '%d-%m-%Y': None,
+                '%Y/%m/%d %H:%M:%S': None,
+                '%Y/%m/%d %H:%M:%S': None,
                 '%Y-%m-%d %H:%M:%S': None,
                 '%Y-%m-%dT%H:%M:%S': None,
                 '%Y-%m-%d %H:%M:%S%z': None,
+                '%Y-%m-%dT%H:%M:%S%z': None,
+                '%Y-%m-%dT%H:%M:%S%z': None,
                 '%Y-%m-%dT%H:%M:%S%z': None,
                 '%Y%m%d': None
             }
@@ -220,7 +225,7 @@ class TimeUtils:
         return TimeUtils.to_timestamp(dt, milliseconds)
     
     @staticmethod
-    def format_datetime(dt: datetime, fmt: str = '%Y-%m-%d %H:%M:%S') -> str:
+    def format_datetime(dt: datetime, fmt: str = '%Y-%m-%d %H:%M:%S%z') -> str:
         """Format a datetime object to string"""
         return dt.strftime(fmt)
     

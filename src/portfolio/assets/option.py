@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src\portfolio\option.py
 
 from scipy.optimize import newton

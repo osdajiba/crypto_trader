@@ -1,4 +1,5 @@
-# src/mode/live_trading_mode.py
+#!/usr/bin/env python3
+# src/trading/modes/live.py
 
 from typing import Dict, List, Any, Optional
 import asyncio
@@ -6,7 +7,7 @@ import pandas as pd
 from datetime import datetime
 
 from src.trading.modes.base import BaseTradingMode
-from src.trading.execution.manager import ExecutionEngine
+from src.trading.execution.engine import ExecutionEngine
 
 
 class LiveTradingMode(BaseTradingMode):

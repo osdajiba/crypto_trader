@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# src/exchange/network.py 
+
 """
 Comprehensive Network Diagnostics Tool for Crypto API Connections
 
@@ -109,8 +111,8 @@ class NetworkDiagnostics:
             file_handler.setLevel(logging.DEBUG)
             
             # Create formatters
-            log_format = '%(asctime)s | %(levelname)8s | %(message)s'
-            date_format = '%Y-%m-%d %H:%M:%S'
+            log_format = "%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"
+            date_format = '%Y-%m-%d %H:%M:%S%z'
             formatter = logging.Formatter(log_format, date_format)
             
             # Add formatters to handlers
@@ -129,7 +131,7 @@ class NetworkDiagnostics:
     def log(self, message: str, level: str = "INFO") -> None:
         """Log formatted message with timestamp"""
         elapsed = time.time() - self.start_time
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S%z")
         console_message = f"{timestamp} | {elapsed:7.2f}s | {level:<8} | {message}"
         print(console_message)
         
@@ -1078,7 +1080,7 @@ class NetworkDiagnostics:
         try:
             # Create report data
             report_data = {
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S%z"),
                 "target": self.target_url,
                 "proxy": self.proxy,
                 "symbol": self.symbol,
@@ -1292,7 +1294,7 @@ async def main():
     # Display banner
     print("\n" + "=" * 80)
     print(" Crypto API Network Diagnostics Tool")
-    print(" Version 1.0.0 | " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    print(" Version 1.0.0 | " + datetime.now().strftime("%Y-%m-%d %H:%M:%S%z"))
     print("=" * 80 + "\n")
     
     # Initialize diagnostics

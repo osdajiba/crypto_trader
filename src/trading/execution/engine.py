@@ -1,4 +1,5 @@
-# src\execution\execution_engine.py
+#!/usr/bin/env python3
+# src/trading/execution/engine.py
 
 import ccxt
 import pandas as pd

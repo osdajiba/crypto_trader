@@ -1,4 +1,5 @@
-# src/backtest/performance_monitor.py
+#!/usr/bin/env python3
+# src/backtest/performance.py
 
 import pandas as pd
 import numpy as np

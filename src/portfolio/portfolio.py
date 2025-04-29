@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/portfolio/portfolio.py
 
 from portfolio.assets.base import Asset

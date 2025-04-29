@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/portfolio/asset.py
 
 from abc import ABC, abstractmethod

@@ -1,4 +1,5 @@
-# src/portfolio/portfolio_manager.py
+#!/usr/bin/env python3
+# src/portfolio/manager.py
 
 from typing import Dict, List
 from portfolio.assets.base import Asset

@@ -1,4 +1,5 @@
-# src/mode/base_trading_mode.py
+#!/usr/bin/env python3
+# src/trading/modes/base.py
 
 from abc import ABC, abstractmethod
 import asyncio

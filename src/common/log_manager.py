@@ -1,4 +1,5 @@
-# src/common/log_manager.py - Simplified logging handler
+#!/usr/bin/env python3
+# src/common/log_manager.py
 
 import logging
 import sys
@@ -6,6 +7,7 @@ import os
 from pathlib import Path
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 import json
+import time
 from typing import Dict, Any, Optional, Union, List
 from datetime import datetime
 import gzip
@@ -186,7 +188,7 @@ class LogManager:
         # Basic defaults - will be overridden by setup
         self.configured_loggers = set()
         self.base_path = Path(f"./logs")
-        self.format_str = "%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"
+        self.format_str = "%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"
         self.date_format = '%Y-%m-%d %H:%M:%S%z'
         self.default_level = logging.INFO
         self.log_to_console = True
@@ -204,10 +206,26 @@ class LogManager:
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
             
-        # Add console handler
+        # Add console handler with millisecond format
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
-        formatter = logging.Formatter(self.format_str)
+        
+        # Custom formatter to include milliseconds
+        class MillisecondFormatter(logging.Formatter):
+            def formatTime(self, record, datefmt=None):
+                ct = self.converter(record.created)
+                if datefmt:
+                    s = time.strftime(datefmt, ct)
+                    ms = "%03d" % record.msecs
+                    return s.replace("%z", ms)
+                else:
+                    t = time.strftime("%Y-%m-%d %H:%M:%S", ct)
+                    return f"{t},{ms:03d}"
+        
+        formatter = MillisecondFormatter(
+            fmt=self.format_str,
+            datefmt='%Y-%m-%d %H:%M:%S%z'  # Include %z for milliseconds
+        )
         console_handler.setFormatter(formatter)
         root_logger.addHandler(console_handler)
         
@@ -218,7 +236,7 @@ class LogManager:
             "app": {"level": "INFO", "modules": []}
         }
         self.configured_loggers = set(["root"])
-    
+
     def _setup_logging(self, config):
         """Configure logging from a config object"""
         try:
@@ -244,9 +262,9 @@ class LogManager:
             
             # Get formatting settings
             self.format_str = config.get("logging", "format", 
-                default="%(asctime)s | %(levelname)-8s | %(message)s")
+                default="%(asctime)s | %(levelname)s | [%(filename)s:%(lineno)d] | %(message)s")
             self.detailed_format = config.get("logging", "detailed_format", 
-                default="%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
+                default="%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
             self.date_format = config.get("logging", "date_format", default='%Y-%m-%d %H:%M:%S%z')
             
             # Default level
@@ -269,7 +287,7 @@ class LogManager:
             self.use_buffer = config.get("logging", "handlers", "file", "buffer", "enabled", default=True)
             self.buffer_size = int(config.get("logging", "handlers", "file", "buffer", "capacity", default=1000))
             
-            # Initialize root logger
+            # Initialize root logger with millisecond precision
             self._setup_root_logger()
             
             # Set up combined log if enabled
@@ -280,7 +298,55 @@ class LogManager:
             # Fall back to basic setup on failure
             self._setup_basic_logging()
             print(f"Log initialization failed: {str(e)}")
-            
+
+    def _setup_root_logger(self):
+        """Configure the root logger with proper handlers"""
+        root_logger = logging.getLogger()
+        root_logger.setLevel(self.default_level)
+        
+        # Clear existing handlers
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+        
+        # Custom formatter class to handle milliseconds
+        class MillisecondFormatter(logging.Formatter):
+            def formatTime(self, record, datefmt=None):
+                ct = self.converter(record.created)
+                if datefmt:
+                    s = time.strftime(datefmt, ct)
+                    ms = "%03d" % record.msecs
+                    return s.replace("%z", ms)
+                else:
+                    t = time.strftime("%Y-%m-%d %H:%M:%S", ct)
+                    return f"{t},{ms:03d}"
+        
+        # Create formatter with milliseconds
+        formatter = MillisecondFormatter(
+            fmt=self.format_str,
+            datefmt=self.date_format
+        )
+        
+        # Add console handler if enabled
+        if self.log_to_console:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(self.default_level)
+            console_handler.setFormatter(formatter)
+            root_logger.addHandler(console_handler)
+        
+        # Add file handler if enabled
+        if self.log_to_file:
+            log_file = self.base_path / f"application_{self.date_str}.log"
+            file_handler = logging.FileHandler(
+                log_file,
+                encoding='utf-8',
+                delay=self.use_buffer  # Delay opening file until first write if buffering
+            )
+            file_handler.setLevel(self.default_level)
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+        
+        self.configured_loggers.add("root")
+                
     def _parse_categories(self, config):
         """Define consolidated log categories with module mappings"""
         # Default categories with detailed module mappings
@@ -804,7 +870,7 @@ class LogInitializer:
             syslog_handler = SysLogHandler(address=(syslog_host, syslog_port), facility=facility)
             
             # Format for syslog (no timestamps since syslog adds those)
-            formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
+            formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
             syslog_handler.setFormatter(formatter)
             
             # Add to root logger
@@ -838,7 +904,7 @@ class LogInitializer:
             else:
                 handler = self.log_manager._create_file_handler(summary_path)
                 formatter = logging.Formatter(self.config.get("logging", "format", 
-                    default="%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"),
+                    default="%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"),
                     datefmt=self.config.get("logging", "date_format", default='%Y-%m-%d %H:%M:%S%z'))
                 handler.setFormatter(formatter)
             

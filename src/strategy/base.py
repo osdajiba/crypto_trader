@@ -1,4 +1,5 @@
-# src/strategy/base_strategy.py
+#!/usr/bin/env python3
+# src/strategy/base.py
 
 import pandas as pd
 from typing import Dict, Optional, Callable, Any, List, Type, Union

@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# src/datasource/integrity.py
+
 from datetime import datetime
 import pandas as pd
 import numpy as np

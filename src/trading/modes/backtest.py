@@ -1,11 +1,12 @@
-# src/mode/backtest_trading_mode.py
+#!/usr/bin/env python3
+# src/trading/modes/backtest.py
 
-from typing import Dict, List, Any
 import pandas as pd
+from typing import Dict, List, Any
 from datetime import datetime
 
 from src.trading.modes.base import BaseTradingMode
-from src.trading.execution.manager import ExecutionEngine
+from src.trading.execution.engine import ExecutionEngine
 from src.risk.manager import BacktestRiskManager
 from src.backtest.performance import PerformanceMonitor
 

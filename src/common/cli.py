@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/common/cli.py
 
 import sys
@@ -69,7 +70,7 @@ def display_results(result):
                 for trade in trades[:5]:
                     date = trade.get('timestamp', 'N/A')
                     if isinstance(date, (int, float)):
-                        date = datetime.datetime.fromtimestamp(date).strftime('%Y-%m-%d %H:%M')
+                        date = datetime.datetime.fromtimestamp(date).strftime('%Y-%m-%d %H:%M%z')
                     
                     print(f"{str(date):<20} {trade.get('symbol', 'N/A'):<10} "
                           f"{str(trade.get('action', 'N/A')):<5} {trade.get('price', 0):<10.2f} "

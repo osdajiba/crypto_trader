@@ -10,7 +10,6 @@ import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-# Add project root to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 sys.path.append(project_root)
@@ -89,47 +88,6 @@ class TradingSystemLauncher:
         
         return parser
     
-    def prompt_mode_selection(self) -> str:
-        """Command-line prompt for trading mode selection"""
-        print("\nTrading Mode Selection")
-        print("========================================")
-        print("1. Backtest    - Historical data simulation")
-        print("2. Paper       - Real-time simulation")
-        print("3. Live        - Real order execution (CAUTION)")
-        print("========================================")
-        print("Warning: Live trading requires proper configuration!\n")
-        
-        while True:
-            try:
-                choice = int(input("Select trading mode (1-3): "))
-                if 1 <= choice <= 3:
-                    modes = {1: "backtest", 2: "paper", 3: "live"}
-                    return modes[choice]
-                else:
-                    print("Invalid selection. Please choose 1-3.")
-            except ValueError:
-                print("Please enter a number from 1 to 3.")
-
-    def prompt_backtest_engine_selection(self) -> str:
-        """Command-line prompt for backtest engine selection"""
-        print("\nBacktest Engine Selection")
-        print("========================================")
-        print("1. OHLCV (Basic)          - Standard backtesting with OHLCV data")
-        print("2. Market Replay (Advanced) - High-fidelity market replay with realistic order execution")
-        print("========================================")
-        
-        while True:
-            try:
-                choice = int(input("Select backtest engine type (1-2): "))
-                if choice == 1:
-                    return "ohlcv"
-                elif choice == 2:
-                    return "market_replay"
-                else:
-                    print("Invalid selection. Please choose 1 or 2.")
-            except ValueError:
-                print("Please enter either 1 or 2.")
-    
     def setup_environment(self):
         """Setup environment with config and logging"""
         # Constants
@@ -167,50 +125,31 @@ class TradingSystemLauncher:
             self.logger.debug("Debug logging enabled")
         
         self.logger.info(f"Environment setup complete. Using config: {config_path}")
-        return config_path
     
     def run_trading_core(self):
         """Initialize and run the trading core"""
         
         self.logger.info(f"Starting trading system in {self.args.mode} mode")
         
-        # Initialize the trading core
-        trading_core = TradingCore(
-            config=self.config,
-            mode=self.args.mode,
-            backtest_engine=getattr(self.args, 'backtest_engine', None)
-        )
+        trading_core = TradingCore(config=self.config)
         
-        # Create and run event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
         try:
-            # Run trading pipeline
             result = loop.run_until_complete(trading_core.run_pipeline())
-            
-            # Ensure proper shutdown
             loop.run_until_complete(trading_core.shutdown())
-            
             return result
+        
         finally:
             loop.close()
     
     def run(self):
         """Main entry point for the trading system"""
         try:
-            # Parse command line arguments
             parser = self.setup_argument_parser()
             self.args = parser.parse_args()
-            
-            # Setup environment (config and logging)
-            config_path = self.setup_environment()
-            
-            # Interactive mode - prompt for missing critical options
-            if not self.args.mode:
-                self.args.mode = self.prompt_mode_selection()
-            if self.args.mode == "backtest" and not getattr(self.args, 'backtest_engine', None):
-                self.args.backtest_engine = self.prompt_backtest_engine_selection()
+            self.setup_environment()    # Setup config and logging
 
             # Run the trading core
             result = self.run_trading_core()

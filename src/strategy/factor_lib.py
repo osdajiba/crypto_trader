@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/strategy/factors_lib.py
 
 import pandas as pd

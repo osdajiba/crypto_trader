@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/datacource/processor.py
 
 import pandas as pd

@@ -1,4 +1,5 @@
-# src/strategy/DualMA.py
+#!/usr/bin/env python3
+# src/strategy/dual_ma.py
 
 import numpy as np
 import pandas as pd

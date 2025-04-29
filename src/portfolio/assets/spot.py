@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/portfolio/spot.py
 
 from .base import Asset

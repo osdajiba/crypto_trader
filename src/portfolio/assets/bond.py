@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/portfolio/bond.py
 
 from .base import Asset

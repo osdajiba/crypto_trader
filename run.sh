@@ -462,7 +462,7 @@ update_main_config() {
 logging:
   base_path: "./logs"
   level: "INFO"
-  format: "%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"
+  format: "%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"
   date_format: "%Y-%m-%d %H:%M:%S%z"
   
   # Console logging settings
@@ -683,7 +683,7 @@ def enhanced_get_colored_formatter(self):
     class EnhancedColoredFormatter(logging.Formatter):
         def format(self, record):
             # Format the timestamp
-            timestamp_pattern = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
+            timestamp_pattern = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}+d{4}'
             
             # Save original message
             original_msg = record.msg
@@ -894,7 +894,7 @@ def test_dns_resolution():
 def run_tests():
     """Run all network tests"""
     print(f"=== Trading System Network Test ===")
-    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S%z')}")
     print(f"Hostname: {socket.gethostname()}")
     
     test_internet_connection()

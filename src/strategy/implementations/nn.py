@@ -1,4 +1,6 @@
+#!/usr/bin/env python3
 # src/strategy/nn.py
+
 import pandas as pd
 from typing import Dict, Optional, Any
 from src.strategy.base import BaseStrategy

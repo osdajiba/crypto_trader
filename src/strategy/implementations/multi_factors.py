@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/strategy/multi_factors.py
 
 import pandas as pd

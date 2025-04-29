@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/datasource/downloader.py
 
 import asyncio
@@ -7,8 +8,9 @@ import numpy as np
 import os
 import time
 from datetime import datetime, timedelta, timezone
-import logging
 from typing import Dict, List, Optional, Tuple, Union, Any
+
+from src.common.log_manager import LogManager
 
 class DataDownloader:
     """Optimized trading data downloader for reliable data acquisition"""
@@ -45,7 +47,7 @@ class DataDownloader:
         self.storage_path = storage_path
         os.makedirs(storage_path, exist_ok=True)
         
-        # Set up logger
+        # Set up logger using LogManager instead of standard logging
         self._setup_logger(log_level)
         
         # HTTP session settings
@@ -55,20 +57,15 @@ class DataDownloader:
         self.logger.info(f"Data downloader initialized: chunk_size={self.chunk_size}, rate_limit={self.rate_limit}/s")
     
     def _setup_logger(self, log_level: str):
-        """Configure logger"""
-        self.logger = logging.getLogger("data_downloader")
-        self.logger.setLevel(getattr(logging, log_level))
+        """Configure logger using LogManager"""
+        # Get a logger instance from LogManager instead of standard logging
+        # Use the module path as the logger name for proper categorization
+        self.logger = LogManager.get_logger("datasource.downloader")
         
-        if not self.logger.handlers:
-            console_handler = logging.StreamHandler()
-            formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
-            
-            os.makedirs("logs", exist_ok=True)
-            file_handler = logging.FileHandler("logs/data_download.log")
-            file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
+        # LogManager automatically handles the log level based on categories, 
+        # but we can also set it explicitly if needed
+        if log_level != "INFO":  # Only change if it's different from default
+            LogManager.set_level(log_level, "datasource.downloader")
     
     async def initialize(self):
         """Initialize HTTP session"""

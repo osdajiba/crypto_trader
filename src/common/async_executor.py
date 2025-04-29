@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/common/async_executor.py
 
 import threading
@@ -112,7 +113,7 @@ class AsyncExecutor:
         logger = logging.getLogger("system.async_executor")
         if not logger.handlers:  # Only add handler if none exists
             handler = logging.StreamHandler()
-            formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
+            formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s")
             handler.setFormatter(formatter)
             logger.addHandler(handler)
             logger.setLevel(logging.INFO)

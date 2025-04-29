@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 # src/common/config.py
 
 from datetime import datetime, timedelta
@@ -131,7 +130,7 @@ class ConfigManager:
             'level': 'INFO',
             'async_write': True,
             'combined_log': True,
-            'format': "%(asctime)s | %(levelname)-8s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s",
+            'format': "%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s",
             'date_format': '%Y-%m-%d %H:%M:%S%z',
             'detailed_format': True,
             'handlers': {
