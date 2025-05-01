@@ -19,12 +19,57 @@ from typing import Any, Dict, List, Optional, Callable, Tuple, Union
 from src.common.log_manager import LogManager
 logger = LogManager.get_logger("helpers")
 
-
-class TradingMode(Enum):
+    
+class BacktestEngine(Enum):
+    """Centralize the definition of backtest engine types"""
+    MARKETREPLAY = "market_replay"
+    OHLCV = "ohlcv"
+    
+    
+class TradingMode(Enum):    
     """Centralize the definition of transaction mode types"""
     BACKTEST = "backtest"
     PAPER = "paper"
     LIVE = "live"
+    
+    
+class DataSource(Enum):
+    """Centralize the definition of data source types"""
+    LOCAL = "local"
+    EXCHANGE = "exchange"
+    HIBRID = "hybrid"
+
+
+class Execution(Enum):
+    """Centralize the definition of data source types"""
+    BACKTEST = "backtest"
+    PAPER = "paper"
+    LIVE = "live"
+    
+
+class RiskManager(Enum):
+    """Centralize the definition of backtest engine types"""
+    BACKTEST = "backtest"
+    TRADING = "trading"
+
+
+class PerformanceAnalyzer(Enum):
+    """Centralize the definition of backtest engine types"""
+    BACKTEST = "backtest"
+    TRADING = "trading"
+    
+
+class Strategy(Enum):
+    """Centralize the definition of backtest engine types"""
+    DUAL_MA = "dual_ma"
+    MF = "multi_factors"
+    NN = "neural_network"
+    
+    
+class TradableAsset(Enum):
+    """Centralize the definition of backtest engine types"""
+    SPOT = "spot"
+    FUTURE = "future"
     
     
 class TimeUtils:

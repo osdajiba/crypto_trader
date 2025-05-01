@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Callable, Any
 from src.common.config import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
-from src.trading.modes.base import TradingModeFactory
+from src.trading.base import TradingModeFactory
 
 
 class TradingCore:

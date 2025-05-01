@@ -1,35 +1,103 @@
 #!/usr/bin/env python3
 # src/backtest/engine/ohlcv.py
 
+"""
+OHLCV backtest engine implementation.
+Provides vectorized backtesting for OHLCV (Open, High, Low, Close, Volume) data.
+"""
+
+from collections import deque
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List, Tuple
 import time
+import asyncio
 
 from src.common.abstract_factory import register_factory_class
-from src.backtest.engine.base import BaseBacktestEngine
+from src.common.helpers import BacktestEngine
+from src.backtest.engine.base import BaseBacktestEngine, BacktestEngineError
 
 
-@register_factory_class('backtest_factory', 'ohlcv', 
+class OHLCVEngineError(BacktestEngineError):
+    """Error specific to OHLCV engine operations"""
+    pass
+
+
+@register_factory_class('backtest_engine_factory', BacktestEngine.OHLCV.value, 
     description="OHLCV Engine for vectorized backtesting",
+    features=["vectorized", "ohlcv", "performance_optimized"],
     category="backtest")
 class OHLCVEngine(BaseBacktestEngine):
-    """OHLCV Engine for vectorized backtesting on OHLCV data"""
+    """
+    OHLCV Engine for vectorized backtesting on OHLCV data
+    
+    This engine provides optimized performance for backtesting strategies 
+    on standard OHLCV (Open, High, Low, Close, Volume) data, with optional
+    vectorized processing for maximum speed.
+    """
     
     def __init__(self, config, params=None):
-        """Initialize OHLCV backtest engine"""
+        """
+        Initialize OHLCV backtest engine
+        
+        Args:
+            config: Configuration manager
+            params: Engine parameters
+        """
         super().__init__(config, params)
         
-        # OHLCV specific settings
-        self.initial_capital = self.params.get('initial_capital', 100000)
-        self.commission_rate = self.params.get('commission_rate', 0.001)
-        self.slippage = self.params.get('slippage', 0.001)
+        # OHLCV specific settings from config with params override
+        self.initial_capital = self.params.get(
+            'initial_capital', 
+            self.config.get("trading", "capital", "initial", default=100000)
+        )
+        self.commission_rate = self.params.get(
+            'commission_rate', 
+            self.config.get("trading", "fees", "commission", default=0.001)
+        )
+        self.slippage = self.params.get(
+            'slippage', 
+            self.config.get("trading", "fees", "slippage", default=0.001)
+        )
         
         # Factor calculation cache
         self.factor_values = {}  # Symbol -> Factor -> Series
+        
+        self.logger.info(f"OHLCV Engine initialized with capital={self.initial_capital}, "
+                        f"commission={self.commission_rate}, slippage={self.slippage}")
+
+    async def initialize(self) -> None:
+        """
+        Initialize backtest engine with specific OHLCV requirements
+        
+        This method extends the base initialization with OHLCV-specific
+        settings and configurations.
+        """
+        await super().initialize()
+        
+        # Additional OHLCV-specific initialization
+        if 'use_vectorized' not in self.params:
+            self.params['use_vectorized'] = True
+        
+        self.use_vectorized = self.params.get('use_vectorized')
+        self.logger.info(f"OHLCV Engine vectorized mode: {self.use_vectorized}")
 
     async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-        """Run vectorized backtest on OHLCV data"""
+        """
+        Run vectorized backtest on OHLCV data
+        
+        This method implements the backtest execution on OHLCV data, optionally
+        using vectorized processing for improved performance.
+        
+        Args:
+            data: Dictionary of symbol -> DataFrame market data
+            
+        Returns:
+            Dict[str, Any]: Backtest results
+            
+        Raises:
+            OHLCVEngineError: If backtest execution fails
+        """
         if not self._is_initialized:
             await self.initialize()
         
@@ -50,21 +118,29 @@ class OHLCVEngine(BaseBacktestEngine):
         }
         
         try:
+            self.logger.info("Starting OHLCV backtest run")
+            
             # Calculate all factors for each symbol in vectorized manner
-            for symbol, df in data.items():
-                if not df.empty:
-                    await self._calculate_all_factors(df, symbol)
+            if self.use_vectorized:
+                for symbol, df in data.items():
+                    if not df.empty:
+                        await self._calculate_all_factors(df, symbol)
             
             # Generate signals in vectorized manner
             all_signals = {}
             for symbol, df in data.items():
                 if not df.empty:
-                    signals = await self._generate_signals_vectorized(df, symbol)
+                    if self.use_vectorized:
+                        signals = await self._generate_signals_vectorized(df, symbol)
+                    else:
+                        signals = await self._generate_signals_sequential(df, symbol)
+                        
                     if not signals.empty:
                         all_signals[symbol] = signals
+                        self.logger.info(f"Generated {len(signals)} signals for {symbol}")
             
             # Simulate portfolio
-            trades, equity_curve = self._simulate_portfolio(all_signals, data)
+            trades, equity_curve = await self._simulate_portfolio(all_signals, data)
             
             # Store results
             results['signals'] = all_signals
@@ -107,20 +183,29 @@ class OHLCVEngine(BaseBacktestEngine):
                 'symbols_traded': len(set(trade['symbol'] for trade in trades)) if trades else 0
             })
             
-            self.logger.info(f"OHLCV vectorized backtest completed in {execution_time:.2f}s")
+            self.logger.info(f"OHLCV vectorized backtest completed in {execution_time:.2f}s with "
+                           f"return {results['metrics']['total_return_pct']:.2f}%")
             
             return results
             
         except Exception as e:
             self.logger.error(f"Error during OHLCV backtest: {str(e)}")
-            return {'error': str(e), 'metrics': self.metrics}
+            raise OHLCVEngineError(f"Backtest execution failed: {str(e)}")
         finally:
             self._is_running = False
     
     async def _calculate_all_factors(self, data: pd.DataFrame, symbol: str) -> None:
-        """Calculate all factors for a symbol's data in vectorized manner"""
+        """
+        Calculate all factors for a symbol's data in vectorized manner
+        
+        Args:
+            data: OHLCV data for a symbol
+            symbol: Trading symbol
+        """
         if not self.strategy or not hasattr(self.strategy, '_factor_registry'):
             return
+            
+        self.logger.debug(f"Calculating factors for {symbol}")
             
         # Initialize cache for this symbol
         if symbol not in self.factor_values:
@@ -140,7 +225,17 @@ class OHLCVEngine(BaseBacktestEngine):
                 self.logger.error(f"Error calculating factor '{factor_name}' for {symbol}: {str(e)}")
     
     def _calculate_factor_vectorized(self, data: pd.DataFrame, factor_name: str, symbol: str) -> Optional[pd.Series]:
-        """Calculate factor values for entire dataset"""
+        """
+        Calculate factor values for entire dataset
+        
+        Args:
+            data: OHLCV data for a symbol
+            factor_name: Factor name to calculate
+            symbol: Trading symbol
+            
+        Returns:
+            Optional[pd.Series]: Factor values or None if calculation fails
+        """
         # Check if already calculated
         if symbol in self.factor_values and factor_name in self.factor_values[symbol]:
             return self.factor_values[symbol][factor_name]
@@ -174,12 +269,21 @@ class OHLCVEngine(BaseBacktestEngine):
             return None
     
     async def _generate_signals_vectorized(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
-        """Generate signals for entire dataset at once"""
+        """
+        Generate signals for entire dataset at once
+        
+        Args:
+            data: OHLCV data for a symbol
+            symbol: Trading symbol
+            
+        Returns:
+            pd.DataFrame: Generated signals
+        """
         try:
             # Check if strategy has vectorized signal generation
-            if hasattr(self.strategy, '_generate_signals_vectorized'):
+            if hasattr(self.strategy, 'generate_signals_vectorized'):
                 # Use vectorized method if available
-                signals = await self.strategy._generate_signals_vectorized(data, symbol, self.factor_values.get(symbol, {}))
+                signals = await self.strategy.generate_signals_vectorized(data, symbol, self.factor_values.get(symbol, {}))
                 
                 # Add symbol if not present
                 if not signals.empty and 'symbol' not in signals.columns:
@@ -202,13 +306,55 @@ class OHLCVEngine(BaseBacktestEngine):
             self.logger.error(f"Error generating vectorized signals for {symbol}: {str(e)}")
             return pd.DataFrame()
     
+    async def _generate_signals_sequential(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+        """
+        Generate signals by processing data sequentially
+        
+        Args:
+            data: OHLCV data for a symbol
+            symbol: Trading symbol
+            
+        Returns:
+            pd.DataFrame: Generated signals
+        """
+        signals_list = []
+        
+        # Reset buffer for clean run
+        self.data_buffers[symbol] = pd.DataFrame()
+        self.has_sufficient_history[symbol] = False
+        self.data_queues[symbol] = deque(maxlen=self.required_window_size)
+        
+        # Process data sequentially
+        for i in range(len(data)):
+            data_point = data.iloc[[i]]
+            signal = await self.process_data_point(data_point, symbol)
+            if not signal.empty:
+                signals_list.append(signal)
+                
+            # Log progress periodically
+            if i % 1000 == 0 and i > 0:
+                self.logger.debug(f"Processed {i}/{len(data)} data points for {symbol}")
+        
+        if signals_list:
+            return pd.concat(signals_list)
+        return pd.DataFrame()
+    
     async def _apply_strategy_vectorized(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
-        """Apply strategy logic to entire dataset"""
+        """
+        Apply strategy logic to entire dataset
+        
+        Args:
+            data: Enriched OHLCV data with factor values
+            symbol: Trading symbol
+            
+        Returns:
+            pd.DataFrame: Generated signals
+        """
         # For strategies with specific factors (e.g. dual MA), optimize signal generation
         if 'factor_short_ma' in data.columns and 'factor_long_ma' in data.columns:
             # Create signal DataFrame
             signals = pd.DataFrame(index=data.index)
-            signals['timestamp'] = data.index
+            signals['timestamp'] = data.index if isinstance(data.index, pd.DatetimeIndex) else data.get('datetime', data.index)
             signals['symbol'] = symbol
             
             # Buy signal: short MA crosses above long MA
@@ -245,186 +391,235 @@ class OHLCVEngine(BaseBacktestEngine):
             return pd.concat(signals_list)
         return pd.DataFrame()
     
-    def _simulate_portfolio(self, all_signals: Dict[str, pd.DataFrame], price_data: Dict[str, pd.DataFrame]) -> Tuple[List[Dict], pd.DataFrame]:
-        """Simulate portfolio performance based on generated signals"""
-        # Initialize portfolio
-        portfolio = {
-            'cash': self.initial_capital,
-            'positions': {},  # symbol -> quantity
-            'trades': [],
-            'history': []     # portfolio value history
-        }
+    async def _simulate_portfolio(self, all_signals: Dict[str, pd.DataFrame], price_data: Dict[str, pd.DataFrame]) -> Tuple[List[Dict], pd.DataFrame]:
+        """
+        Simulate portfolio performance based on generated signals
         
+        Args:
+            all_signals: Dictionary of symbol -> signals DataFrame
+            price_data: Dictionary of symbol -> OHLCV data
+            
+        Returns:
+            Tuple[List[Dict], pd.DataFrame]: Trades and equity curve
+        """
         try:
-            # Create unified timeline
-            all_timestamps = []
-            for df in price_data.values():
-                if isinstance(df.index, pd.DatetimeIndex):
-                    all_timestamps.extend(df.index.tolist())
-                elif 'datetime' in df.columns:
-                    all_timestamps.extend(df['datetime'].tolist())
+            trades = []
+            equity_curve = []
+            self.cash = self.initial_capital
+            self.positions = {}
+            self.portfolio_history = []
             
-            timeline = sorted(set(all_timestamps))
+            # Combine all signals from all symbols into a single timeline
+            combined_signals = []
+            for symbol, signals_df in all_signals.items():
+                if not signals_df.empty:
+                    # Ensure datetime column exists
+                    if 'datetime' not in signals_df.columns and 'timestamp' in signals_df.columns:
+                        signals_df['datetime'] = signals_df['timestamp']
+                    
+                    # Convert to records for easier timeline merging
+                    for _, row in signals_df.iterrows():
+                        signal_dict = row.to_dict()
+                        if 'datetime' not in signal_dict and 'timestamp' in signal_dict:
+                            signal_dict['datetime'] = signal_dict['timestamp']
+                        combined_signals.append(signal_dict)
             
-            # Organize signals by timestamp
-            signal_by_time = {}
-            for symbol, signals in all_signals.items():
-                if signals.empty:
-                    continue
+            # Sort signals by datetime
+            if combined_signals:
+                combined_signals.sort(key=lambda x: x.get('datetime', pd.Timestamp.min))
                 
-                for _, signal in signals.iterrows():
-                    timestamp = signal.get('timestamp')
-                    if timestamp is None and isinstance(signal.name, pd.Timestamp):
-                        timestamp = signal.name
-                        
-                    if timestamp:
-                        if timestamp not in signal_by_time:
-                            signal_by_time[timestamp] = []
-                        signal_by_time[timestamp].append(signal.to_dict())
-            
-            # Simulate each timestamp sequentially
-            for timestamp in timeline:
-                # Get current prices
-                current_prices = {}
-                for symbol, df in price_data.items():
-                    if isinstance(df.index, pd.DatetimeIndex):
-                        if timestamp in df.index:
-                            current_prices[symbol] = df.loc[timestamp, 'close']
-                    elif 'datetime' in df.columns:
-                        mask = df['datetime'] == timestamp
-                        if mask.any():
-                            current_prices[symbol] = df.loc[mask, 'close'].iloc[0]
-                
-                # Calculate portfolio value
-                portfolio_value = portfolio['cash']
-                for symbol, quantity in portfolio['positions'].items():
-                    if symbol in current_prices:
-                        portfolio_value += quantity * current_prices[symbol]
-                
-                # Execute any signals at this timestamp
-                if timestamp in signal_by_time:
-                    for signal in signal_by_time[timestamp]:
-                        self._execute_signal(signal, current_prices, portfolio)
-                
-                # Record portfolio history
-                portfolio['history'].append({
-                    'timestamp': timestamp,
-                    'cash': portfolio['cash'],
-                    'portfolio_value': portfolio_value
-                })
+                # Process signals sequentially
+                for signal in combined_signals:
+                    symbol = signal.get('symbol')
+                    action = signal.get('action', '').lower()
+                    price = signal.get('price')
+                    
+                    if not symbol or not action or not price:
+                        continue
+                    
+                    # Calculate quantity based on portfolio allocation
+                    quantity = signal.get('quantity')
+                    if not quantity:
+                        if action == 'buy':
+                            # Default to using 10% of available cash
+                            allocation = self.params.get('position_size', 0.1)
+                            quantity = (self.cash * allocation) / price
+                            
+                    # Execute trade
+                    if action == 'buy':
+                        trade = self._execute_buy(symbol, price, quantity)
+                        if trade:
+                            trades.append(trade)
+                    elif action == 'sell':
+                        trade = self._execute_sell(symbol, price, quantity)
+                        if trade:
+                            trades.append(trade)
+                    
+                    # Update portfolio value at each signal
+                    portfolio_value = self._calculate_portfolio_value(price_data, signal.get('datetime'))
+                    self.portfolio_history.append({
+                        'timestamp': signal.get('datetime'),
+                        'portfolio_value': portfolio_value,
+                        'cash': self.cash
+                    })
             
             # Create equity curve DataFrame
-            equity_curve = pd.DataFrame(portfolio['history'])
+            if self.portfolio_history:
+                equity_curve = pd.DataFrame(self.portfolio_history)
+            else:
+                # Create empty equity curve with structure
+                equity_curve = pd.DataFrame(columns=['timestamp', 'portfolio_value', 'cash'])
             
-            # Add returns calculations
-            if not equity_curve.empty and 'portfolio_value' in equity_curve.columns:
-                equity_curve['return'] = equity_curve['portfolio_value'].pct_change()
-                equity_curve['cumulative_return'] = (1 + equity_curve['return'].fillna(0)).cumprod() - 1
-            
-            # Store for class access
-            self.portfolio_history = portfolio['history']
-            
-            return portfolio['trades'], equity_curve
-            
+            self.logger.info(f"Portfolio simulation completed with {len(trades)} trades")
+            return trades, equity_curve
+        
         except Exception as e:
-            self.logger.error(f"Error simulating portfolio: {str(e)}")
+            self.logger.error(f"Error in portfolio simulation: {str(e)}")
             return [], pd.DataFrame()
     
-    def _execute_signal(self, signal: Dict, current_prices: Dict[str, float], portfolio: Dict) -> None:
-        """Execute a trading signal"""
-        symbol = signal['symbol']
-        action = signal['action'].lower()
-        timestamp = signal.get('timestamp')
+    def _execute_buy(self, symbol: str, price: float, quantity: float) -> Optional[Dict]:
+        """
+        Execute a buy order
         
-        # Skip if we don't have price data
-        if symbol not in current_prices:
-            return
+        Args:
+            symbol: Trading symbol
+            price: Execution price
+            quantity: Quantity to buy
             
-        price = current_prices[symbol]
-        
+        Returns:
+            Optional[Dict]: Trade record or None if trade couldn't be executed
+        """
+        if quantity <= 0:
+            return None
+            
         # Apply slippage
-        if action == 'buy':
-            execution_price = price * (1 + self.slippage)
-        else:  # sell
-            execution_price = price * (1 - self.slippage)
+        execution_price = price * (1 + self.slippage)
         
-        # Determine quantity
-        quantity = signal.get('quantity')
-        if quantity is None:
-            # Use 1% of portfolio value by default
-            portfolio_value = portfolio['cash']
-            for sym, qty in portfolio['positions'].items():
-                if sym in current_prices:
-                    portfolio_value += qty * current_prices[sym]
-            
-            risk_pct = 0.01  # 1% risk per trade
-            quantity = (portfolio_value * risk_pct) / execution_price
+        # Calculate total cost including commission
+        cost = quantity * execution_price
+        commission = cost * self.commission_rate
+        total_cost = cost + commission
         
-        # Execute trade
-        if action == 'buy':
-            # Calculate cost
+        # Check if we have enough cash
+        if total_cost > self.cash:
+            # Adjust quantity to available cash
+            quantity = (self.cash / execution_price) * (1 - self.commission_rate)
+            if quantity <= 0:
+                return None
+                
+            # Recalculate costs
             cost = quantity * execution_price
             commission = cost * self.commission_rate
             total_cost = cost + commission
-            
-            # Check if we have enough cash
-            if total_cost > portfolio['cash']:
-                quantity = portfolio['cash'] / (execution_price * (1 + self.commission_rate))
-                cost = quantity * execution_price
-                commission = cost * self.commission_rate
-                total_cost = cost + commission
-            
-            if quantity > 0:
-                # Update cash
-                portfolio['cash'] -= total_cost
-                
-                # Update position
-                if symbol not in portfolio['positions']:
-                    portfolio['positions'][symbol] = 0
-                portfolio['positions'][symbol] += quantity
-                
-                # Record trade
-                portfolio['trades'].append({
-                    'timestamp': timestamp,
-                    'symbol': symbol,
-                    'action': 'buy',
-                    'quantity': quantity,
-                    'price': execution_price,
-                    'commission': commission,
-                    'cost': total_cost
-                })
         
-        elif action == 'sell':
-            # Check if we have the position
-            if symbol in portfolio['positions'] and portfolio['positions'][symbol] > 0:
-                # Limit to current position
-                quantity = min(quantity, portfolio['positions'][symbol])
+        # Update cash
+        self.cash -= total_cost
+        
+        # Update position
+        if symbol not in self.positions:
+            self.positions[symbol] = 0
+        self.positions[symbol] += quantity
+        
+        # Create trade record
+        trade = {
+            'timestamp': pd.Timestamp.now(),
+            'symbol': symbol,
+            'action': 'buy',
+            'quantity': quantity,
+            'price': execution_price,
+            'commission': commission,
+            'total_cost': total_cost,
+            'cash_after': self.cash
+        }
+        
+        return trade
+    
+    def _execute_sell(self, symbol: str, price: float, quantity: float = None) -> Optional[Dict]:
+        """
+        Execute a sell order
+        
+        Args:
+            symbol: Trading symbol
+            price: Execution price
+            quantity: Quantity to sell (None for all)
+            
+        Returns:
+            Optional[Dict]: Trade record or None if trade couldn't be executed
+        """
+        current_position = self.positions.get(symbol, 0)
+        
+        # If no position, can't sell
+        if current_position <= 0:
+            return None
+            
+        # If quantity not specified, sell all
+        if quantity is None or quantity > current_position:
+            quantity = current_position
+            
+        # Apply slippage
+        execution_price = price * (1 - self.slippage)
+        
+        # Calculate proceeds
+        value = quantity * execution_price
+        commission = value * self.commission_rate
+        net_proceeds = value - commission
+        
+        # Update cash
+        self.cash += net_proceeds
+        
+        # Update position
+        self.positions[symbol] -= quantity
+        if self.positions[symbol] <= 0:
+            del self.positions[symbol]
+        
+        # Create trade record
+        trade = {
+            'timestamp': pd.Timestamp.now(),
+            'symbol': symbol,
+            'action': 'sell',
+            'quantity': quantity,
+            'price': execution_price,
+            'commission': commission,
+            'net_proceeds': net_proceeds,
+            'cash_after': self.cash
+        }
+        
+        return trade
+    
+    def _calculate_portfolio_value(self, price_data: Dict[str, pd.DataFrame], timestamp) -> float:
+        """
+        Calculate portfolio value at a specific timestamp
+        
+        Args:
+            price_data: Dictionary of symbol -> OHLCV data
+            timestamp: Timestamp to calculate value at
+            
+        Returns:
+            float: Portfolio value
+        """
+        # Start with cash
+        portfolio_value = self.cash
+        
+        # Add value of all positions
+        for symbol, quantity in self.positions.items():
+            if symbol in price_data:
+                symbol_data = price_data[symbol]
                 
-                # Calculate value
-                value = quantity * execution_price
-                commission = value * self.commission_rate
-                net_value = value - commission
-                
-                # Update cash
-                portfolio['cash'] += net_value
-                
-                # Update position
-                portfolio['positions'][symbol] -= quantity
-                
-                # Remove position if zero
-                if portfolio['positions'][symbol] <= 0:
-                    del portfolio['positions'][symbol]
-                
-                # Record trade
-                portfolio['trades'].append({
-                    'timestamp': timestamp,
-                    'symbol': symbol,
-                    'action': 'sell',
-                    'quantity': quantity,
-                    'price': execution_price,
-                    'commission': commission,
-                    'value': net_value
-                })
+                # Find closest price data
+                if isinstance(timestamp, pd.Timestamp) and 'datetime' in symbol_data.columns:
+                    closest_row = symbol_data.iloc[symbol_data['datetime'].searchsorted(timestamp, side='right') - 1]
+                    price = closest_row['close']
+                elif len(symbol_data) > 0:
+                    # Use latest price if can't match timestamp
+                    price = symbol_data['close'].iloc[-1]
+                else:
+                    continue
+                    
+                # Add position value
+                position_value = quantity * price
+                portfolio_value += position_value
+        
+        return portfolio_value
     
     async def shutdown(self) -> None:
         """Clean up resources"""

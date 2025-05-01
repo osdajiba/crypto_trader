@@ -1,30 +1,57 @@
 #!/usr/bin/env python3
 # src/backtest/engine/base.py
 
-import asyncio
+"""
+Base backtest engine implementation.
+Provides abstract base class for all backtest engines.
+"""
+
+from abc import ABC, abstractmethod
 import pandas as pd
-import numpy as np
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from collections import deque
 import time
-import traceback
+import asyncio
 
-from src.common.abstract_factory import register_factory_class
-from src.common.async_executor import AsyncExecutor
 from src.common.config import ConfigManager
 from src.common.log_manager import LogManager
 
 
-class BaseBacktestEngine:
-    """Base backtest engine with efficient data management"""
+class BacktestEngineError(Exception):
+    """Base exception for backtest engine errors"""
+    pass
+
+
+class DataPreparationError(BacktestEngineError):
+    """Error raised when data preparation fails"""
+    pass
+
+
+class StrategyExecutionError(BacktestEngineError):
+    """Error raised when strategy execution fails"""
+    pass
+
+
+class BaseBacktestEngine(ABC):
+    """
+    Base abstract backtest engine with efficient data management.
+    
+    Provides the foundation for all backtest engine implementations with
+    standardized data handling, strategy integration, and backtest execution.
+    """
     
     def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
-        """Initialize backtest engine"""
+        """
+        Initialize backtest engine base class
+        
+        Args:
+            config: Configuration manager
+            params: Engine parameters dictionary
+        """
         self.config = config
         self.params = params or {}
         self.logger = LogManager.get_logger(f"backtest.{self.__class__.__name__.lower()}")
         self.strategy = None
-        self.executor = AsyncExecutor()
         
         # Data management
         self.data_buffers = {}
@@ -45,22 +72,39 @@ class BaseBacktestEngine:
         self._is_running = False
     
     async def initialize(self) -> None:
-        """Initialize backtest engine and load strategy"""
+        """
+        Initialize backtest engine and load strategy
+        
+        This method performs standard initialization including strategy loading
+        and window size calculation.
+        
+        Raises:
+            BacktestEngineError: If initialization fails
+        """
         if self._is_initialized:
             return
             
         self.logger.info("Initializing backtest engine")
-        await self.executor.start()
-        await self._load_strategy()
         
-        if self.strategy:
-            self._update_required_window_size()
-        
-        self._is_initialized = True
-        self.logger.info(f"Backtest initialization complete, window size: {self.required_window_size}")
+        try:
+            await self._load_strategy()
+            
+            if self.strategy:
+                self._update_required_window_size()
+            
+            self._is_initialized = True
+            self.logger.info(f"Backtest initialization complete, window size: {self.required_window_size}")
+        except Exception as e:
+            self.logger.error(f"Backtest engine initialization failed: {str(e)}")
+            raise BacktestEngineError(f"Initialization failed: {str(e)}")
     
     def _update_required_window_size(self) -> None:
-        """Determine required window size from strategy factors"""
+        """
+        Determine required window size from strategy factors
+        
+        This method analyzes the strategy's factor requirements to determine
+        the minimum required data window size.
+        """
         if not hasattr(self.strategy, '_factor_registry'):
             self.required_window_size = 30  # Default
             return
@@ -83,81 +127,115 @@ class BaseBacktestEngine:
         self.required_window_size = max(max_window, 2)
     
     async def _load_strategy(self) -> None:
-        """Load strategy from parameters"""
+        """
+        Load strategy from parameters
+        
+        This method loads the strategy specified in parameters or
+        falls back to the default strategy from configuration.
+        
+        Raises:
+            BacktestEngineError: If strategy loading fails
+        """
         strategy_name = self.params.get('strategy')
         if not strategy_name:
-            raise ValueError("No strategy specified for backtest")
+            self.logger.info("No strategy specified for backtest, using default")
+            # Get default strategy from config
+            strategy_name = self.config.get("strategy", "default", default="dual_ma")
         
         strategy_params = self.params.get('strategy_params', {})
         
         try:
-            # Import here to avoid circular imports
-            from src.strategy.base import StrategyFactory
+            # Import using factory pattern
+            from src.strategy.factory import get_strategy_factory
             
-            factory = StrategyFactory.get_instance(self.config)
-            self.strategy = await factory.create(strategy_name, strategy_params)
-            await self.strategy.initialize()
+            strategy_factory = get_strategy_factory(self.config)
+            self.strategy = await strategy_factory.create(strategy_name, strategy_params)
             
             self.logger.info(f"Strategy '{strategy_name}' loaded and initialized")
         except Exception as e:
             self.logger.error(f"Failed to load strategy '{strategy_name}': {str(e)}")
-            raise
+            raise BacktestEngineError(f"Strategy loading failed: {str(e)}")
     
     async def prepare_data(self, data: Dict[str, pd.DataFrame]) -> bool:
-        """Prepare and validate data for backtesting"""
+        """
+        Prepare and validate data for backtesting
+        
+        Args:
+            data: Dictionary of symbol -> DataFrame market data
+            
+        Returns:
+            bool: True if data is sufficient for backtest
+            
+        Raises:
+            DataPreparationError: If data preparation encounters a critical error
+        """
         if not data:
             self.logger.warning("No data provided for backtest")
             return False
         
-        # Initialize data structures
-        self.data_buffers = {}
-        self.factor_cache = {}
-        self.has_sufficient_history = {}
-        self.data_queues = {}
-        
-        # Process each symbol
-        sufficient_data = True
-        for symbol, df in data.items():
-            # Validate data
-            if df.empty:
-                self.logger.warning(f"Empty data for {symbol}")
-                sufficient_data = False
-                continue
-                
-            df[symbol] = symbol
+        try:
+            # Initialize data structures
+            self.data_buffers = {}
+            self.factor_cache = {}
+            self.has_sufficient_history = {}
+            self.data_queues = {}
             
-            # Initialize buffers
-            self.data_buffers[symbol] = pd.DataFrame()
-            self.factor_cache[symbol] = {}
-            self.has_sufficient_history[symbol] = False
-            self.data_queues[symbol] = deque(maxlen=self.required_window_size)
+            # Process each symbol
+            sufficient_data = True
+            for symbol, df in data.items():
+                # Validate data
+                if df.empty:
+                    self.logger.warning(f"Empty data for {symbol}")
+                    sufficient_data = False
+                    continue
+                
+                # Ensure symbol column exists    
+                if 'symbol' not in df.columns:
+                    df['symbol'] = symbol
+                
+                # Initialize buffers
+                self.data_buffers[symbol] = pd.DataFrame()
+                self.factor_cache[symbol] = {}
+                self.has_sufficient_history[symbol] = False
+                self.data_queues[symbol] = deque(maxlen=self.required_window_size)
+                
+                # Preload data if sufficient history exists
+                if len(df) >= self.required_window_size:
+                    initial_data = df.iloc[:self.required_window_size]
+                    
+                    for _, row in initial_data.iterrows():
+                        self.data_queues[symbol].append(pd.DataFrame([row]))
+                    
+                    self.data_buffers[symbol] = initial_data.copy()
+                    self.has_sufficient_history[symbol] = True
+                    
+                    self.logger.debug(f"Preloaded {len(initial_data)} data points for {symbol}")
+                else:
+                    self.logger.warning(f"Insufficient data for {symbol}: {len(df)} < {self.required_window_size}")
+                    sufficient_data = False
             
-            # Preload data if sufficient history exists
-            if len(df) >= self.required_window_size:
-                initial_data = df.iloc[-self.required_window_size:]
-                
-                for _, row in initial_data.iterrows():
-                    self.data_queues[symbol].append(pd.DataFrame([row]))
-                
-                self.data_buffers[symbol] = initial_data.copy()
-                self.has_sufficient_history[symbol] = True
-                
-                self.logger.info(f"Preloaded {len(initial_data)} data points for {symbol}")
-            else:
-                self.logger.warning(f"Insufficient data for {symbol}: {len(df)} < {self.required_window_size}")
-                sufficient_data = False
-        
-        # Pre-calculate factors if strategy is available
-        if self.strategy and sufficient_data:
-            await self._precalculate_factors()
-        
-        return sufficient_data
+            # Pre-calculate factors if strategy is available
+            if self.strategy and sufficient_data:
+                await self._precalculate_factors()
+            
+            return sufficient_data
+            
+        except Exception as e:
+            self.logger.error(f"Data preparation error: {str(e)}")
+            raise DataPreparationError(f"Failed to prepare data: {str(e)}")
     
     async def _precalculate_factors(self) -> None:
-        """Precalculate factors for all symbols with sufficient history"""
+        """
+        Precalculate factors for all symbols with sufficient history
+        
+        This method calculates strategy factors for efficient processing
+        during the backtest.
+        """
         if not hasattr(self.strategy, '_factor_registry') or not self.strategy._factor_registry:
             return
             
+        self.logger.debug("Precalculating strategy factors")
+        
         for symbol in self.has_sufficient_history:
             if not self.has_sufficient_history[symbol]:
                 continue
@@ -180,12 +258,24 @@ class BaseBacktestEngine:
                     self.logger.error(f"Error calculating factor '{factor_name}' for {symbol}: {str(e)}")
     
     async def process_data_point(self, data_point: pd.DataFrame, symbol: str) -> pd.DataFrame:
-        """Process a single data point for a symbol"""
+        """
+        Process a single data point for a symbol
+        
+        Args:
+            data_point: Single data point as DataFrame
+            symbol: Trading symbol
+            
+        Returns:
+            pd.DataFrame: Generated signals
+            
+        Raises:
+            StrategyExecutionError: If strategy execution fails
+        """
         if not self._is_initialized:
             await self.initialize()
         
         if not self.strategy:
-            raise ValueError("No strategy loaded")
+            raise StrategyExecutionError("No strategy loaded")
         
         try:
             # Add data point to buffer
@@ -209,10 +299,19 @@ class BaseBacktestEngine:
             
         except Exception as e:
             self.logger.error(f"Error processing data point for {symbol}: {str(e)}")
-            return pd.DataFrame()
+            raise StrategyExecutionError(f"Strategy execution failed: {str(e)}")
     
     async def _add_data_point(self, data_point: pd.DataFrame, symbol: str) -> bool:
-        """Add a data point to the buffer"""
+        """
+        Add a data point to the buffer
+        
+        Args:
+            data_point: Single data point as DataFrame
+            symbol: Trading symbol
+            
+        Returns:
+            bool: True if sufficient history exists
+        """
         # Initialize buffers if needed
         if symbol not in self.data_buffers:
             self.data_buffers[symbol] = pd.DataFrame()
@@ -236,79 +335,21 @@ class BaseBacktestEngine:
         
         return self.has_sufficient_history[symbol]
     
+    @abstractmethod
     async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-        """Run backtest on all data"""
-        if not self._is_initialized:
-            await self.initialize()
+        """
+        Run backtest on provided data
         
-        start_time = time.time()
-        self._is_running = True
+        This abstract method must be implemented by subclasses to perform
+        the actual backtest execution.
         
-        results = {
-            'signals': {},
-            'metrics': {}
-        }
-        
-        try:
-            # Prepare data
-            sufficient_data = await self.prepare_data(data)
-            if not sufficient_data:
-                self.logger.warning("Insufficient data for backtest")
-                return {
-                    'error': 'Insufficient data for backtest',
-                    'metrics': self.metrics
-                }
+        Args:
+            data: Dictionary of symbol -> DataFrame market data
             
-            # Process each symbol
-            for symbol, df in data.items():
-                if symbol not in self.has_sufficient_history or not self.has_sufficient_history[symbol]:
-                    continue
-                
-                signals = []
-                
-                # Process data points after initial window
-                for i in range(self.required_window_size, len(df)):
-                    if not self._is_running:
-                        self.logger.info("Backtest stopped early")
-                        break
-                    
-                    # Get data point
-                    data_point = df.iloc[[i]]
-                    
-                    # Process data point
-                    signal = await self.process_data_point(data_point, symbol)
-                    
-                    if not signal.empty:
-                        signals.append(signal)
-                    
-                    # Allow asyncio to process other tasks
-                    if i % 100 == 0:
-                        await asyncio.sleep(0)
-                
-                # Combine signals
-                if signals:
-                    results['signals'][symbol] = pd.concat(signals)
-                else:
-                    results['signals'][symbol] = pd.DataFrame()
-                    
-                self.logger.info(f"Generated {len(results['signals'][symbol])} signals for {symbol}")
-            
-            # Calculate metrics
-            execution_time = time.time() - start_time
-            self.metrics['processing_time'] = execution_time
-            
-            results['metrics'] = self.metrics
-            
-            self.logger.info(f"Backtest completed in {execution_time:.2f}s")
-            self.logger.info(f"Generated {self.metrics['total_signals']} signals in total")
-            
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"Error during backtest: {str(e)}\n{traceback.format_exc()}")
-            return {'error': str(e), 'metrics': self.metrics}
-        finally:
-            self._is_running = False
+        Returns:
+            Dict: Backtest results
+        """
+        pass
     
     def stop(self) -> None:
         """Stop backtest execution"""
@@ -316,7 +357,11 @@ class BaseBacktestEngine:
         self.logger.info("Stopping backtest")
     
     async def shutdown(self) -> None:
-        """Clean up resources"""
+        """
+        Clean up resources
+        
+        This method performs cleanup of resources used during backtesting.
+        """
         if self.strategy and hasattr(self.strategy, 'shutdown'):
             await self.strategy.shutdown()
         

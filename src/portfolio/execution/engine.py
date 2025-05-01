@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# src/trading/execution/engine.py
+# src/portfolio/execution/engine.py
 
 import ccxt
 import pandas as pd
@@ -7,9 +7,9 @@ from typing import Dict, Optional, List, Tuple
 
 from src.common.config import ConfigManager
 from src.common.log_manager import LogManager
-from src.trading.execution.order import *
 from src.exchange.adapters.binance import Binance
-from src.trading.execution.order import Direction
+from src.portfolio.execution.order import *
+from src.portfolio.execution.order import Direction
 
 
 class ExecutionEngine:

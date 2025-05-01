@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # src/backtest/engine/market_replay.py
 
+"""
+Market Replay backtest engine implementation.
+Simulates trading with sequential processing of market data.
+"""
+
 import asyncio
 import pandas as pd
 import numpy as np
@@ -8,28 +13,53 @@ from typing import Dict, Any, Optional, List
 import time
 
 from src.common.abstract_factory import register_factory_class
-from src.backtest.engine.base import BaseBacktestEngine
+from src.common.helpers import BacktestEngine
+from src.backtest.engine.base import BaseBacktestEngine, BacktestEngineError
 
 
-@register_factory_class('backtest_factory', 'market_replay', 
+class MarketReplayEngineError(BacktestEngineError):
+    """Error specific to market replay engine operations"""
+    pass
+
+
+@register_factory_class('backtest_engine_factory', BacktestEngine.MARKETREPLAY.value, 
     description="Market Replay Backtest Engine for sequential data processing",
+    features=["sequential", "realistic_execution", "detailed_simulation"],
     category="backtest")
 class MarketReplayEngine(BaseBacktestEngine):
     """
     Market Replay Backtest Engine
     
-    Processes data sequentially, simulating real-time market conditions with position tracking.
+    Processes data sequentially, simulating real-time market conditions with
+    realistic order execution and position tracking. This engine provides
+    a more accurate simulation of live trading conditions compared to
+    vectorized approaches.
     """
     
     def __init__(self, config, params=None):
-        """Initialize market replay backtest engine"""
+        """
+        Initialize market replay backtest engine
+        
+        Args:
+            config: Configuration manager
+            params: Engine parameters
+        """
         super().__init__(config, params)
         
-        # Market replay specific settings
+        # Market replay specific settings from params with defaults
         self.replay_speed = self.params.get('replay_speed', 0)  # 0 means as fast as possible
-        self.initial_capital = self.params.get('initial_capital', 100000)
-        self.commission_rate = self.params.get('commission_rate', 0.001)
-        self.slippage = self.params.get('slippage', 0.001)
+        self.initial_capital = self.params.get(
+            'initial_capital', 
+            self.config.get("trading", "capital", "initial", default=100000)
+        )
+        self.commission_rate = self.params.get(
+            'commission_rate', 
+            self.config.get("trading", "fees", "commission", default=0.001)
+        )
+        self.slippage = self.params.get(
+            'slippage', 
+            self.config.get("trading", "fees", "slippage", default=0.001)
+        )
         
         # Portfolio state
         self.cash = self.initial_capital
@@ -38,12 +68,25 @@ class MarketReplayEngine(BaseBacktestEngine):
         self.portfolio_history = []  # Snapshots of portfolio value over time
 
     async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-        """Run market replay backtest, processing data sequentially"""
+        """
+        Run market replay backtest, processing data sequentially
+        
+        Args:
+            data: Dictionary of symbol -> DataFrame market data
+            
+        Returns:
+            Dict[str, Any]: Backtest results
+            
+        Raises:
+            MarketReplayEngineError: If backtest execution fails
+        """
         if not self._is_initialized:
             await self.initialize()
         
         start_time = time.time()
         self._is_running = True
+        
+        # Initialize portfolio state
         self.cash = self.initial_capital
         self.positions = {}
         self.trades = []
@@ -187,12 +230,20 @@ class MarketReplayEngine(BaseBacktestEngine):
             
         except Exception as e:
             self.logger.error(f"Error during market replay: {str(e)}")
-            return {'error': str(e)}
+            raise MarketReplayEngineError(f"Market replay failed: {str(e)}")
         finally:
             self._is_running = False
 
     def _get_common_timeline(self, data: Dict[str, pd.DataFrame]) -> List:
-        """Extract a common timeline from all data sources"""
+        """
+        Extract a common timeline from all data sources
+        
+        Args:
+            data: Dictionary of symbol -> DataFrame market data
+            
+        Returns:
+            List: Sorted unique timestamps
+        """
         # Extract all timestamps
         all_timestamps = []
         for df in data.values():
@@ -205,7 +256,16 @@ class MarketReplayEngine(BaseBacktestEngine):
         return sorted(set(all_timestamps))
     
     def _get_data_at_timestamp(self, data: Dict[str, pd.DataFrame], timestamp) -> Dict[str, pd.DataFrame]:
-        """Get data for all symbols at a specific timestamp"""
+        """
+        Get data for all symbols at a specific timestamp
+        
+        Args:
+            data: Dictionary of symbol -> DataFrame market data
+            timestamp: Timestamp to fetch data for
+            
+        Returns:
+            Dict[str, pd.DataFrame]: Symbol -> data point at timestamp
+        """
         result = {}
         
         for symbol, df in data.items():
@@ -221,7 +281,16 @@ class MarketReplayEngine(BaseBacktestEngine):
         return result
     
     def _execute_signals(self, signals: pd.DataFrame, current_data: Dict[str, pd.DataFrame]) -> List[Dict]:
-        """Execute trading signals and return transactions"""
+        """
+        Execute trading signals and return transactions
+        
+        Args:
+            signals: Trading signals DataFrame
+            current_data: Current market data for all symbols
+            
+        Returns:
+            List[Dict]: List of executed trades
+        """
         if signals.empty:
             return []
         
@@ -326,7 +395,15 @@ class MarketReplayEngine(BaseBacktestEngine):
         return trades
     
     def _calculate_portfolio_value(self, current_data: Dict[str, pd.DataFrame]) -> float:
-        """Calculate current portfolio value"""
+        """
+        Calculate current portfolio value
+        
+        Args:
+            current_data: Current market data for all symbols
+            
+        Returns:
+            float: Current portfolio value
+        """
         portfolio_value = self.cash
         
         # Add position values
