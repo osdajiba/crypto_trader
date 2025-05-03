@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 from src.common.abstract_factory import register_factory_class
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.strategy.base import BaseStrategy
 from src.strategy.factors import get_factor_registry
 from src.strategy.factors.trend import SMA, EMA

@@ -14,7 +14,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 sys.path.append(project_root)
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager, LogInitializer
 from src.core.core import TradingCore
 
@@ -99,14 +99,10 @@ class TradingSystemLauncher:
             config_path = Path(self.args.config)
         else:
             config_path = default_config_path
-        
-        # Initialize config manager
-        config_manager = ConfigManager(str(config_path))
-        
+
         # Load configuration
         try:
-            config_manager.load()
-            self.config = config_manager
+            self.config = config_manager = ConfigManager(str(config_path))
         except Exception as e:
             print(f"Warning: Failed to load config: {e}")
             print(f"Using default configuration.")

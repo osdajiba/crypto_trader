@@ -6,15 +6,22 @@ Data source factory module.
 Provides factory methods for creating data source instances according to the factory pattern standard.
 """
 
+from enum import Enum
 from typing import Dict, Optional, Any, Type, List, Union
 import asyncio
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.common.helpers import DataSource
 from src.datasource.sources.base import BaseDataSource, DataSourceError
 
+
+class DataSource(Enum):
+    """Centralize the definition of data source types"""
+    LOCAL = "local"
+    EXCHANGE = "exchange"
+    HIBRID = "hybrid"
+    
 
 class DataSourceFactory(AbstractFactory):
     """

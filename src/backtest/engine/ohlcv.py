@@ -14,7 +14,6 @@ import time
 import asyncio
 
 from src.common.abstract_factory import register_factory_class
-from src.common.helpers import BacktestEngine
 from src.backtest.engine.base import BaseBacktestEngine, BacktestEngineError
 
 
@@ -23,7 +22,7 @@ class OHLCVEngineError(BacktestEngineError):
     pass
 
 
-@register_factory_class('backtest_engine_factory', BacktestEngine.OHLCV.value, 
+@register_factory_class('backtest_engine_factory', "ohlcv", 
     description="OHLCV Engine for vectorized backtesting",
     features=["vectorized", "ohlcv", "performance_optimized"],
     category="backtest")

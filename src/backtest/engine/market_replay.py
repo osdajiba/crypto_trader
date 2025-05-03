@@ -13,7 +13,6 @@ from typing import Dict, Any, Optional, List
 import time
 
 from src.common.abstract_factory import register_factory_class
-from src.common.helpers import BacktestEngine
 from src.backtest.engine.base import BaseBacktestEngine, BacktestEngineError
 
 
@@ -22,7 +21,7 @@ class MarketReplayEngineError(BacktestEngineError):
     pass
 
 
-@register_factory_class('backtest_engine_factory', BacktestEngine.MARKETREPLAY.value, 
+@register_factory_class('backtest_engine_factory', "market_replay", 
     description="Market Replay Backtest Engine for sequential data processing",
     features=["sequential", "realistic_execution", "detailed_simulation"],
     category="backtest")

@@ -6,15 +6,21 @@ Backtest engine factory module.
 Provides factory methods for creating backtest engine instances according to the factory pattern standard.
 """
 
+from enum import Enum
 from typing import Dict, Optional, Any, Type, List
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.common.helpers import BacktestEngine
 from src.backtest.engine.base import BaseBacktestEngine
 
 
+class BacktestEngine(Enum):
+    """Centralize the definition of backtest engine types"""
+    MARKETREPLAY = "market_replay"
+    OHLCV = "ohlcv"
+    
+    
 class BacktestEngineFactory(AbstractFactory):
     """
     Factory for creating backtest engines following the standard factory pattern.

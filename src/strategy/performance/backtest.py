@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Union, List, Tuple
 from pathlib import Path
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.strategy.performance.base import BasePerformanceAnalyzer
 from src.strategy.performance.metrics import PerformanceMetrics

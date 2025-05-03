@@ -6,14 +6,14 @@ import asyncio
 from decimal import Decimal
 from typing import Dict, Any, Optional, Union
 
-from src.exchange.adapters.base import retry_exchange_operation
+from src.exchange.base import retry_exchange_operation
 from src.common.abstract_factory import register_factory_class
 from src.portfolio.execution.order import Order, Direction, OrderStatus
-from src.portfolio.assets.tradable_asset import TradableAsset, logger
+from src.portfolio.assets.base import Asset, logger
 
 
 @register_factory_class('asset_factory', 'future')
-class Future(TradableAsset):
+class Future(Asset):
     """
     Future contract asset implementation for derivatives trading
     Integrates with CCXT exchange API futures markets and execution engine
@@ -243,6 +243,7 @@ class Future(TradableAsset):
         logger.info(f"Updated {self.symbol} future position after order fill: {float(self._contracts)} contracts "
                    f"at ${float(self._entry_price):.2f}, {self.position_type}")
 
+    @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
     async def set_leverage(self, leverage: float) -> Dict[str, Any]:
         """
         Set leverage for trading
@@ -379,6 +380,7 @@ class Future(TradableAsset):
             if self.exchange and hasattr(self.exchange, 'exchange') and hasattr(self.exchange.exchange, 'options'):
                 self.exchange.exchange.options['defaultType'] = current_type
     
+    @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
     async def sync_position(self) -> Dict[str, Any]:
         """
         Sync futures position with exchange

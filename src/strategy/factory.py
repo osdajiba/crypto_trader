@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 # src/strategy/factory.py
 
+from enum import Enum
 from typing import Dict, Optional, Any, Type, List, Union
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.strategy.base import BaseStrategy
 
 
+class Strategy(Enum):
+    """Centralize the definition of backtest engine types"""
+    DUAL_MA = "dual_ma"
+    MF = "multi_factors"
+    NN = "neural_network"
+    
+    
 class StrategyFactory(AbstractFactory):
     """Factory for creating strategy instances"""
     
@@ -27,7 +35,7 @@ class StrategyFactory(AbstractFactory):
     
     def _register_default_strategies(self) -> None:
         """Register default strategies with consistent metadata"""
-        self.register("dual_ma", "src.strategy.implementations.dual_ma.DualMAStrategy", {
+        self.register(Strategy.DUAL_MA.value, "src.strategy.implementations.dual_ma.DualMAStrategy", {
             "description": "Dual Moving Average Crossover Strategy",
             "features": ["moving_averages", "crossover", "trend_following"],
             "category": "trend",
@@ -40,13 +48,13 @@ class StrategyFactory(AbstractFactory):
             ]
         })
         
-        self.register("multi_factors", "src.strategy.implementations.multi_factors.MultiFactorsStrategy", {
+        self.register(Strategy.MF.value, "src.strategy.implementations.multi_factors.MultiFactorsStrategy", {
             "description": "Multi-Factor Strategy with custom factor combinations",
             "features": ["multi_factor", "customizable", "technical_indicators"],
             "category": "custom"
         })
         
-        self.register("neural_network", "src.strategy.implementations.neural_network.NeuralNetworkStrategy", {
+        self.register(Strategy.NN.value, "src.strategy.implementations.neural_network.NeuralNetworkStrategy", {
             "description": "Neural Network based prediction strategy",
             "features": ["machine_learning", "prediction", "advanced"],
             "category": "ml"

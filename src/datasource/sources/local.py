@@ -15,7 +15,7 @@ import asyncio
 
 from src.common.abstract_factory import register_factory_class
 from src.common.helpers import TimeUtils, ParquetFileManager
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.datasource.sources.base import BaseDataSource, DataSourceFetchError
 
 

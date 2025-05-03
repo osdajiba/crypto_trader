@@ -9,7 +9,6 @@ import hashlib
 from enum import Enum
 
 from src.common.log_manager import LogManager
-logger = LogManager.get_logger("strategy.factors")
 
 
 class SignalType(Enum):
@@ -25,16 +24,22 @@ class SignalType(Enum):
 class FactorBase(ABC):
     """Base class for all technical indicators and factors"""
     
-    def __init__(self, name: Optional[str] = None):
+    def __init__(self, config=None, params: Optional[Dict[str, Any]] = None):
         """
         Initialize indicator
         
         Args:
-            name: Indicator name
+            config: Configuration manager (optional)
+            params: Parameters for indicator initialization
         """
         self._cache = {}
-        self._name = name or self.__class__.__name__
+        self.params = params or {}
+        self._name = self.params.get('name') or self.__class__.__name__
         self.logger = LogManager.get_logger(f"strategy.factors.{self._name.lower()}")
+    
+    def initialize(self) -> None:
+        """Initialize factor (called after creation by factory)"""
+        self.logger.debug(f"Initializing factor: {self._name}")
     
     def clear_cache(self) -> None:
         """Clear calculation cache"""
@@ -130,7 +135,7 @@ class FactorBase(ABC):
         pass
     
     def generate_signal(self, data: pd.DataFrame, signal_type: SignalType = SignalType.STANDARD, 
-                       params: Optional[Dict[str, Any]] = None) -> pd.Series:
+                      params: Optional[Dict[str, Any]] = None) -> pd.Series:
         """
         Generate trading signals based on indicator
         

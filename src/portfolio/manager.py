@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 # src/portfolio/manager.py
 
+from enum import Enum
 import time
 import asyncio
 from decimal import Decimal
-from typing import Dict, List, Any, Optional, Union, Set
+from typing import Dict, List, Any, Optional
 import pandas as pd
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.portfolio.assets.base import Asset
-from src.portfolio.assets.tradable_asset import TradableAsset
-from src.portfolio.assets.factory import AssetFactory
-from src.portfolio.execution.order import Direction
+from src.portfolio.assets.factory import *
+from src.exchange.factory import get_exchange_factory
 
-
+    
 logger = LogManager.get_logger("portfolio.manager")
 
+
+class TradableAsset(Enum):
+    """Centralize the definition of backtest engine types"""
+    SPOT = "spot"
+    FUTURE = "future"
+    
 
 class PortfolioManager:
     """
@@ -34,7 +40,7 @@ class PortfolioManager:
         """
         self.assets: Dict[str, Asset] = {}
         self.config = config if config else ConfigManager()
-        self.exchange = exchange
+        self.exchange = exchange if exchange is not None else get_exchange_factory(config)
         
         # Initialize asset factory
         self.asset_factory = AssetFactory.instance(self.config)

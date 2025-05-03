@@ -4,10 +4,10 @@
 import asyncio
 from typing import Dict, List, Optional, Callable, Any
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
-from src.trading.base import TradingModeFactory
+from src.trading.factory import get_trading_mode_factory
 
 
 class TradingCore:
@@ -31,7 +31,7 @@ class TradingCore:
         self._progress_callback = None
         
         # Create trading mode factory
-        self.mode_factory = TradingModeFactory(config=self.config)
+        self.mode_factory = get_trading_mode_factory(config=self.config)
         
         # Get available pattern
         available_modes = self.mode_factory.get_available_modes()

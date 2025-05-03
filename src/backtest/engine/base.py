@@ -13,7 +13,7 @@ from collections import deque
 import time
 import asyncio
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 
 

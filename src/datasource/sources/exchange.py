@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 
 from src.common.abstract_factory import register_factory_class
 from src.common.helpers import TimeUtils, FileUtils
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.datasource.sources.base import BaseDataSource, DataSourceConnectionError, DataSourceFetchError
 from src.exchange.factory import get_exchange_factory
 

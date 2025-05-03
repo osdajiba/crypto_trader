@@ -9,7 +9,7 @@ Provides factory methods for creating exchange instances according to the factor
 from typing import Dict, Optional, Any, Type, List
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.exchange.base import Exchange
 
@@ -46,7 +46,7 @@ class ExchangeFactory(AbstractFactory):
         """Register default exchanges with consistent metadata"""
         self.register(
             "binance", 
-            "src.exchange.implementations.binance.BinanceExchange",
+            "src.exchange.binance.BinanceExchange",
             {
                 "description": "Binance exchange integration",
                 "features": ["spot", "futures", "websocket"],
@@ -57,7 +57,7 @@ class ExchangeFactory(AbstractFactory):
         # You can register other exchanges similarly
         self.register(
             "bybit",
-            "src.exchange.implementations.bybit.BybitExchange",
+            "src.exchange.bybit.BybitExchange",
             {
                 "description": "Bybit exchange integration",
                 "features": ["spot", "futures", "websocket"],
@@ -71,7 +71,7 @@ class ExchangeFactory(AbstractFactory):
         """Auto-discover additional exchange implementations"""
         try:
             # Discover implementations from exchange directory
-            module_path = "src.exchange.implementations"
+            module_path = "src.exchange"
             self.discover_registrable_classes(
                 Exchange, 
                 module_path, 

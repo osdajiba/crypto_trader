@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# src/common/config.py
+# src/common/config_manager.py
 
 from datetime import datetime, timedelta
 import json
@@ -615,7 +615,7 @@ class ConfigParser:
         Returns:
             List of strategy names
         """
-        strategies = ["dual_ma", "neural_network"]  # Default strategies
+        strategies = ["dual_ma", "multi_factors", "neural_network"]  # Default strategies
         
         # Try to find additional strategies from config
         if 'strategy' in self.config:
@@ -690,3 +690,65 @@ class ConfigParser:
             else:
                 return default
         return result
+    
+
+class ConfigValidator:
+    """配置验证器"""
+    
+    @staticmethod
+    def validate_schema(config, schema):
+        """
+        验证配置是否符合模式
+        
+        Args:
+            config: 配置对象
+            schema: 验证模式
+            
+        Raises:
+            ConfigValidationError: 验证失败
+        """
+        for key, spec in schema.items():
+            # 检查必填项
+            if spec.get('required', False) and key not in config:
+                raise ConfigValidationError(f"Missing required key: {key}")
+                
+            if key not in config:
+                continue
+                
+            value = config[key]
+            
+            # 类型检查
+            if 'type' in spec:
+                expected_type = spec['type']
+                if not isinstance(value, expected_type):
+                    type_name = expected_type.__name__
+                    value_type = type(value).__name__
+                    raise ConfigValidationError(
+                        f"Invalid type for {key}: expected {type_name}, got {value_type}"
+                    )
+            
+            # 值范围检查
+            if 'min' in spec and value < spec['min']:
+                raise ConfigValidationError(
+                    f"Value for {key} is too small: minimum is {spec['min']}, got {value}"
+                )
+                
+            if 'max' in spec and value > spec['max']:
+                raise ConfigValidationError(
+                    f"Value for {key} is too large: maximum is {spec['max']}, got {value}"
+                )
+                
+            # 枚举值检查
+            if 'enum' in spec and value not in spec['enum']:
+                raise ConfigValidationError(
+                    f"Invalid value for {key}: must be one of {spec['enum']}, got {value}"
+                )
+                
+            # 递归检查子项
+            if 'children' in spec and isinstance(value, dict):
+                try:
+                    ConfigValidator.validate_schema(value, spec['children'])
+                except ConfigValidationError as e:
+                    raise ConfigValidationError(f"{key}.{e}")
+                
+

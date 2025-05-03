@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 
 from src.common.helpers import TimeUtils
 from src.common.log_manager import LogManager
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.async_executor import AsyncExecutor
 
 

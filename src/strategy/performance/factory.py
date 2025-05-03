@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 # src/strategy/performance/factory.py
 
+from enum import Enum
 from typing import Dict, Optional, Any, Type
 import asyncio
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.common.helpers import PerformanceAnalyzer
 from src.strategy.performance.base import BasePerformanceAnalyzer
 
 
+class PerformanceAnalyzer(Enum):
+    """Centralize the definition of backtest engine types"""
+    BACKTEST = "backtest"
+    TRADING = "trading"
+    
+    
 class PerformanceAnalyzerFactory(AbstractFactory):
     """Factory for creating performance analyzer instances"""
     

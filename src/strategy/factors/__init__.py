@@ -2,6 +2,7 @@
 # src/strategy/factors/__init__.py
 
 from src.strategy.factors.base import FactorBase, SignalType
+from src.strategy.factors.factory import FactorFactory
 from src.strategy.factors.momentum import RSI, MACD, Stochastic
 from src.strategy.factors.volatility import BollingerBands, ATR, ADX
 from src.strategy.factors.volume import OBV, MoneyFlowIndex, VolumeOscillator
@@ -12,6 +13,7 @@ __all__ = [
     # Base classes
     'FactorBase',
     'SignalType',
+    'FactorFactory',
     
     # Momentum indicators
     'RSI',

@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import time
 import asyncio
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
 
@@ -33,8 +33,8 @@ class BaseStrategy(ABC):
         self._is_initialized = False
         
         # Factor management
-        self._factor_registry = {}  # Factor registry
-        self._data_buffer = {}      # Data buffer
+        self._factor_registry = {}
+        self._data_buffer = {}
         self._required_data_points = 0  # Will be computed based on factors
         self._has_sufficient_history = {}  # Track history per symbol
         self._factor_cache = {}     # Cache for factor values
@@ -48,13 +48,8 @@ class BaseStrategy(ABC):
             'runs': 0
         }
         
-        # Basic configuration
-        self.lookback_period = self.params.get("lookback_period", 60)
-        
-        # Async execution
+        self.lookback_period = self.params.get("lookback_period", 60)    # Basic configuration
         self.executor = AsyncExecutor()
-        
-        # Initialize factors
         self._init_factors()
     
     def _init_factors(self) -> None:
@@ -100,7 +95,6 @@ class BaseStrategy(ABC):
                         dep_window += 1
                     max_window = max(max_window, dep_window)
         
-        # Set the required data points (minimum 2)
         self._required_data_points = max(max_window, 2) + 1
         
         # Update lookback period if needed
@@ -119,9 +113,7 @@ class BaseStrategy(ABC):
             Trading signals
         """
         try:
-            start_time = time.time()
-            
-            # Manage data buffer
+            start_time = time.time()            
             sufficient_history = await self._manage_data_buffer(data, symbol)
             
             # Check if we have enough data to generate signals
@@ -129,10 +121,7 @@ class BaseStrategy(ABC):
                 self.logger.debug(f"Insufficient history for {symbol}, need {self._required_data_points} points")
                 return pd.DataFrame()
             
-            # Generate signals
             signals = await self._generate_signals(self._data_buffer[symbol])
-            
-            # Add symbol if not present
             if not signals.empty and 'symbol' not in signals.columns:
                 signals['symbol'] = symbol
             

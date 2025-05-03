@@ -10,6 +10,7 @@ from collections import defaultdict
 from typing import Callable, Optional
 
 from src.common.log_manager import LogManager
+from src.exchange.base import Exchange
 
 
 # 定义枚举类型
@@ -85,11 +86,13 @@ class Order:
         order_id: Optional[str] = None,
         timestamp: Optional[datetime.datetime] = None,
         validity: Validity = Validity.DAY,
-        event_bus: Optional[OrderEventBus] = None
+        event_bus: Optional[OrderEventBus] = None,
+        exchange: Optional[Exchange] = None        
     ):
         # 初始化日志和事件总线
         self.logger = LogManager.get_logger("system.order")
         self.event_bus = event_bus or OrderEventBus()
+        self.exchange = exchange
 
         # 参数验证
         if not isinstance(order_type, OrderType):

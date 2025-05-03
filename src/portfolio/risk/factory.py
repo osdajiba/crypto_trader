@@ -6,14 +6,22 @@ Risk manager factory module.
 Provides factory methods for creating risk manager instances according to the factory pattern standard.
 """
 
+from enum import Enum
 from typing import Dict, Optional, Any, Type, List
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.portfolio.risk.base import BaseRiskManager
 from src.portfolio.manager import PortfolioManager
 
+
+class RiskManager(Enum):
+    """Centralize the definition of backtest engine types"""
+    BACKTEST = "backtest"
+    STANDARD = "standard"
+    CONSERVATIVE = "conservative"
+    
 
 class RiskManagerFactory(AbstractFactory):
     """
@@ -46,7 +54,7 @@ class RiskManagerFactory(AbstractFactory):
     def _register_default_risk_managers(self) -> None:
         """Register default risk managers with consistent metadata"""
         self.register(
-            "standard", 
+            RiskManager.STANDARD.value, 
             "src.portfolio.risk.standard.StandardRiskManager",
             {
                 "description": "Standard risk management implementation",
@@ -56,7 +64,7 @@ class RiskManagerFactory(AbstractFactory):
         )
         
         self.register(
-            "backtest", 
+            RiskManager.BACKTEST.value, 
             "src.portfolio.risk.backtest.BacktestRiskManager",
             {
                 "description": "Simplified risk management for backtesting",
@@ -66,7 +74,7 @@ class RiskManagerFactory(AbstractFactory):
         )
         
         self.register(
-            "conservative", 
+            RiskManager.CONSERVATIVE.value,
             "src.portfolio.risk.conservative.ConservativeRiskManager",
             {
                 "description": "Conservative risk management with stricter limits",
@@ -81,7 +89,7 @@ class RiskManagerFactory(AbstractFactory):
         """Auto-discover additional risk manager implementations"""
         try:
             # Discover implementations from implementations directory
-            module_path = "src.portfolio.risk.implementations"
+            module_path = "src.portfolio.risk"
             self.discover_registrable_classes(
                 BaseRiskManager, 
                 module_path, 
@@ -112,11 +120,11 @@ class RiskManagerFactory(AbstractFactory):
         
         # Default risk managers for different modes
         if op_mode.lower() == "backtest":
-            default_risk_manager = "backtest"
+            default_risk_manager = RiskManager.BACKTEST.value
         elif op_mode.lower() == "live":
-            default_risk_manager = "conservative"
+            default_risk_manager = RiskManager.CONSERVATIVE.value
         else:
-            default_risk_manager = "standard"
+            default_risk_manager = RiskManager.STANDARD.value
             
         # Override from config if specified
         default_risk_manager = self.config.get("risk", "default_manager", default=default_risk_manager)
@@ -165,8 +173,9 @@ class RiskManagerFactory(AbstractFactory):
         return metadata.get('features', [])
     
     async def create_with_config_params(self, 
+                                      portfolio_manager: Optional[PortfolioManager],
                                       name: Optional[str] = None, 
-                                      portfolio_manager: Optional[PortfolioManager] = None) -> BaseRiskManager:
+                                      ) -> BaseRiskManager:
         """
         Create a risk manager with parameters from configuration
         
@@ -188,7 +197,7 @@ class RiskManagerFactory(AbstractFactory):
         # Add config params
         if risk_params:
             params.update(risk_params)
-        
+            
         return await self.create(resolved_name, params=params)
 
 

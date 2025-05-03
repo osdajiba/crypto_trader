@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 from src.common.log_manager import LogManager
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 
 
 class RiskValidationError(Exception):

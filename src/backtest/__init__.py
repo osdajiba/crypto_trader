@@ -10,7 +10,7 @@ with different engines:
 - Market Replay Engine: Sequential data processing for realistic simulation
 
 Usage:
-    from src.src.backtest.engine.factory import get_backtest_factory
+    from src.src.backtest.engine.factory import get_backtest_engine_factory
     from src.backtest.mode import BacktestMode
     from src.common.config import ConfigManager
     
@@ -19,11 +19,11 @@ Usage:
     backtest_mode = BacktestMode(config)
     
     # Or create a specific engine directly
-    factory = get_backtest_factory(config)
+    factory = get_backtest_engine_factory(config)
     engine = await factory.create_engine('ohlcv', {'strategy': 'dual_ma'})
 """
 
-from src.backtest.engine.factory import get_backtest_factory, BacktestFactory
+from src.backtest.engine.factory import get_backtest_engine_factory, BacktestEngineFactory
 from src.backtest.backtest import BacktestMode
 
 # Engine imports

@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 # src/trading/factory.py
 
+from enum import Enum
 from typing import Dict, Optional, Any, Type, List
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.common.helpers import TradingMode
 from src.trading.base import BaseTradingMode
 
+
+class TradingMode(Enum):    
+    """Centralize the definition of transaction mode types"""
+    BACKTEST = "backtest"
+    PAPER = "paper"
+    LIVE = "live"
+    
 
 class TradingModeFactory(AbstractFactory):
     """Factory for creating trading mode instances"""
@@ -26,19 +33,19 @@ class TradingModeFactory(AbstractFactory):
     
     def _register_default_modes(self) -> None:
         """Register default trading modes with consistent metadata"""
-        self.register(TradingMode.BACKTEST.value, "src.trading.modes.backtest.BacktestMode", {
+        self.register(TradingMode.BACKTEST.value, "src.backtest.backtest.BacktestMode", {
             "description": "Historical data backtesting",
             "features": ["historical_data", "performance_analysis"],
             "category": "simulation"
         })
         
-        self.register(TradingMode.PAPER.value, "src.trading.modes.paper.PaperMode", {
+        self.register(TradingMode.PAPER.value, "src.trading.paper.PaperMode", {
             "description": "Paper trading (uses real market data without real funds)",
             "features": ["real_time_data", "virtual_execution"],
             "category": "simulation"
         })
         
-        self.register(TradingMode.LIVE.value, "src.trading.modes.live.LiveMode", {
+        self.register(TradingMode.LIVE.value, "src.trading.live.LiveMode", {
             "description": "Live trading (uses real funds on exchange)",
             "features": ["real_time_data", "real_execution", "risk_management"],
             "category": "production"
@@ -47,7 +54,7 @@ class TradingModeFactory(AbstractFactory):
     def _discover_trading_modes(self) -> None:
         """Auto-discover trading mode modules"""
         try:
-            mode_dir = "src.trading.modes"
+            mode_dir = "src.backtest" if self.config.get('system','operational_mode')=="backtest" else "src.trading"
             self.discover_registrable_classes(BaseTradingMode, mode_dir, "trading_mode_factory")
         except Exception as e:
             self.logger.error(f"Error auto-discovering trading modes: {e}")

@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime
 
 from src.common.abstract_factory import register_factory_class
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.trading.base import BaseTradingMode
 
 

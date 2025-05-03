@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional, Union, Tuple
 import os
 import json
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 
 

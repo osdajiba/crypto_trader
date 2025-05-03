@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import asyncio
 from tqdm import tqdm
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.helpers import TimeUtils
 from src.common.abstract_factory import register_factory_class
 from src.trading.base import BaseTradingMode

@@ -9,11 +9,13 @@ Provides abstract base class for all exchange interfaces.
 import pandas as pd
 import asyncio
 import time
+import random
+import functools
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Any, Union, List, Callable
+from typing import Dict, Optional, Any, Union, List, Callable, Type, Set, TypeVar
 from datetime import datetime
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 
 
@@ -35,6 +37,90 @@ class ExchangeAPIError(ExchangeError):
 class ExchangeRateLimitError(ExchangeError):
     """Rate limit exceeded"""
     pass
+
+
+# Type variable for function return type
+T = TypeVar('T')
+
+
+def retry_exchange_operation(max_attempts: int = 3, 
+                             base_delay: float = 1.0, 
+                             max_delay: float = 30.0,
+                             retryable_exceptions: Optional[Set[Type[Exception]]] = None):
+    """
+    Decorator for retrying exchange operations with exponential backoff and jitter
+    
+    Args:
+        max_attempts: Maximum number of retry attempts
+        base_delay: Base delay between retries in seconds
+        max_delay: Maximum delay between retries in seconds
+        retryable_exceptions: Set of exception types that should trigger retry
+                              If None, will retry on any exception
+    
+    Returns:
+        Decorated function with retry logic
+    """
+    # Default retryable exceptions if not specified
+    if retryable_exceptions is None:
+        retryable_exceptions = {
+            ExchangeConnectionError,
+            ExchangeAPIError,
+            ExchangeRateLimitError,
+            ConnectionError,
+            TimeoutError,
+            asyncio.TimeoutError
+        }
+    
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            # Get logger - attempt to get from instance if available, otherwise use module logger
+            if args and hasattr(args[0], 'logger'):
+                logger = args[0].logger
+            else:
+                logger = LogManager.get_logger("exchange.retry")
+                
+            attempt = 0
+            last_exception = None
+            
+            while attempt < max_attempts:
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    # Check if exception is retryable
+                    is_retryable = False
+                    for exc_type in retryable_exceptions:
+                        if isinstance(e, exc_type):
+                            is_retryable = True
+                            break
+                    
+                    # If exception is not retryable, re-raise immediately
+                    if not is_retryable:
+                        raise
+                    
+                    attempt += 1
+                    last_exception = e
+                    
+                    # If this was the last attempt, re-raise the exception
+                    if attempt >= max_attempts:
+                        logger.error(f"Retry exhausted after {attempt} attempts: {str(e)}")
+                        raise
+                    
+                    # Calculate delay with exponential backoff and jitter
+                    delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+                    jitter = random.uniform(0.8, 1.2)  # 20% jitter
+                    final_delay = delay * jitter
+                    
+                    logger.warning(f"Retry attempt {attempt}/{max_attempts} after {final_delay:.2f}s: {str(e)}")
+                    await asyncio.sleep(final_delay)
+            
+            # We should never reach here, but just in case
+            if last_exception:
+                raise last_exception
+            raise ExchangeError("Retry failed for unknown reason")
+            
+        return wrapper
+    return decorator
 
 
 class TokenBucket:
@@ -303,7 +389,8 @@ class Exchange(ABC):
             if wait_time > 30:  # If wait time is excessive, raise error
                 raise ExchangeRateLimitError(f"Rate limit exceeded, would need to wait {wait_time:.2f} seconds")
             self.logger.warning(f"Rate limit reached, waiting {wait_time:.2f} seconds")
-            
+    
+    @retry_exchange_operation()
     async def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
         """
         Fetch current ticker data for a symbol
@@ -319,6 +406,7 @@ class Exchange(ABC):
         """
         raise NotImplementedError("fetch_ticker not implemented by this exchange")
     
+    @retry_exchange_operation()
     async def fetch_order_book(self, symbol: str, limit: int = 20) -> Dict[str, Any]:
         """
         Fetch order book for a symbol
@@ -335,6 +423,7 @@ class Exchange(ABC):
         """
         raise NotImplementedError("fetch_order_book not implemented by this exchange")
     
+    @retry_exchange_operation()
     async def fetch_trades(self, symbol: str, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Fetch recent trades for a symbol
@@ -350,6 +439,184 @@ class Exchange(ABC):
             NotImplementedError: If not implemented by subclass
         """
         raise NotImplementedError("fetch_trades not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def create_order(self, 
+                     symbol: str, 
+                     order_type: str, 
+                     side: str, 
+                     amount: float,
+                     price: Optional[float] = None, 
+                     params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Create an order on the exchange
+        
+        Args:
+            symbol: Trading pair symbol
+            order_type: Order type (e.g., 'market', 'limit')
+            side: Order side ('buy' or 'sell')
+            amount: Order amount
+            price: Order price (required for limit orders)
+            params: Additional parameters for the order
+            
+        Returns:
+            Dict[str, Any]: Order information
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("create_order not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def cancel_order(self, order_id: str, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Cancel an order on the exchange
+        
+        Args:
+            order_id: Order ID to cancel
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Cancellation result
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("cancel_order not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def fetch_order(self, order_id: str, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Fetch order details
+        
+        Args:
+            order_id: Order ID to fetch
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Order details
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("fetch_order not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def fetch_orders(self, symbol: str, since: Optional[int] = None, 
+                    limit: Optional[int] = None, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch multiple orders
+        
+        Args:
+            symbol: Trading pair symbol
+            since: Timestamp to fetch orders from
+            limit: Maximum number of orders to fetch
+            params: Additional parameters
+            
+        Returns:
+            List[Dict[str, Any]]: List of orders
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("fetch_orders not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def fetch_open_orders(self, symbol: Optional[str] = None, 
+                         since: Optional[int] = None, 
+                         limit: Optional[int] = None, 
+                         params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch open orders
+        
+        Args:
+            symbol: Trading pair symbol (optional)
+            since: Timestamp to fetch orders from
+            limit: Maximum number of orders to fetch
+            params: Additional parameters
+            
+        Returns:
+            List[Dict[str, Any]]: List of open orders
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("fetch_open_orders not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def fetch_closed_orders(self, symbol: Optional[str] = None, 
+                           since: Optional[int] = None, 
+                           limit: Optional[int] = None, 
+                           params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch closed orders
+        
+        Args:
+            symbol: Trading pair symbol (optional)
+            since: Timestamp to fetch orders from
+            limit: Maximum number of orders to fetch
+            params: Additional parameters
+            
+        Returns:
+            List[Dict[str, Any]]: List of closed orders
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("fetch_closed_orders not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def fetch_balance(self, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Fetch account balance
+        
+        Args:
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Account balance information
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass
+        """
+        raise NotImplementedError("fetch_balance not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def fetch_position(self, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Fetch position information for futures trading
+        
+        Args:
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Position information
+            
+        Raises:
+            NotImplementedError: If not implemented by this exchange
+        """
+        raise NotImplementedError("fetch_position not implemented by this exchange")
+    
+    @retry_exchange_operation()
+    async def set_leverage(self, leverage: float, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Set leverage for futures trading
+        
+        Args:
+            leverage: Leverage level
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Response from exchange
+            
+        Raises:
+            NotImplementedError: If not implemented by this exchange
+        """
+        raise NotImplementedError("set_leverage not implemented by this exchange")
     
     def is_initialized(self) -> bool:
         """

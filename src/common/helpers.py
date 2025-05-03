@@ -11,66 +11,14 @@ import pandas as pd
 import aiofiles
 import pyarrow as pa
 import pyarrow.parquet as pq
-from enum import Enum
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Callable, Tuple, Union
 
-
 from src.common.log_manager import LogManager
+
+
 logger = LogManager.get_logger("helpers")
 
-    
-class BacktestEngine(Enum):
-    """Centralize the definition of backtest engine types"""
-    MARKETREPLAY = "market_replay"
-    OHLCV = "ohlcv"
-    
-    
-class TradingMode(Enum):    
-    """Centralize the definition of transaction mode types"""
-    BACKTEST = "backtest"
-    PAPER = "paper"
-    LIVE = "live"
-    
-    
-class DataSource(Enum):
-    """Centralize the definition of data source types"""
-    LOCAL = "local"
-    EXCHANGE = "exchange"
-    HIBRID = "hybrid"
-
-
-class Execution(Enum):
-    """Centralize the definition of data source types"""
-    BACKTEST = "backtest"
-    PAPER = "paper"
-    LIVE = "live"
-    
-
-class RiskManager(Enum):
-    """Centralize the definition of backtest engine types"""
-    BACKTEST = "backtest"
-    TRADING = "trading"
-
-
-class PerformanceAnalyzer(Enum):
-    """Centralize the definition of backtest engine types"""
-    BACKTEST = "backtest"
-    TRADING = "trading"
-    
-
-class Strategy(Enum):
-    """Centralize the definition of backtest engine types"""
-    DUAL_MA = "dual_ma"
-    MF = "multi_factors"
-    NN = "neural_network"
-    
-    
-class TradableAsset(Enum):
-    """Centralize the definition of backtest engine types"""
-    SPOT = "spot"
-    FUTURE = "future"
-    
     
 class TimeUtils:
     """Enhanced time processing utility class"""
@@ -823,3 +771,99 @@ class ParquetFileManager:
         except Exception as e:
             logger.error(f"Error saving dataframe: {e}")
             return False
+        
+    
+
+class DataCache:
+    """轻量级内存数据缓存"""
+    
+    def __init__(self, max_size=1000, ttl=3600):
+        self.max_size = max_size
+        self.ttl = ttl  # 条目生存时间(秒)
+        self._cache = {}
+        self._access_times = {}
+        self._insert_times = {}
+    
+    def get(self, key, default=None):
+        """获取缓存内容，考虑TTL"""
+        if key not in self._cache:
+            return default
+            
+        # 检查是否过期
+        if time.time() - self._insert_times[key] > self.ttl:
+            self.remove(key)
+            return default
+            
+        # 更新访问时间
+        self._access_times[key] = time.time()
+        return self._cache[key]
+    
+    def set(self, key, value):
+        """设置缓存内容"""
+        # 检查容量
+        if len(self._cache) >= self.max_size and key not in self._cache:
+            self._evict()
+            
+        now = time.time()
+        self._cache[key] = value
+        self._access_times[key] = now
+        self._insert_times[key] = now
+    
+    def _evict(self):
+        """逐出最少使用的条目"""
+        if not self._cache:
+            return
+            
+        # 找到最少访问的键
+        oldest_key = min(self._access_times.items(), key=lambda x: x[1])[0]
+        self.remove(oldest_key)
+    
+    def remove(self, key):
+        """移除缓存条目"""
+        if key in self._cache:
+            del self._cache[key]
+            del self._access_times[key]
+            del self._insert_times[key]
+            
+    def clear(self):
+        """清空缓存"""
+        self._cache.clear()
+        self._access_times.clear()
+        self._insert_times.clear()
+    
+    def size(self):
+        """当前缓存大小"""
+        return len(self._cache)
+    
+    
+class Singleton(type):
+    """
+    Singleton metaclass for ensuring only one instance of a class is created.
+    
+    Usage:
+        class MyClass(metaclass=Singleton):
+            pass
+    """
+    
+    _instances = {}
+    
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+    
+    @classmethod
+    def clear_instance(cls, target_cls):
+        """
+        Clear a specific class instance from the registry
+        
+        Args:
+            target_cls: The class whose instance should be cleared
+        """
+        if target_cls in cls._instances:
+            del cls._instances[target_cls]
+    
+    @classmethod
+    def clear_all(cls):
+        """Clear all singleton instances"""
+        cls._instances = {}

@@ -10,8 +10,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
+from src.portfolio.manager import PortfolioManager
 from src.strategy.factory import get_strategy_factory
 from src.datasource.sources.factory import get_datasource_factory
 from src.portfolio.risk.factory import get_risk_factory
@@ -43,13 +44,14 @@ class BaseTradingMode(ABC):
         self.params = params or {}
         
         self.logger = LogManager.get_logger(f"mode.{self.__class__.__name__.lower()}")
+        self.portfolio = PortfolioManager(config)
         self._running = False
         
         # Component factories
         self.datasource_factory = get_datasource_factory(config)
         self.risk_factory = get_risk_factory(config)
         self.performance_factory = get_analyzer_factory(config)
-        self.execution_factory = get_execution_factory(config)
+        self.execution_factory = get_execution_factory(config)  # Use the new factory
         self.strategy_factory = get_strategy_factory(config)
           
         # Components will be initialized later
@@ -92,19 +94,34 @@ class BaseTradingMode(ABC):
     
     async def _initialize_components(self) -> None:
         """Initialize common components"""
-        # Create data source
-        source_type = self._get_source_type()
-        self.data_source = await self.datasource_factory.create(source_type)
-        
-        # Create risk manager
-        risk_manager_type = f"{self.mode_name}_risk_manager"
-        self.risk_manager = await self.risk_factory.create(risk_manager_type)
-        
+        resolved_name = self.config.get("system", "operational_mode", default="backtest")
+                    
         # Create performance analyzer
         initial_capital = self._get_initial_capital()
         perf_params = {"initial_balance": initial_capital}
+        
+        # Create data source        
+        source_type = self._get_source_type()
+        self.data_source = await self.datasource_factory.create(source_type)
+        if self.data_source:
+            self.logger.info(f"Registered {resolved_name} data source")
+                    
+        # Create risk manager
+        self.risk_manager = await self.risk_factory.create_with_config_params(self.portfolio)
+        if self.risk_manager:
+            self.logger.info(f"Registered {resolved_name} risk managers")
+            
+        # Create performance analyzer with appropriate mode
         self.performance_analyzer = await self.performance_factory.create(params=perf_params)
-    
+        if self.performance_analyzer:
+            self.logger.info(f"Registered {resolved_name} performance analyzer")
+        
+        # Create execution engine with appropriate mode
+        self.execution_engine = await self.execution_factory.create(self.mode_name)
+        if self.execution_engine:
+            self.logger.info(f"Registered {resolved_name} execution engine")        
+
+        
     @abstractmethod
     async def _initialize_mode_specific(self) -> None:
         """Initialize mode-specific components"""
@@ -235,8 +252,8 @@ class BaseTradingMode(ABC):
     def _update_timestamp_from_data(self, data_map: Dict[str, pd.DataFrame]) -> None:
         """Update current timestamp from data"""
         for df in data_map.values():
-            if not df.empty and 'datetime' in df.columns:
-                latest_time = df['datetime'].iloc[-1]
+            if not df.empty and 'timestamp' in df.columns:
+                latest_time = df['timestamp'].iloc[-1]
                 self.state['timestamp'] = latest_time
                 break
     
@@ -255,7 +272,7 @@ class BaseTradingMode(ABC):
         executed_trades = []
         
         try:
-            # Execute signals
+            # Execute signals using the execution engine
             executed_orders, _ = await self.execution_engine.execute(signals)
             
             # Process executed orders
@@ -273,18 +290,24 @@ class BaseTradingMode(ABC):
     def _process_executed_order(self, order: pd.Series) -> Optional[Dict[str, Any]]:
         """Process an executed order and update state"""
         try:
-            symbol = order.symbol
-            direction = order.direction
-            price = order.price
-            quantity = order.filled_qty
+            symbol = order.get('symbol')
+            direction = order.get('direction')
+            price = order.get('price', 0) or order.get('avg_price', 0)
+            quantity = order.get('filled_qty', 0)
+            
+            # Skip if invalid data
+            if not symbol or not direction or quantity <= 0:
+                return None
             
             # Calculate commission
-            commission_rate = self.config.get(self.mode_name, "commission_rate", 
-                default=self.config.get("trading", "commission", default=0.001))
-            commission = price * quantity * commission_rate
+            commission = order.get('commission', 0)
+            if commission == 0:
+                commission_rate = self.config.get(self.mode_name, "commission_rate", 
+                    default=self.config.get("trading", "commission", default=0.001))
+                commission = price * quantity * commission_rate
             
             # Update cash and positions
-            if direction.value == 'buy':
+            if direction == 'buy':
                 # Update cash
                 total_cost = (price * quantity) + commission
                 if total_cost > self.state['cash']:
@@ -298,17 +321,20 @@ class BaseTradingMode(ABC):
                     self.state['positions'][symbol] = 0
                 self.state['positions'][symbol] += quantity
                 
-            elif direction.value == 'sell' or direction.value == 'short':
+            elif direction == 'sell' or direction == 'short':
                 # Check position
                 current_position = self.state['positions'].get(symbol, 0)
                 
-                if current_position < quantity and direction.value == 'sell':
+                if current_position < quantity and direction == 'sell':
                     self.logger.warning(f"Insufficient position for {direction} {quantity} {symbol}, current position: {current_position}")
                     return None
                 
                 # Update position
+                if symbol not in self.state['positions']:
+                    self.state['positions'][symbol] = 0
+                    
                 self.state['positions'][symbol] -= quantity
-                if self.state['positions'][symbol] <= 0:
+                if self.state['positions'][symbol] <= 0 and direction == 'sell':
                     del self.state['positions'][symbol]
                 
                 # Update cash
@@ -316,13 +342,15 @@ class BaseTradingMode(ABC):
             
             # Create trade record
             trade = {
-                'timestamp': self.state['timestamp'],
+                'timestamp': self.state['timestamp'] or order.get('timestamp'),
                 'symbol': symbol,
                 'action': direction,
                 'quantity': quantity,
                 'price': price,
                 'commission': commission,
-                'cash_after': self.state['cash']
+                'cash_after': self.state['cash'],
+                'order_id': order.get('order_id'),
+                'status': order.get('status', 'filled')
             }
             
             # Record the trade
@@ -387,7 +415,8 @@ class BaseTradingMode(ABC):
             'sell_trades': sell_trades,
             'current_positions': self.state['positions'],
             'remaining_cash': self.state['cash'],
-            'trades': trades
+            'trades': trades,
+            'mode': self.mode_name
         }
         
         equity_curve = self.state['equity_curve']
@@ -487,4 +516,12 @@ class BaseTradingMode(ABC):
     @abstractmethod
     async def shutdown(self) -> None:
         """Shutdown mode specific components"""
-        pass
+        # Common cleanup logic
+        self._running = False
+        
+        # Close execution engine
+        if self.execution_engine:
+            try:
+                await self.execution_engine.close()
+            except Exception as e:
+                self.logger.error(f"Error closing execution engine: {e}")

@@ -6,8 +6,9 @@ import inspect
 from typing import Dict, Any, Optional, Type, ClassVar, List, Callable
 import asyncio
 import functools
+import pkgutil
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 
 
@@ -237,8 +238,7 @@ class AbstractFactory:
             
             # Scan for submodules
             if hasattr(module, '__path__'):
-                import pkgutil
-                for _, name, is_pkg in pkgutil.iter_modules(module.__path__, module.__name__ + '.'):
+                for _, name, _ in pkgutil.iter_modules(module.__path__, module.__name__ + '.'):
                     try:
                         submodule = importlib.import_module(name)
                         
@@ -251,8 +251,8 @@ class AbstractFactory:
                                 attr != base_class and not inspect.isabstract(attr)):
                                 
                                 # Check for registration metadata
-                                if hasattr(attr, '__factory_registrations'):
-                                    for reg in attr.__factory_registrations:
+                                if hasattr(attr, '_AbstractFactory_'):
+                                    for reg in attr._AbstractFactory_:
                                         if reg['factory_type'] == log_prefix:
                                             self.register(
                                                 reg['name'], 

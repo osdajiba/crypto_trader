@@ -17,7 +17,7 @@ from typing import Dict, List, Union, Optional, Any, Tuple, Callable
 from datetime import datetime, timedelta
 from functools import wraps
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.abstract_factory import register_factory_class
 from src.common.helpers import TimeUtils
 from src.exchange.base import Exchange, ExchangeError, ExchangeAPIError, ExchangeRateLimitError, ExchangeConnectionError
