@@ -10,18 +10,27 @@ from typing import Dict, Optional, Any, Type
 from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.portfolio.execution.engine import ExecutionEngine
+from src.portfolio.execution.base import BaseExecutionEngine
+from src.portfolio.execution.live import LiveExecutionEngine
+from src.portfolio.execution.paper import PaperExecutionEngine
+from src.portfolio.execution.backtest import BacktestExecutionEngine
 
 
-class Execution(Enum):
-    """Centralize the definition of data source types"""
+class ExecutionMode(Enum):
+    """Centralize the definition of execution modes"""
     BACKTEST = "backtest"
     PAPER = "paper"
     LIVE = "live"
     
-    
+
 class ExecutionFactory(AbstractFactory):
-    """Factory for creating execution engines"""
+    """
+    Factory for creating execution engines.
+    
+    This factory manages the creation of execution engines based on the desired mode
+    (live, paper, backtest) and provides a consistent interface for accessing and
+    configuring execution engines.
+    """
     
     def __init__(self, config: ConfigManager):
         """
@@ -41,22 +50,22 @@ class ExecutionFactory(AbstractFactory):
     
     def _register_default_execution_engines(self) -> None:
         """Register built-in execution engines"""
-        # Register main execution engine
-        self.register("default", "src.portfolio.execution.engine.ExecutionEngine")
+        # Register main execution engine types with their class paths
+        self.register("backtest", "src.portfolio.execution.backtest.BacktestExecutionEngine", {"mode": "backtest"})
+        self.register("paper", "src.portfolio.execution.paper.PaperExecutionEngine", {"mode": "paper"})
+        self.register("live", "src.portfolio.execution.live.LiveExecutionEngine", {"mode": "live"})
         
-        # Map mode names to the same engine (different modes handled internally)
-        self.register("live", "src.portfolio.execution.engine.ExecutionEngine", {"mode": "live"})
-        self.register("paper", "src.portfolio.execution.engine.ExecutionEngine", {"mode": "paper"})
-        self.register("backtest", "src.portfolio.execution.engine.ExecutionEngine", {"mode": "backtest"})
-        self.register("simple_backtest", "src.portfolio.execution.engine.ExecutionEngine", {"mode": "simple_backtest"})
+        # Register alias for simple_backtest -> backtest
+        self.register("simple_backtest", "src.portfolio.execution.backtest.BacktestExecutionEngine", {"mode": "simple_backtest"})
         
         self.logger.info("Registered default execution engines")
     
     def _discover_execution_engines(self) -> None:
         """Discover additional execution engines using auto-discovery"""
         try:
+            # Use AbstractFactory's discovery mechanism to find additional engine implementations
             self.discover_registrable_classes(
-                ExecutionEngine, 
+                BaseExecutionEngine, 
                 "src.portfolio.execution", 
                 "execution_factory"
             )
@@ -82,12 +91,12 @@ class ExecutionFactory(AbstractFactory):
         
         # Map system mode to execution engine
         mode_mapping = {
-            "backtest": Execution.BACKTEST.value,
-            "paper": Execution.PAPER.value,
-            "live": Execution.LIVE.value
+            "backtest": ExecutionMode.BACKTEST.value,
+            "paper": ExecutionMode.PAPER.value,
+            "live": ExecutionMode.LIVE.value
         }
         
-        return mode_mapping.get(operational_mode, "default")
+        return mode_mapping.get(operational_mode, ExecutionMode.BACKTEST.value)
     
     async def _get_concrete_class(self, name: str) -> Type:
         """
@@ -106,9 +115,9 @@ class ExecutionFactory(AbstractFactory):
             raise ValueError(f"Execution engine not found: {name}")
             
         # Get class path and load class
-        return await self._load_class_from_path(name, ExecutionEngine)
+        return await self._load_class_from_path(name, BaseExecutionEngine)
     
-    async def create(self, name: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> ExecutionEngine:
+    async def create(self, name: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> BaseExecutionEngine:
         """
         Create execution engine
         
@@ -131,7 +140,11 @@ class ExecutionFactory(AbstractFactory):
             combined_params.update(params)
         
         # Create instance
-        engine = concrete_class(self.config, combined_params.get("mode", resolved_name), None)
+        mode = combined_params.get("mode", resolved_name)
+        historical_data = combined_params.get("historical_data")
+        
+        self.logger.info(f"Creating {resolved_name} execution engine with mode: {mode}")
+        engine = concrete_class(self.config, mode, historical_data)
         
         # Initialize if needed
         if hasattr(engine, 'initialize') and callable(engine.initialize):
@@ -151,6 +164,25 @@ class ExecutionFactory(AbstractFactory):
             Dict of engine names and class paths
         """
         return {name: path for name, path in self._registry.items()}
+    
+    @staticmethod
+    def map_execution_mode(system_mode: str) -> str:
+        """
+        Map system operational mode to execution mode
+        
+        Args:
+            system_mode: System operational mode
+            
+        Returns:
+            Corresponding execution mode
+        """
+        mode_mapping = {
+            "backtest": ExecutionMode.BACKTEST.value,
+            "paper": ExecutionMode.PAPER.value,
+            "live": ExecutionMode.LIVE.value
+        }
+        
+        return mode_mapping.get(system_mode, ExecutionMode.BACKTEST.value)
 
 
 def get_execution_factory(config: ConfigManager) -> ExecutionFactory:

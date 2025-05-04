@@ -5,10 +5,10 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Any, Union
 
-from src.strategy.factors.base import FactorBase
+from src.strategy.factors.base import BaseFactor
 
 
-class BollingerBands(FactorBase):
+class BollingerBands(BaseFactor):
     """Bollinger Bands indicator"""
     
     def __init__(self, period: int = 20, std_dev: float = 2.0, price_col: str = 'close', name: Optional[str] = None):
@@ -65,7 +65,7 @@ class BollingerBands(FactorBase):
         return result
 
 
-class ATR(FactorBase):
+class ATR(BaseFactor):
     """Average True Range (ATR) indicator"""
     
     def __init__(self, period: int = 14, name: Optional[str] = None):
@@ -106,7 +106,7 @@ class ATR(FactorBase):
         return atr
 
 
-class ADX(FactorBase):
+class ADX(BaseFactor):
     """Average Directional Index (ADX) indicator"""
     
     def __init__(self, period: int = 14, name: Optional[str] = None):

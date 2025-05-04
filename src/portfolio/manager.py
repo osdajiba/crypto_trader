@@ -1,33 +1,27 @@
 #!/usr/bin/env python3
 # src/portfolio/manager.py
 
-from enum import Enum
-import time
 import asyncio
+import time
 from decimal import Decimal
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 import pandas as pd
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.portfolio.assets.base import Asset
-from src.portfolio.assets.factory import *
+from src.portfolio.assets.factory import get_asset_factory
 from src.exchange.factory import get_exchange_factory
+from src.portfolio.execution.factory import get_execution_factory
 
-    
-logger = LogManager.get_logger("portfolio.manager")
-
-
-class TradableAsset(Enum):
-    """Centralize the definition of backtest engine types"""
-    SPOT = "spot"
-    FUTURE = "future"
-    
 
 class PortfolioManager:
     """
     Manager for handling a collection of assets in a portfolio
-    with exchange integration and order execution capabilities
+    with exchange integration and order execution capabilities.
+    
+    This class provides a centralized way to manage multiple assets,
+    execute trades, track positions, and handle risk management.
     """
     
     def __init__(self, config: Optional[ConfigManager] = None, exchange=None):
@@ -40,13 +34,14 @@ class PortfolioManager:
         """
         self.assets: Dict[str, Asset] = {}
         self.config = config if config else ConfigManager()
-        self.exchange = exchange if exchange is not None else get_exchange_factory(config)
+        self.logger = LogManager.get_logger("portfolio.manager")
+        
+        # Initialize exchange
+        self.exchange = exchange
+        self._exchange_factory = None
         
         # Initialize asset factory
-        self.asset_factory = AssetFactory.instance(self.config)
-        
-        # Auto-discover all asset types
-        self.asset_factory.discover_assets()
+        self.asset_factory = get_asset_factory(self.config)
         
         # Portfolio state tracking
         self._total_value = Decimal('0')
@@ -56,9 +51,82 @@ class PortfolioManager:
         # Order tracking
         self._all_orders: Dict[str, Dict[str, Any]] = {}
         
-        logger.info("Portfolio manager initialized")
+        # Risk management parameters
+        self._init_risk_management()
+        
+        self.logger.info("Portfolio manager initialized")
 
-    def add_asset(self, asset: Asset) -> None:
+    async def initialize(self) -> None:
+        """
+        Initialize the portfolio manager and its components.
+        
+        Should be called after creation to properly set up async resources.
+        """
+        # Initialize exchange if needed
+        if not self.exchange:
+            self._exchange_factory = get_exchange_factory(self.config)
+            self.exchange = await self._exchange_factory.create()
+            self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
+        
+        # Auto-discover all asset types
+        self.asset_factory.discover_assets()
+        self.logger.info("Asset types discovered")
+        
+        # Initialize any pre-configured assets
+        await self._init_preconfigured_assets()
+        
+        self.logger.info("Portfolio manager initialization complete")
+        return self
+    
+    async def _init_preconfigured_assets(self) -> None:
+        """Initialize assets defined in configuration"""
+        assets_config = self.config.get("portfolio", "assets", default={})
+        
+        for asset_name, asset_config in assets_config.items():
+            try:
+                asset_type = asset_config.get("type", "spot")
+                
+                # Add exchange to params
+                params = asset_config.get("params", {})
+                if self.exchange and 'exchange' not in params:
+                    params['exchange'] = self.exchange
+                
+                # Create and add the asset
+                asset = await self.create_asset(asset_type, {
+                    "name": asset_name,
+                    **params
+                })
+                
+                self.logger.info(f"Initialized pre-configured asset: {asset_name} ({asset_type})")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize asset {asset_name}: {str(e)}")
+
+    def _init_risk_management(self) -> None:
+        """Initialize risk management parameters"""
+        risk_config = self.config.get("portfolio", "risk", default={})
+        
+        # Maximum allowed drawdown before stopping trading
+        self.max_drawdown = Decimal(str(risk_config.get("max_drawdown", 0.25)))
+        
+        # Maximum percentage of portfolio in a single position
+        self.max_position_pct = Decimal(str(risk_config.get("max_position_pct", 0.25)))
+        
+        # Maximum leverage allowed (if applicable)
+        self.max_leverage = Decimal(str(risk_config.get("max_leverage", 1.0)))
+        
+        # Position sizing method
+        self.position_sizing_method = risk_config.get("position_sizing", "fixed")
+        
+        # Risk per trade (percentage of portfolio)
+        self.risk_per_trade = Decimal(str(risk_config.get("risk_per_trade", 0.01)))
+        
+        # Historical drawdown values
+        self.peak_value = Decimal('0')
+        self.current_drawdown = Decimal('0')
+        
+        self.logger.info(f"Risk management initialized: max drawdown {self.max_drawdown}, max position {self.max_position_pct}")
+
+    async def add_asset(self, asset: Asset) -> None:
         """
         Add an asset to the portfolio
         
@@ -75,10 +143,14 @@ class PortfolioManager:
         if not asset.exchange and self.exchange:
             asset.set_exchange(self.exchange)
             
+        # Initialize the asset if needed
+        if hasattr(asset, 'initialize') and callable(asset.initialize):
+            await asset.initialize()
+            
         self.assets[asset.name] = asset
-        logger.info(f"Added asset {asset.name} to portfolio")
+        self.logger.info(f"Added asset {asset.name} to portfolio")
 
-    def create_asset(self, asset_type: str, params: dict) -> Asset:
+    async def create_asset(self, asset_type: str, params: dict) -> Asset:
         """
         Create and add a new asset to the portfolio
         
@@ -90,20 +162,24 @@ class PortfolioManager:
             Asset: The created asset
             
         Raises:
-            ValueError: If asset with the same name already exists
+            ValueError: If asset creation fails
         """
         # Add exchange to parameters if available
         if self.exchange and 'exchange' not in params:
             params['exchange'] = self.exchange
             
+        # Add configuration
+        if 'config' not in params:
+            params['config'] = self.config
+            
         # Create the asset
-        asset = self.asset_factory.create_asset(asset_type, params)
+        asset = await self.asset_factory.create(asset_type, params)
         
         # Add to portfolio
-        self.add_asset(asset)
+        await self.add_asset(asset)
         return asset
 
-    def remove_asset(self, asset_name: str) -> None:
+    async def remove_asset(self, asset_name: str) -> None:
         """
         Remove an asset from the portfolio
         
@@ -116,8 +192,13 @@ class PortfolioManager:
         if asset_name not in self.assets:
             raise ValueError(f"Asset '{asset_name}' does not exist")
             
+        # Close the asset if it has a close method
+        asset = self.assets[asset_name]
+        if hasattr(asset, 'close') and callable(asset.close):
+            await asset.close()
+            
         del self.assets[asset_name]
-        logger.info(f"Removed asset {asset_name} from portfolio")
+        self.logger.info(f"Removed asset {asset_name} from portfolio")
 
     def get_total_value(self) -> float:
         """
@@ -128,7 +209,23 @@ class PortfolioManager:
         """
         total = sum(asset.get_value() for asset in self.assets.values())
         self._total_value = Decimal(str(total))
+        
+        # Update peak value and drawdown
+        self._update_drawdown()
+        
         return float(self._total_value)
+
+    def _update_drawdown(self) -> None:
+        """Update peak value and current drawdown"""
+        if self._total_value > self.peak_value:
+            self.peak_value = self._total_value
+            self.current_drawdown = Decimal('0')
+        elif self.peak_value > 0:
+            self.current_drawdown = (self.peak_value - self._total_value) / self.peak_value
+            
+        # Check if drawdown exceeds limit
+        if self.current_drawdown > self.max_drawdown:
+            self.logger.warning(f"DRAWDOWN ALERT: Current drawdown {self.current_drawdown:.2%} exceeds maximum {self.max_drawdown:.2%}")
 
     async def update_all_values(self) -> float:
         """
@@ -138,7 +235,7 @@ class PortfolioManager:
             float: Updated total portfolio value
         """
         if self._is_syncing:
-            logger.debug("Already syncing values, skipping duplicate call")
+            self.logger.debug("Already syncing values, skipping duplicate call")
             return float(self._total_value)
             
         self._is_syncing = True
@@ -157,7 +254,7 @@ class PortfolioManager:
                 for i, result in enumerate(results):
                     if isinstance(result, Exception):
                         asset_name = list(self.assets.keys())[i]
-                        logger.error(f"Error updating {asset_name} value: {str(result)}")
+                        self.logger.error(f"Error updating {asset_name} value: {str(result)}")
                 
             # Calculate total value
             total = Decimal('0')
@@ -166,6 +263,9 @@ class PortfolioManager:
                 
             self._total_value = total
             self._last_update_time = time.time()
+            
+            # Update drawdown metrics
+            self._update_drawdown()
             
             return float(self._total_value)
         finally:
@@ -191,30 +291,35 @@ class PortfolioManager:
         
         asset = self.assets[asset_name]
         
-        # Check if the asset is a TradableAsset
-        if isinstance(asset, TradableAsset):
-            result = await asset.buy(amount, **kwargs)
-            
-            # Track order in portfolio manager
-            if result.get('success', False) and 'order_id' in result:
-                self._all_orders[result['order_id']] = {
-                    'asset_name': asset_name,
-                    'action': 'buy',
-                    'amount': amount,
-                    'result': result,
-                    'timestamp': time.time(),
-                    'params': kwargs
-                }
-                
-            return result
-        elif hasattr(asset, 'buy') and callable(asset.buy):
-            # Support for non-TradableAsset buy methods
-            if asyncio.iscoroutinefunction(asset.buy):
-                return await asset.buy(amount, **kwargs)
-            else:
-                return asset.buy(amount, **kwargs)
-        else:
+        # Check if the asset is tradable
+        if not hasattr(asset, 'buy') or not callable(asset.buy):
             raise ValueError(f"Asset {asset_name} does not support buy operations")
+        
+        # Apply risk checks
+        if not await self._check_position_risk(asset_name, amount, 'buy'):
+            return {
+                'success': False,
+                'error': 'Trade rejected due to risk limits',
+                'asset_name': asset_name,
+                'action': 'buy',
+                'amount': amount
+            }
+        
+        # Execute buy
+        result = await asset.buy(amount, **kwargs)
+        
+        # Track order if successful
+        if result.get('success', False) and 'order_id' in result:
+            self._all_orders[result['order_id']] = {
+                'asset_name': asset_name,
+                'action': 'buy',
+                'amount': amount,
+                'result': result,
+                'timestamp': time.time(),
+                'params': kwargs
+            }
+                
+        return result
 
     async def sell_asset(self, asset_name: str, amount: float, **kwargs) -> Dict[str, Any]:
         """
@@ -236,30 +341,81 @@ class PortfolioManager:
         
         asset = self.assets[asset_name]
         
-        # Check if the asset is a TradableAsset
-        if isinstance(asset, TradableAsset):
-            result = await asset.sell(amount, **kwargs)
-            
-            # Track order in portfolio manager
-            if result.get('success', False) and 'order_id' in result:
-                self._all_orders[result['order_id']] = {
-                    'asset_name': asset_name,
-                    'action': 'sell',
-                    'amount': amount,
-                    'result': result,
-                    'timestamp': time.time(),
-                    'params': kwargs
-                }
-                
-            return result
-        elif hasattr(asset, 'sell') and callable(asset.sell):
-            # Support for non-TradableAsset sell methods
-            if asyncio.iscoroutinefunction(asset.sell):
-                return await asset.sell(amount, **kwargs)
-            else:
-                return asset.sell(amount, **kwargs)
-        else:
+        # Check if the asset is tradable
+        if not hasattr(asset, 'sell') or not callable(asset.sell):
             raise ValueError(f"Asset {asset_name} does not support sell operations")
+        
+        # Apply risk checks (simplified for sells)
+        if not await self._check_position_risk(asset_name, amount, 'sell'):
+            return {
+                'success': False,
+                'error': 'Trade rejected due to risk limits',
+                'asset_name': asset_name,
+                'action': 'sell',
+                'amount': amount
+            }
+        
+        # Execute sell
+        result = await asset.sell(amount, **kwargs)
+        
+        # Track order if successful
+        if result.get('success', False) and 'order_id' in result:
+            self._all_orders[result['order_id']] = {
+                'asset_name': asset_name,
+                'action': 'sell',
+                'amount': amount,
+                'result': result,
+                'timestamp': time.time(),
+                'params': kwargs
+            }
+                
+        return result
+
+    async def _check_position_risk(self, asset_name: str, amount: float, action: str) -> bool:
+        """
+        Check if a trade would violate risk management rules
+        
+        Args:
+            asset_name: Asset name
+            amount: Trade amount
+            action: Trade action ('buy' or 'sell')
+            
+        Returns:
+            True if trade is acceptable, False if it should be rejected
+        """
+        # Skip checks for sales (risk reduction)
+        if action.lower() == 'sell':
+            return True
+            
+        # Check overall portfolio drawdown
+        if self.current_drawdown > self.max_drawdown:
+            self.logger.warning(f"Trade rejected: current drawdown ({self.current_drawdown:.2%}) exceeds maximum ({self.max_drawdown:.2%})")
+            return False
+            
+        # Get asset's current value and portfolio total
+        asset = self.assets[asset_name]
+        current_value = Decimal(str(asset.get_value()))
+        total_value = self._total_value if self._total_value > 0 else self.get_total_value()
+        
+        # Estimate the new position size based on the trade
+        # Note: This is a simplification and should be refined based on asset type
+        if hasattr(asset, '_last_price') and asset._last_price > 0:
+            # Use last price for estimate
+            trade_value = Decimal(str(amount)) * asset._last_price
+        else:
+            # Rough approximation
+            trade_value = Decimal(str(amount))
+        
+        new_position_value = current_value + trade_value
+        
+        # Check position size as percentage of portfolio
+        if total_value > 0:
+            position_pct = new_position_value / total_value
+            if position_pct > self.max_position_pct:
+                self.logger.warning(f"Trade rejected: position size ({position_pct:.2%}) would exceed maximum ({self.max_position_pct:.2%})")
+                return False
+        
+        return True
 
     async def place_order(self, asset_name: str, order_type: str, direction: str, 
                       amount: float, **kwargs) -> Dict[str, Any]:
@@ -279,12 +435,6 @@ class PortfolioManager:
         if asset_name not in self.assets:
             raise ValueError(f"Asset '{asset_name}' does not exist")
         
-        asset = self.assets[asset_name]
-        
-        # Check if the asset is a TradableAsset
-        if not isinstance(asset, TradableAsset):
-            raise ValueError(f"Asset {asset_name} does not support advanced order operations")
-        
         # Normalize order type and direction
         order_type = order_type.lower()
         direction = direction.lower()
@@ -302,7 +452,7 @@ class PortfolioManager:
             else:
                 raise ValueError(f"Invalid direction: {direction}. Must be 'buy' or 'sell'")
         except Exception as e:
-            logger.error(f"Error placing {order_type} {direction} order for {asset_name}: {str(e)}")
+            self.logger.error(f"Error placing {order_type} {direction} order for {asset_name}: {str(e)}")
             return {
                 'success': False,
                 'error': str(e),
@@ -327,7 +477,7 @@ class PortfolioManager:
             asset_name = self._all_orders[order_id]['asset_name']
             asset = self.assets.get(asset_name)
             
-            if asset and isinstance(asset, TradableAsset):
+            if asset and hasattr(asset, 'cancel_order') and callable(asset.cancel_order):
                 try:
                     success = await asset.cancel_order(order_id)
                     
@@ -346,7 +496,7 @@ class PortfolioManager:
                             'error': 'Cancel failed'
                         }
                 except Exception as e:
-                    logger.error(f"Error canceling order {order_id}: {str(e)}")
+                    self.logger.error(f"Error canceling order {order_id}: {str(e)}")
                     return {
                         'success': False,
                         'order_id': order_id,
@@ -360,9 +510,9 @@ class PortfolioManager:
                     'error': f"Asset {asset_name} not found or does not support order operations"
                 }
         
-        # If order not tracked, try canceling on all tradable assets
+        # If order not tracked, try canceling on all assets
         for asset_name, asset in self.assets.items():
-            if isinstance(asset, TradableAsset):
+            if hasattr(asset, 'cancel_order') and callable(asset.cancel_order):
                 try:
                     success = await asset.cancel_order(order_id)
                     if success:
@@ -396,7 +546,10 @@ class PortfolioManager:
             asset_name = self._all_orders[order_id]['asset_name']
             asset = self.assets.get(asset_name)
             
-            if asset and isinstance(asset, TradableAsset):
+            if asset and hasattr(asset, 'get_order_status') and callable(asset.get_order_status):
+                return await asset.get_order_status(order_id)
+                
+            elif asset and hasattr(asset, 'get_order') and callable(asset.get_order):
                 order = asset.get_order(order_id)
                 if order:
                     return {
@@ -412,9 +565,16 @@ class PortfolioManager:
                         'timestamp': order.timestamp
                     }
         
-        # If order not tracked, search in all tradable assets
+        # If order not tracked, search in all assets
         for asset_name, asset in self.assets.items():
-            if isinstance(asset, TradableAsset):
+            # Try get_order_status first (preferred)
+            if hasattr(asset, 'get_order_status') and callable(asset.get_order_status):
+                result = await asset.get_order_status(order_id)
+                if result.get('success', False):
+                    return result
+                    
+            # Fall back to get_order
+            elif hasattr(asset, 'get_order') and callable(asset.get_order):
                 order = asset.get_order(order_id)
                 if order:
                     return {
@@ -430,7 +590,10 @@ class PortfolioManager:
                         'timestamp': order.timestamp
                     }
         
-        return {}
+        return {
+            'success': False,
+            'error': 'Order not found'
+        }
 
     def list_assets(self) -> List[str]:
         """
@@ -469,7 +632,7 @@ class PortfolioManager:
         for asset in self.assets.values():
             asset.set_exchange(exchange)
             
-        logger.info("Updated exchange for portfolio and all assets")
+        self.logger.info("Updated exchange for portfolio and all assets")
 
     async def sync_with_exchange(self) -> Dict[str, Any]:
         """
@@ -479,11 +642,11 @@ class PortfolioManager:
             Dict[str, Any]: Sync results by asset
         """
         if not self.exchange:
-            logger.warning("No exchange available, cannot sync portfolio")
+            self.logger.warning("No exchange available, cannot sync portfolio")
             return {'success': False, 'error': 'No exchange available'}
         
         if self._is_syncing:
-            logger.debug("Already syncing, skipping duplicate call")
+            self.logger.debug("Already syncing, skipping duplicate call")
             return {'success': False, 'error': 'Sync already in progress'}
             
         self._is_syncing = True
@@ -491,7 +654,7 @@ class PortfolioManager:
         try:
             results = {}
             
-            # Sync each asset type accordingly
+            # Sync each asset accordingly
             for name, asset in self.assets.items():
                 try:
                     # Different sync methods based on asset type
@@ -506,7 +669,7 @@ class PortfolioManager:
                         
                     results[name] = result
                 except Exception as e:
-                    logger.error(f"Error syncing {name}: {str(e)}")
+                    self.logger.error(f"Error syncing {name}: {str(e)}")
                     results[name] = {'error': str(e)}
             
             # Update total value
@@ -612,50 +775,70 @@ class PortfolioManager:
             'results': results
         }
         
-    def calculate_portfolio_risk(self, method: str = 'var') -> float:
+    def calculate_portfolio_risk(self, method: str = 'var') -> Dict[str, float]:
         """
         Calculate portfolio risk using specified method
         
         Args:
-            method: Risk calculation method ('var', 'std', etc.)
+            method: Risk calculation method ('var', 'std', 'drawdown', etc.)
             
         Returns:
-            float: Risk measure
-            
-        Note:
-            This implementation can be extended with actual risk calculations
+            Dict with risk metrics
         """
-        # Simple risk calculation based on asset allocation and volatility
-        # This is a placeholder - actual implementation would be more complex
+        # Get current drawdown
+        current_drawdown = float(self.current_drawdown)
         
+        # Get portfolio weights
+        weights = self.get_asset_weights()
+        
+        # Basic portfolio risk metrics
         if method == 'var':
-            # Value at Risk calculation would go here
-            # Placeholder: sum of weighted asset volatilities
-            return 0.05  # Example 5% VaR
+            # Simple Value at Risk estimate
+            # In a real implementation, would use historical returns and proper VaR calculation
+            var_estimate = 0.05  # 5% VaR (placeholder)
+            return {
+                'var': var_estimate,
+                'drawdown': current_drawdown,
+                'max_position': max(weights.values()) if weights else 0.0
+            }
         elif method == 'std':
-            # Standard deviation calculation
-            return 0.15  # Example 15% portfolio volatility
+            # Standard deviation (volatility) estimate
+            # Placeholder - real implementation would calculate from return series
+            volatility = 0.15  # 15% volatility
+            return {
+                'volatility': volatility,
+                'drawdown': current_drawdown,
+                'max_position': max(weights.values()) if weights else 0.0
+            }
+        elif method == 'drawdown':
+            # Just return current and maximum drawdown
+            return {
+                'current_drawdown': current_drawdown,
+                'max_drawdown': float(self.max_drawdown),
+                'max_position': max(weights.values()) if weights else 0.0
+            }
         else:
-            logger.warning(f"Unsupported risk calculation method: {method}")
-            return 0.0
+            self.logger.warning(f"Unsupported risk calculation method: {method}")
+            return {
+                'drawdown': current_drawdown,
+                'error': f"Unsupported method: {method}"
+            }
 
-    def get_portfolio_return(self, start_date: str, end_date: str) -> float:
+    def get_portfolio_summary(self) -> Dict[str, Any]:
         """
-        Calculate portfolio return over a specified period
+        Get a summary of the portfolio state
         
-        Args:
-            start_date: Start date in YYYY-MM-DD format
-            end_date: End date in YYYY-MM-DD format
-            
         Returns:
-            float: Portfolio return as a decimal
-            
-        Note:
-            This implementation can be extended with actual return calculations
+            Dict with portfolio summary
         """
-        # In a real implementation, this would calculate returns from historical data
-        # Placeholder for now
-        return 0.0
+        return {
+            'total_value': float(self._total_value),
+            'assets': len(self.assets),
+            'asset_values': {name: asset.get_value() for name, asset in self.assets.items()},
+            'weights': self.get_asset_weights(),
+            'drawdown': float(self.current_drawdown),
+            'last_update': self._last_update_time
+        }
         
     async def close(self):
         """
@@ -663,20 +846,21 @@ class PortfolioManager:
         """
         # Cancel all orders
         for asset_name, asset in self.assets.items():
-            if isinstance(asset, TradableAsset):
-                try:
+            try:
+                if hasattr(asset, 'cancel_all_orders') and callable(asset.cancel_all_orders):
                     await asset.cancel_all_orders()
-                    if hasattr(asset, 'close') and callable(asset.close):
-                        asset.close()
-                except Exception as e:
-                    logger.error(f"Error closing asset {asset_name}: {str(e)}")
+                
+                if hasattr(asset, 'close') and callable(asset.close):
+                    await asset.close()
+            except Exception as e:
+                self.logger.error(f"Error closing asset {asset_name}: {str(e)}")
         
         # Close exchange connection if we own it
         if self.exchange and hasattr(self.exchange, 'close'):
             try:
                 await self.exchange.close()
-                logger.info("Closed exchange connection")
+                self.logger.info("Closed exchange connection")
             except Exception as e:
-                logger.error(f"Error closing exchange connection: {str(e)}")
+                self.logger.error(f"Error closing exchange connection: {str(e)}")
         
-        logger.info("Portfolio manager closed")
+        self.logger.info("Portfolio manager closed")

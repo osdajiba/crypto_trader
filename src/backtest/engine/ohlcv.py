@@ -50,13 +50,15 @@ class OHLCVEngine(BaseBacktestEngine):
             'initial_capital', 
             self.config.get("trading", "capital", "initial", default=100000)
         )
+        
+        # TODO: different commission fee when the role is taker or maker (not implemented) 
         self.commission_rate = self.params.get(
             'commission_rate', 
-            self.config.get("trading", "fees", "commission", default=0.001)
+            self.config.get("trading", "fees", "commission_taker", default=0.005)
         )
         self.slippage = self.params.get(
             'slippage', 
-            self.config.get("trading", "fees", "slippage", default=0.001)
+            self.config.get("trading", "fees", "slippage", default=0.0001)
         )
         
         # Factor calculation cache

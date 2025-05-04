@@ -116,12 +116,6 @@ class BaseTradingMode(ABC):
         if self.performance_analyzer:
             self.logger.info(f"Registered {resolved_name} performance analyzer")
         
-        # Create execution engine with appropriate mode
-        self.execution_engine = await self.execution_factory.create(self.mode_name)
-        if self.execution_engine:
-            self.logger.info(f"Registered {resolved_name} execution engine")        
-
-        
     @abstractmethod
     async def _initialize_mode_specific(self) -> None:
         """Initialize mode-specific components"""

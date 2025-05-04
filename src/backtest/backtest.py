@@ -44,7 +44,7 @@ class BacktestMode(BaseTradingMode):
             "mode": "backtest",
             "allow_partial_fills": False
         }
-        self.execution_engine = await self.execution_factory.create("backtest_execution", execution_params)
+        self.execution_engine = await self.execution_factory.create("backtest", execution_params)
         self.logger.info("Backtest execution engine initialized")
         
         # Configure backtest parameters

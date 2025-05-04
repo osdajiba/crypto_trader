@@ -7,7 +7,7 @@ import asyncio
 from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.strategy.factors.base import FactorBase
+from src.strategy.factors.base import BaseFactor
 
 
 class FactorFactory(AbstractFactory):
@@ -73,7 +73,7 @@ class FactorFactory(AbstractFactory):
         """Discover additional factors from modules"""
         try:
             factor_dir = "src.strategy.factors"
-            self.discover_registrable_classes(FactorBase, factor_dir, "factors")
+            self.discover_registrable_classes(BaseFactor, factor_dir, "factors_factory")
         except Exception as e:
             self.logger.error(f"Error auto-discovering strategies: {e}")
 
@@ -95,7 +95,7 @@ class FactorFactory(AbstractFactory):
         
         return name.lower()
     
-    async def _get_concrete_class(self, name: str) -> Type[FactorBase]:
+    async def _get_concrete_class(self, name: str) -> Type[BaseFactor]:
         """
         Get concrete factor class
         
@@ -103,9 +103,9 @@ class FactorFactory(AbstractFactory):
             name: Factor name
             
         Returns:
-            Type[FactorBase]: Factor class
+            Type[BaseFactor]: Factor class
         """
-        return await self._load_class_from_path(name, FactorBase)
+        return await self._load_class_from_path(name, BaseFactor)
     
     def get_factors_by_category(self, category: str) -> List[str]:
         """
@@ -169,7 +169,7 @@ def get_factor_factory(config: ConfigManager) -> FactorFactory:
 
 
 # Convenience function for creating factors
-async def create_factor(config: ConfigManager, name: str, **kwargs) -> Optional[FactorBase]:
+async def create_factor(config: ConfigManager, name: str, **kwargs) -> Optional[BaseFactor]:
     """
     Create a factor instance with specified parameters
     
@@ -179,7 +179,7 @@ async def create_factor(config: ConfigManager, name: str, **kwargs) -> Optional[
         **kwargs: Parameters for factor initialization
         
     Returns:
-        Optional[FactorBase]: Factor instance
+        Optional[BaseFactor]: Factor instance
     """
     factory = get_factor_factory(config)
     return await factory.create(name, kwargs)

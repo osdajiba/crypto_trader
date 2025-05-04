@@ -37,10 +37,11 @@ def register_factory_class(factory_type: str, name: str, **metadata):
         **metadata: Additional metadata for the component
     """
     def decorator(cls):
-        if not hasattr(cls, '__factory_registrations'):
-            cls.__factory_registrations = []
+        # Changed from __factory_registrations to _AbstractFactory_
+        if not hasattr(cls, '_AbstractFactory_'):
+            cls._AbstractFactory_ = []
         
-        cls.__factory_registrations.append({
+        cls._AbstractFactory_.append({
             'factory_type': factory_type,
             'name': name,
             'metadata': metadata
@@ -205,7 +206,13 @@ class AbstractFactory:
             
             # Get class
             if not hasattr(module, class_name):
-                raise ComponentLoadError(f"Class not found in module: {class_name}")
+                # Try to get similar names for debugging
+                similar_names = [attr for attr in dir(module) if attr.lower() == class_name.lower()]
+                if similar_names:
+                    error_msg = f"Class not found: {class_name}. Did you mean one of: {', '.join(similar_names)}?"
+                else:
+                    error_msg = f"Class not found in module: {class_name}"
+                raise ComponentLoadError(error_msg)
                 
             component_class = getattr(module, class_name)
             
@@ -223,7 +230,7 @@ class AbstractFactory:
             raise ComponentLoadError(f"Error loading component class {class_path}: {str(e)}")
     
     def discover_registrable_classes(self, base_class: Type, module_path: str, 
-                                   log_prefix: str = "factory") -> None:
+                                log_prefix: str = "factory") -> None:
         """
         Auto-discover registrable classes
         
@@ -233,6 +240,10 @@ class AbstractFactory:
             log_prefix: Prefix for log messages
         """
         try:
+            # Add check for base_class parameter
+            if base_class is None:
+                raise ValueError("base_class parameter cannot be None")
+                
             # Import module
             module = importlib.import_module(module_path)
             
@@ -247,10 +258,13 @@ class AbstractFactory:
                             attr = getattr(submodule, attr_name)
                             
                             # Check if it's a class and subclass of base_class
-                            if (inspect.isclass(attr) and issubclass(attr, base_class) and 
-                                attr != base_class and not inspect.isabstract(attr)):
+                            if (inspect.isclass(attr) and 
+                                base_class is not None and  # Added safety check
+                                issubclass(attr, base_class) and 
+                                attr != base_class and 
+                                not inspect.isabstract(attr)):
                                 
-                                # Check for registration metadata
+                                # Check for registration metadata (fixed attribute name)
                                 if hasattr(attr, '_AbstractFactory_'):
                                     for reg in attr._AbstractFactory_:
                                         if reg['factory_type'] == log_prefix:
@@ -270,3 +284,31 @@ class AbstractFactory:
             self.logger.warning(f"Error importing base module {module_path}: {str(e)}")
         except Exception as e:
             self.logger.warning(f"Error during component discovery: {str(e)}")
+
+    def _get_base_class_by_name(self, class_name: str) -> Optional[Type]:
+        """
+        Safely get a base class by name
+    
+        Args:
+            class_name: Name of the class to retrieve
+            
+        Returns:
+            Optional[Type]: The class if found, None otherwise
+        """
+        try:
+            # Try to get class from globals or from module
+            if class_name in globals():
+                return globals()[class_name]
+            
+            # Try to import and get class
+            parts = class_name.split('.')
+            if len(parts) > 1:
+                module_path = '.'.join(parts[:-1])
+                class_name = parts[-1]
+                module = importlib.import_module(module_path)
+                return getattr(module, class_name, None)
+            
+            return None
+        except Exception as e:
+            self.logger.warning(f"Could not get base class {class_name}: {str(e)}")
+            return None

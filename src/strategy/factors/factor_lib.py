@@ -23,7 +23,7 @@ class SignalType(Enum):
     VOLATILITY = "volatility"   # Use volatility-based signals
 
 
-class IndicatorBase(ABC):
+class BaseIndicator(ABC):
     """Base class for all technical indicators"""
     
     def __init__(self, name: Optional[str] = None):
@@ -204,7 +204,7 @@ class IndicatorBase(ABC):
         return self._name
 
 
-class RsiIndicator(IndicatorBase):
+class RsiIndicator(BaseIndicator):
     """Relative Strength Index (RSI) indicator"""
     
     def __init__(self, period: int = 14, price_col: str = 'close', name: Optional[str] = None):
@@ -253,7 +253,7 @@ class RsiIndicator(IndicatorBase):
         return rsi
 
 
-class MacdIndicator(IndicatorBase):
+class MacdIndicator(BaseIndicator):
     """Moving Average Convergence Divergence (MACD) indicator"""
     
     def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9,
@@ -310,7 +310,7 @@ class MacdIndicator(IndicatorBase):
         return result
 
 
-class BollingerBand(IndicatorBase):
+class BollingerBand(BaseIndicator):
     """Bollinger Bands indicator"""
     
     def __init__(self, period: int = 20, std_dev: float = 2.0, price_col: str = 'close', name: Optional[str] = None):
@@ -367,7 +367,7 @@ class BollingerBand(IndicatorBase):
         return result
 
 
-class VolumeOscillator(IndicatorBase):
+class VolumeOscillator(BaseIndicator):
     """Volume Oscillator indicator"""
     
     def __init__(self, fast_period: int = 5, slow_period: int = 14, vol_col: str = 'volume', name: Optional[str] = None):
@@ -408,7 +408,7 @@ class VolumeOscillator(IndicatorBase):
         return vol_osc
 
 
-class StochasticOscillator(IndicatorBase):
+class StochasticOscillator(BaseIndicator):
     """Stochastic Oscillator indicator"""
     
     def __init__(self, k_period: int = 14, d_period: int = 3, slowing: int = 3, name: Optional[str] = None):
@@ -468,7 +468,7 @@ class StochasticOscillator(IndicatorBase):
         return result
 
 
-class AverageTrueRange(IndicatorBase):
+class AverageTrueRange(BaseIndicator):
     """Average True Range (ATR) indicator"""
     
     def __init__(self, period: int = 14, name: Optional[str] = None):
@@ -509,7 +509,7 @@ class AverageTrueRange(IndicatorBase):
         return atr
 
 
-class AverageDirectionalIndex(IndicatorBase):
+class AverageDirectionalIndex(BaseIndicator):
     """Average Directional Index (ADX) indicator"""
     
     def __init__(self, period: int = 14, name: Optional[str] = None):
@@ -580,7 +580,7 @@ class AverageDirectionalIndex(IndicatorBase):
         return result
 
 
-class OnBalanceVolume(IndicatorBase):
+class OnBalanceVolume(BaseIndicator):
     """On-Balance Volume (OBV) indicator"""
     
     def __init__(self, price_col: str = 'close', vol_col: str = 'volume', name: Optional[str] = None):
@@ -623,7 +623,7 @@ class OnBalanceVolume(IndicatorBase):
         return obv
 
 
-class IchimokuCloud(IndicatorBase):
+class IchimokuCloud(BaseIndicator):
     """Ichimoku Cloud indicator"""
     
     def __init__(self, tenkan_period: int = 9, kijun_period: int = 26, 
@@ -693,7 +693,7 @@ class IchimokuCloud(IndicatorBase):
         return result
 
 
-class ExponentialMovingAverage(IndicatorBase):
+class ExponentialMovingAverage(BaseIndicator):
     """Exponential Moving Average (EMA) indicator"""
     
     def __init__(self, period: int = 20, price_col: str = 'close', name: Optional[str] = None):
@@ -728,7 +728,7 @@ class ExponentialMovingAverage(IndicatorBase):
         return ema
 
 
-class SimpleMovingAverage(IndicatorBase):
+class SimpleMovingAverage(BaseIndicator):
     """Simple Moving Average (SMA) indicator"""
     
     def __init__(self, period: int = 20, price_col: str = 'close', name: Optional[str] = None):
@@ -763,7 +763,7 @@ class SimpleMovingAverage(IndicatorBase):
         return sma
 
 
-class MoneyFlowIndex(IndicatorBase):
+class MoneyFlowIndex(BaseIndicator):
     """Money Flow Index (MFI) indicator"""
     
     def __init__(self, period: int = 14, vol_col: str = 'volume', name: Optional[str] = None):

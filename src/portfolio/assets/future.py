@@ -8,8 +8,12 @@ from typing import Dict, Any, Optional, Union
 
 from src.exchange.base import retry_exchange_operation
 from src.common.abstract_factory import register_factory_class
+from src.common.log_manager import LogManager
 from src.portfolio.execution.order import Order, Direction, OrderStatus
-from src.portfolio.assets.base import Asset, logger
+from src.portfolio.assets.base import Asset
+
+
+logger = LogManager.get_logger("asset.future")
 
 
 @register_factory_class('asset_factory', 'future')

@@ -3,7 +3,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional, Any, List
+from typing import Dict, Any, List, Optional
 import asyncio
 
 from src.common.abstract_factory import register_factory_class
@@ -11,164 +11,179 @@ from src.common.config_manager import ConfigManager
 from src.strategy.base import BaseStrategy
 
 
-@register_factory_class('strategy_factory', 'dual_ma', 
-                      description="Dual Moving Average Crossover Strategy",
-                      category="trend",
-                      features=["moving_averages", "crossover", "trend_following"],
-                      parameters=[
-                          {"name": "short_window", "type": "int", "default": 20, "description": "Short moving average period"},
-                          {"name": "long_window", "type": "int", "default": 60, "description": "Long moving average period"},
-                          {"name": "signal_threshold", "type": "float", "default": 0.005, "description": "Signal generation threshold"},
-                          {"name": "position_size", "type": "float", "default": 0.01, "description": "Position size as fraction of capital"},
-                          {"name": "use_risk_based_sizing", "type": "bool", "default": True, "description": "Use risk-based position sizing"}
-                      ])
+@register_factory_class('strategy_factory', 'dual_ma',
+                       description="Dual Moving Average Crossover Strategy",
+                       category="trend",
+                       features=["moving_averages", "crossover", "trend_following"])
 class DualMAStrategy(BaseStrategy):
     """
-    Implementation of Dual Moving Average crossover strategy generating trading signals 
-    using short-term and long-term moving averages.
+    Implementation of Dual Moving Average crossover strategy.
     
-    Enhanced with factor registration and efficient data management.
+    This strategy generates trading signals based on crossovers between
+    short-term and long-term moving averages. Additional filters are 
+    applied to improve signal quality and reduce false positives.
     """
-
+    
     def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
         """
-        Initialize Dual MA strategy
+        Initialize the Dual Moving Average strategy.
         
         Args:
             config: Configuration manager instance
-            params: Strategy-specific parameters
-                Expected parameters: short_window, long_window, symbol, lookback_period
+            params: Optional strategy parameters (will override config values)
         """
-        # Load parameters from config if not provided in params
-        params = params or {}
-        config_params = config.get("strategy", "parameters", default={})
+        # Load parameters from config with fallbacks
+        self.short_window = config.get("strategy", "parameters", "fast_period", default=20)
+        self.long_window = config.get("strategy", "parameters", "slow_period", default=60)
+        self.signal_threshold = config.get("strategy", "parameters", "threshold", default=0.005)
+        self.primary_symbol = config.get("trading", "instruments", 0, default="BTC/USDT")
+        self.position_size = config.get("strategy", "parameters", "position_size", default=0.01)
+        self.use_risk_based_sizing = config.get("strategy", "parameters", "use_risk_based_sizing", default=True)
         
         # Override with params if provided
-        params.setdefault("short_window", config_params.get("fast_period", 20))
-        params.setdefault("long_window", config_params.get("slow_period", 60))
-        params.setdefault("symbol", config.get("trading", "instruments", 0, default="BTC/USDT"))
-        params.setdefault("signal_threshold", config_params.get("threshold", 0.005))
-        params.setdefault("position_size", 0.01)  # Default 1%
-        params.setdefault("use_risk_based_sizing", True)
+        if params:
+            self.short_window = params.get("short_window", self.short_window)
+            self.long_window = params.get("long_window", self.long_window)
+            self.signal_threshold = params.get("signal_threshold", self.signal_threshold)
+            self.primary_symbol = params.get("symbol", self.primary_symbol)
+            self.position_size = params.get("position_size", self.position_size)
+            self.use_risk_based_sizing = params.get("use_risk_based_sizing", self.use_risk_based_sizing)
+            
+    
+        self.lookback_period = max(self.long_window * 2, 100) + 1    # Set required lookback period based on window sizes
         
-        # Initialize parent class
         super().__init__(config, params)
         
-        # Store parameters as instance variables for easy access
-        self.short_window = self.params["short_window"]
-        self.long_window = self.params["long_window"]
-        self.primary_symbol = self.params["symbol"]
-        self.signal_threshold = self.params["signal_threshold"]
-        self.position_size = self.params["position_size"]
-        self.use_risk_based_sizing = self.params["use_risk_based_sizing"]
+        self.logger.info(
+            f"DualMAStrategy initialized with short_window={self.short_window}, "
+            f"long_window={self.long_window}, threshold={self.signal_threshold}"
+        )
 
     def _init_factors(self) -> None:
-        """Initialize strategy factors"""
-        # Register short MA factor
+        """Register strategy factors for calculation."""
+        # Register primary moving average factors
         self.register_ma_factor('short_ma', self.short_window)
-        
-        # Register long MA factor
         self.register_ma_factor('long_ma', self.long_window)
         
-        # Register EMA factors for smoother crossovers
+        # Register EMA factors for signal confirmation
         self.register_ema_factor('short_ema', self.short_window)
         self.register_ema_factor('long_ema', self.long_window)
         
-        # Register price percentage change factor for volatility measure
+        # Register price change factor for volatility measure
         self.register_factor('price_change', 10, self._calculate_price_change, is_differential=True)
         
-        # Log registration
-        self.logger.debug(f"Registered factors: short_ma (window={self.short_window}), long_ma (window={self.long_window})")
+        self.logger.debug(f"Registered factors for DualMAStrategy")
 
     def _calculate_price_change(self, data: pd.DataFrame, **kwargs) -> pd.Series:
         """
-        Calculate percentage price change over window
+        Calculate percentage price change over window.
         
         Args:
-            data: Price data
+            data: Price data DataFrame
             **kwargs: Additional parameters
             
         Returns:
             pd.Series: Percentage price change
         """
         if 'close' not in data.columns:
+            self.logger.warning("Close price column not found in data")
             return pd.Series(index=data.index)
             
-        # Calculate percentage change over 10 periods
         return data['close'].pct_change(10)
 
     async def initialize(self) -> None:
-        """Initialize resources and validate parameters"""
+        """Initialize strategy and validate parameters."""
         # Parameter validation
         if self.short_window >= self.long_window:
             self.logger.error(f"short_window ({self.short_window}) must be less than long_window ({self.long_window})")
             raise ValueError("short_window must be less than long_window")
-        
-        # Adjust lookback period if needed
-        min_lookback = self.long_window * 2  # At least double the long window for meaningful signals
-        if self.lookback_period < min_lookback:
-            self.logger.warning(f"lookback_period ({self.lookback_period}) is less than recommended ({min_lookback}), adjusting")
-            self.lookback_period = min_lookback
             
-        # Parent class initialization - includes factor initialization from _init_factors
+        # Initialize parent class (registers factors)
         await super().initialize()
             
-        self.logger.info(f"Initialized DualMAStrategy with short_window={self.short_window}, long_window={self.long_window}")
-
-    async def _generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+    def register_ma_factor(self, name: str, window_size: int, price_column: str = 'close') -> None:
         """
-        Generate trading signals based on market data
+        Register a simple moving average factor.
         
         Args:
-            data: Market data for signal generation (e.g. OHLCV)
-
+            name: Factor name
+            window_size: Window size for the moving average
+            price_column: Column to calculate MA on (default: close)
+        """
+        def calculate_ma(data: pd.DataFrame, **kwargs) -> pd.Series:
+            if price_column in data.columns:
+                return data[price_column].rolling(window=window_size, min_periods=1).mean()
+            return pd.Series(index=data.index)
+        
+        self.register_factor(name, window_size, calculate_ma)
+    
+    def register_ema_factor(self, name: str, window_size: int, price_column: str = 'close') -> None:
+        """
+        Register an exponential moving average factor.
+        
+        Args:
+            name: Factor name
+            window_size: Window size for the EMA
+            price_column: Column to calculate EMA on (default: close)
+        """
+        def calculate_ema(data: pd.DataFrame, **kwargs) -> pd.Series:
+            if price_column in data.columns:
+                return data[price_column].ewm(span=window_size, adjust=False).mean()
+            return pd.Series(index=data.index)
+        
+        self.register_factor(name, window_size, calculate_ema)
+        
+    async def _generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Generate trading signals based on market data.
+        
+        Args:
+            data: Market data DataFrame with OHLCV data
+            
         Returns:
-            pd.DataFrame: Signals containing 'timestamp', 'symbol', 'action' (buy/sell) columns
+            pd.DataFrame: DataFrame with generated trading signals
         """        
         if data.empty:
             self.logger.warning("Empty data, cannot generate signals")
             return pd.DataFrame()
         
-        # Get the symbol
+        # Determine symbol from data or use default
         symbol = self.primary_symbol
-        if 'symbol' in data.columns:
-            # If data has symbol column, use the first one (assuming it's all the same)
-            if not data.empty:
-                symbol = data['symbol'].iloc[0]
-        
-        # Clone data to avoid modifying the original
-        working_data = data.copy()
+        if 'symbol' in data.columns and not data.empty:
+            symbol = data['symbol'].iloc[0]
         
         try:
-            # Calculate moving averages using optimized factor calculation
-            short_ma = self.calculate_factor(working_data, 'short_ma', symbol)
-            long_ma = self.calculate_factor(working_data, 'long_ma', symbol)
+            # Calculate moving averages
+            short_ma = self.calculate_factor(data, 'short_ma')
+            long_ma = self.calculate_factor(data, 'long_ma')
             
             # Calculate EMAs for confirmation
-            short_ema = self.calculate_factor(working_data, 'short_ema', symbol)
-            long_ema = self.calculate_factor(working_data, 'long_ema', symbol)
+            short_ema = self.calculate_factor(data, 'short_ema')
+            long_ema = self.calculate_factor(data, 'long_ema')
             
             # Calculate price change for volatility
-            price_change = self.calculate_factor(working_data, 'price_change', symbol)
+            price_change = self.calculate_factor(data, 'price_change')
             
-            # Add factors to working data
-            working_data['short_ma'] = short_ma
-            working_data['long_ma'] = long_ma
-            working_data['short_ema'] = short_ema
-            working_data['long_ema'] = long_ema
-            working_data['price_change'] = price_change
+            # Add factors to data for analysis
+            processed_data = data.copy()
+            processed_data['short_ma'] = short_ma
+            processed_data['long_ma'] = long_ma
+            processed_data['short_ema'] = short_ema
+            processed_data['long_ema'] = long_ema
+            processed_data['price_change'] = price_change
             
-            # Calculate moving average spread as percentage
-            working_data['ma_spread'] = (short_ma - long_ma) / long_ma
+            # Calculate MA spread (percentage difference)
+            processed_data['ma_spread'] = (short_ma - long_ma) / long_ma
             
-            # Create signal DataFrame using last 2 rows for potential signals
-            last_rows = working_data.tail(2)
-            if len(last_rows) < 2:
-                return pd.DataFrame()  # Need at least 2 rows for crossover detection
+            # Need at least 2 rows to detect crossovers
+            if len(processed_data) < 2:
+                return pd.DataFrame()
                 
-            signals = pd.DataFrame()
+            # Get last two rows for signal generation
+            last_rows = processed_data.tail(2)
+            signals = []
             
-            # Detect crossovers with improved reliability
+            # Get values for comparison
             prev_spread = last_rows['ma_spread'].iloc[0]
             curr_spread = last_rows['ma_spread'].iloc[1]
             
@@ -176,58 +191,58 @@ class DualMAStrategy(BaseStrategy):
             prev_ema_diff = (last_rows['short_ema'].iloc[0] - last_rows['long_ema'].iloc[0])
             curr_ema_diff = (last_rows['short_ema'].iloc[1] - last_rows['long_ema'].iloc[1])
             
-            # Get confirmation from price
+            # Get price confirmation
             curr_price = last_rows['close'].iloc[1]
             prev_price = last_rows['close'].iloc[0]
             
-            # Signal conditions with improved reliability
+            # Buy signal conditions
             buy_signal = (
-                prev_spread < 0 and curr_spread > 0  # MA crossover
-                and prev_ema_diff < 0 and curr_ema_diff > 0  # EMA confirmation
-                and abs(curr_spread) > self.signal_threshold  # Sufficient separation
-                and curr_price > prev_price  # Price confirmation
+                prev_spread < 0 and curr_spread > 0 and  # MA crossover
+                prev_ema_diff < 0 and curr_ema_diff > 0 and  # EMA confirmation
+                abs(curr_spread) > self.signal_threshold and  # Sufficient separation
+                curr_price > prev_price  # Price confirmation
             )
             
+            # Sell signal conditions
             sell_signal = (
-                prev_spread > 0 and curr_spread < 0  # MA crossover
-                and prev_ema_diff > 0 and curr_ema_diff < 0  # EMA confirmation
-                and abs(curr_spread) > self.signal_threshold  # Sufficient separation
-                and curr_price < prev_price  # Price confirmation
+                prev_spread > 0 and curr_spread < 0 and  # MA crossover
+                prev_ema_diff > 0 and curr_ema_diff < 0 and  # EMA confirmation
+                abs(curr_spread) > self.signal_threshold and  # Sufficient separation
+                curr_price < prev_price  # Price confirmation
             )
             
-            # Create signal if conditions met
+            # Generate signal if conditions are met
             if buy_signal or sell_signal:
                 row = last_rows.iloc[1]  # Use latest row for signal data
+                action = 'buy' if buy_signal else 'sell'
                 
-                # Create signal
+                # Calculate position size
+                quantity = self.calculate_position_size(
+                    curr_price,
+                    self.config.get("trading", "capital", "initial", default=100000)
+                )
+                
+                # Create signal data
                 signal_data = {
-                    'timestamp': row.name if isinstance(row.name, pd.Timestamp) else (
-                        row['datetime'] if 'datetime' in row else row.get('timestamp', pd.Timestamp.now())
-                    ),
+                    'timestamp': row.name if isinstance(row.name, pd.Timestamp) else row.get('timestamp', pd.Timestamp.now()),
                     'symbol': symbol,
-                    'action': 'buy' if buy_signal else 'sell',
-                    'price': float(row['close']),
+                    'action': action,
+                    'price': float(curr_price),
+                    'quantity': quantity,
                     'ma_spread': float(curr_spread),
                     'reason': 'MA Crossover with EMA confirmation',
                     'short_ma': float(short_ma.iloc[-1]),
                     'long_ma': float(long_ma.iloc[-1])
                 }
                 
-                # Calculate quantity
-                quantity = self.calculate_position_size(
-                    float(curr_price),
-                    self.config.get("trading", "capital", "initial", default=100000)
-                )
-                
-                signal_data['quantity'] = quantity
-                signals = pd.DataFrame([signal_data])
+                signals.append(signal_data)
                 
                 self.logger.info(
-                    f"Generated {signal_data['action']} signal for {symbol} @ ${float(curr_price):.2f}, "
+                    f"Generated {action} signal for {symbol} @ ${float(curr_price):.2f}, "
                     f"quantity: {quantity:.6f}, spread: {float(curr_spread)*100:.2f}%"
                 )
             
-            return signals
+            return pd.DataFrame(signals)
             
         except Exception as e:
             self.logger.error(f"Error generating signals: {str(e)}")
@@ -235,36 +250,31 @@ class DualMAStrategy(BaseStrategy):
     
     def calculate_position_size(self, price: float, capital: float) -> float:
         """
-        Calculate position size based on price and available capital
+        Calculate position size based on price and available capital.
         
         Args:
             price: Current asset price
             capital: Available capital
             
         Returns:
-            float: Position size
+            float: Position size (quantity to trade)
         """
         if self.use_risk_based_sizing:
             # Get risk settings from config
-            risk_per_trade = self.config.get("risk", "exposure", "risk_per_trade", default=0.01)  # Default 1% risk
-            max_position = self.config.get("trading", "limits", "position", default=0.1)  # Default max 10%
+            risk_per_trade = self.config.get("risk", "managers", "standard", "exposure", "risk_per_trade", default=0.01)
+            max_position = self.config.get("trading", "limits", "position", default=0.1)
             
-            # Calculate position size
+            # Calculate position size based on risk
             risk_amount = capital * risk_per_trade
             max_amount = capital * max_position
             
             # Use smaller of the two values
             position_value = min(risk_amount, max_amount)
             
-            # Convert to quantity
-            quantity = position_value / price if price > 0 else 0
-            
-            return quantity
         else:
             # Use fixed position size as percentage of capital
             position_value = capital * self.position_size
             
-            # Convert to quantity
-            quantity = position_value / price if price > 0 else 0
-            
-            return quantity
+        # Convert to quantity
+        quantity = position_value / price if price > 0 else 0
+        return quantity

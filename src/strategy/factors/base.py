@@ -21,7 +21,7 @@ class SignalType(Enum):
     VOLATILITY = "volatility"   # Use volatility-based signals
 
 
-class FactorBase(ABC):
+class BaseFactor(ABC):
     """Base class for all technical indicators and factors"""
     
     def __init__(self, config=None, params: Optional[Dict[str, Any]] = None):
@@ -207,3 +207,21 @@ class FactorBase(ABC):
     def name(self) -> str:
         """Get indicator name"""
         return self._name
+    
+    async def shutdown(self) -> None:
+        """
+        Clean up resources
+        """
+        # Call subclass-specific shutdown
+        await self._shutdown_specific()
+        
+        # Reset state
+        self._initialized = False
+        
+        self.logger.info(f"{self.__class__.__name__} shutdown completed")
+    
+    async def _shutdown_specific(self) -> None:
+        """
+        Specific shutdown operations for subclasses
+        """
+        pass

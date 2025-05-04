@@ -5,10 +5,10 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Any, Union
 
-from src.strategy.factors.base import FactorBase
+from src.strategy.factors.base import BaseFactor
 
 
-class OBV(FactorBase):
+class OBV(BaseFactor):
     """On-Balance Volume (OBV) indicator"""
     
     def __init__(self, price_col: str = 'close', vol_col: str = 'volume', name: Optional[str] = None):
@@ -51,7 +51,7 @@ class OBV(FactorBase):
         return obv
 
 
-class MoneyFlowIndex(FactorBase):
+class MoneyFlowIndex(BaseFactor):
     """Money Flow Index (MFI) indicator"""
     
     def __init__(self, period: int = 14, vol_col: str = 'volume', name: Optional[str] = None):
@@ -108,7 +108,7 @@ class MoneyFlowIndex(FactorBase):
         return mfi
 
 
-class VolumeOscillator(FactorBase):
+class VolumeOscillator(BaseFactor):
     """Volume Oscillator indicator"""
     
     def __init__(self, fast_period: int = 5, slow_period: int = 14, vol_col: str = 'volume', name: Optional[str] = None):

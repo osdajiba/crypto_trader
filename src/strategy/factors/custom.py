@@ -5,10 +5,10 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Any, Union, Callable, Type
 
-from src.strategy.factors.base import FactorBase
+from src.strategy.factors.base import BaseFactor
 
 
-class PriceChangeRate(FactorBase):
+class PriceChangeRate(BaseFactor):
     """Price Change Rate indicator"""
     
     def __init__(self, period: int = 5, price_col: str = 'close', name: Optional[str] = None):
@@ -43,7 +43,7 @@ class PriceChangeRate(FactorBase):
         return pcr
 
 
-class VolatilityIndex(FactorBase):
+class VolatilityIndex(BaseFactor):
     """Volatility Index indicator"""
     
     def __init__(self, period: int = 20, price_col: str = 'close', name: Optional[str] = None):
@@ -84,7 +84,7 @@ class VolatilityIndex(FactorBase):
         return annualized_volatility
 
 
-class PriceChannel(FactorBase):
+class PriceChannel(BaseFactor):
     """Price Channel indicator"""
     
     def __init__(self, period: int = 20, name: Optional[str] = None):
@@ -136,7 +136,7 @@ class PriceChannel(FactorBase):
         return result
 
 
-class RelativeStrengthFactor(FactorBase):
+class RelativeStrengthFactor(BaseFactor):
     """Relative Strength Factor compares current instrument to a benchmark or another instrument"""
     
     def __init__(self, period: int = 20, price_col: str = 'close', 
@@ -184,7 +184,7 @@ class CustomFactorBuilder:
     @staticmethod
     def create_custom_factor(name: str, func: Callable[[pd.DataFrame], pd.Series], 
                           required_columns: List[str] = None, 
-                          min_data_points: int = 0) -> Type[FactorBase]:
+                          min_data_points: int = 0) -> Type[BaseFactor]:
         """
         Create a custom factor class using provided function
         
@@ -195,9 +195,9 @@ class CustomFactorBuilder:
             min_data_points: Minimum required data points
             
         Returns:
-            Type[FactorBase]: Custom factor class
+            Type[BaseFactor]: Custom factor class
         """
-        class CustomFactor(FactorBase):
+        class CustomFactor(BaseFactor):
             def __init__(self, custom_name=None):
                 super().__init__(custom_name or name)
                 self._func = func

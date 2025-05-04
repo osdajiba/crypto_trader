@@ -5,10 +5,10 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Any, Union
 
-from src.strategy.factors.base import FactorBase
+from src.strategy.factors.base import BaseFactor
 
 
-class RSI(FactorBase):
+class RSI(BaseFactor):
     """Relative Strength Index (RSI) indicator"""
     
     def __init__(self, period: int = 14, price_col: str = 'close', name: Optional[str] = None):
@@ -57,7 +57,7 @@ class RSI(FactorBase):
         return rsi
 
 
-class MACD(FactorBase):
+class MACD(BaseFactor):
     """Moving Average Convergence Divergence (MACD) indicator"""
     
     def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9,
@@ -114,7 +114,7 @@ class MACD(FactorBase):
         return result
 
 
-class Stochastic(FactorBase):
+class Stochastic(BaseFactor):
     """Stochastic Oscillator indicator"""
     
     def __init__(self, k_period: int = 14, d_period: int = 3, slowing: int = 3, name: Optional[str] = None):

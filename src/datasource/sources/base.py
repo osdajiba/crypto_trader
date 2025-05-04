@@ -293,3 +293,21 @@ class BaseDataSource(ABC):
             ranges.append((chunk_start, chunk_end))
             
         return ranges
+
+    async def shutdown(self) -> None:
+        """
+        Clean up resources
+        """
+        # Call subclass-specific shutdown
+        await self._shutdown_specific()
+        
+        # Reset state
+        self._initialized = False
+        
+        self.logger.info(f"{self.__class__.__name__} shutdown completed")
+    
+    async def _shutdown_specific(self) -> None:
+        """
+        Specific shutdown operations for subclasses
+        """
+        pass

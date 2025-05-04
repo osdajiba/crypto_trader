@@ -21,7 +21,9 @@ class PaperMode(BaseTradingMode):
     def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
         """Initialize paper trading mode"""
         super().__init__(config, params)
-        self.commission_rate = 0
+        # TODO: different commission fee when the role is taker or maker (not implemented) 
+        self.commission_rate = config.get("trading", "fees", "commission_taker", default=0.005)
+        self.commission_rate = config.get("trading", "fees", "commission_maker", default=0.005)
         self.data_source_type = "hybrid"
     
     async def _initialize_mode_specific(self) -> None:

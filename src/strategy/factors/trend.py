@@ -1,4 +1,4 @@
-class IchimokuCloud(FactorBase):
+class IchimokuCloud(BaseFactor):
     """Ichimoku Cloud indicator"""
     
     def __init__(self, tenkan_period: int = 9, kijun_period: int = 26, 
@@ -68,7 +68,7 @@ class IchimokuCloud(FactorBase):
         return result
 
 
-class EMA(FactorBase):
+class EMA(BaseFactor):
     """Exponential Moving Average (EMA) indicator"""
     
     def __init__(self, period: int = 20, price_col: str = 'close', name: Optional[str] = None):
@@ -107,10 +107,10 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional, Any, Union
 
-from src.strategy.factors.base import FactorBase
+from src.strategy.factors.base import BaseFactor
 
 
-class SMA(FactorBase):
+class SMA(BaseFactor):
     """Simple Moving Average (SMA) indicator"""
     
     def __init__(self, period: int = 20, price_col: str = 'close', name: Optional[str] = None):

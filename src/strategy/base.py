@@ -3,7 +3,7 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional, Callable, Any, List, Type, Union
+from typing import Dict, Optional, Callable, Any, List, Union
 from abc import ABC, abstractmethod
 import time
 import asyncio
@@ -15,29 +15,34 @@ from src.common.async_executor import AsyncExecutor
 
 class BaseStrategy(ABC):
     """
-    Base class for trading strategies with factor management.
-    Concrete strategies inherit from this and implement _generate_signals.
-    """
+    Abstract base class for all trading strategies.
     
+    Provides a unified framework for strategy implementation with
+    built-in factor management, data buffering, and performance tracking.
+    Concrete strategies inherit from this class and implement the
+    _generate_signals method to create trading signals.
+    """
     def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
         """
-        Initialize base strategy.
+        Initialize the base strategy.
         
         Args:
             config: Configuration manager instance
-            params: Strategy-specific parameters
+            params: Optional strategy parameters
         """
         self.config = config
         self.params = params or {}
         self.logger = LogManager.get_logger(f"strategy.{self.__class__.__name__.lower()}")
+        
+        # Internal state tracking
         self._is_initialized = False
         
-        # Factor management
+        # Factor management system
         self._factor_registry = {}
+        self._factor_cache = {}
         self._data_buffer = {}
-        self._required_data_points = 0  # Will be computed based on factors
-        self._has_sufficient_history = {}  # Track history per symbol
-        self._factor_cache = {}     # Cache for factor values
+        self._required_data_points = 0
+        self._has_sufficient_history = {}
         
         # Performance monitoring
         self._performance_stats = {
@@ -48,18 +53,28 @@ class BaseStrategy(ABC):
             'runs': 0
         }
         
-        self.lookback_period = self.params.get("lookback_period", 60)    # Basic configuration
+        # Set default lookback period
+        self.lookback_period = self.params.get("lookback_period", 60)
+        
+        # Async executor for background tasks
         self.executor = AsyncExecutor()
+        
+        # Initialize factors
         self._init_factors()
     
     def _init_factors(self) -> None:
-        """Initialize strategy factors - to be implemented by subclasses"""
+        """
+        Initialize strategy factors.
+        
+        This method should be implemented by concrete strategy classes
+        to register their required factors.
+        """
         pass
     
     def register_factor(self, name: str, window_size: int, func: Callable = None, 
                        depends_on: List[str] = None, is_differential: bool = False) -> None:
         """
-        Register a factor with its required window size
+        Register a calculation factor with the strategy.
         
         Args:
             name: Factor name
@@ -75,19 +90,29 @@ class BaseStrategy(ABC):
             'is_differential': is_differential
         }
         
+        # Update required data points based on new factor
         self._update_required_data_points()
     
     def _update_required_data_points(self) -> None:
-        """Calculate required data points based on registered factors"""
+        """
+        Calculate required data points based on registered factors.
+        
+        This determines how much historical data is needed for proper
+        factor calculation.
+        """
         max_window = 0
         
+        # Find the largest window size from all factors
         for name, info in self._factor_registry.items():
             window_size = info['window_size']
+            
+            # If factor uses differencing, it needs an extra point
             if info.get('is_differential', False):
                 window_size += 1
+            
             max_window = max(max_window, window_size)
             
-            # Check dependencies
+            # Also consider dependencies
             for dep_name in info.get('depends_on', []):
                 if dep_name in self._factor_registry:
                     dep_window = self._factor_registry[dep_name]['window_size']
@@ -95,25 +120,35 @@ class BaseStrategy(ABC):
                         dep_window += 1
                     max_window = max(max_window, dep_window)
         
+        # Add 1 for safety and set minimum of 2 for crossover detection
         self._required_data_points = max(max_window, 2) + 1
         
         # Update lookback period if needed
         if self._required_data_points > self.lookback_period:
             self.lookback_period = self._required_data_points + 5  # Add buffer
     
-    async def process_data(self, data: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    async def process_data(self, data: pd.DataFrame, symbol: str = None) -> pd.DataFrame:
         """
-        Process data for a symbol and generate signals.
+        Process market data for a symbol and generate signals.
         
         Args:
-            data: Market data
-            symbol: Trading pair being processed
+            data: Market data DataFrame
+            symbol: Trading symbol (optional, extracted from data if available)
             
         Returns:
-            Trading signals
+            pd.DataFrame: Trading signals
         """
         try:
-            start_time = time.time()            
+            # Track performance
+            start_time = time.time()
+            
+            # Determine symbol from data if not provided
+            if symbol is None and 'symbol' in data.columns and not data.empty:
+                symbol = data['symbol'].iloc[0]
+            elif symbol is None:
+                symbol = self.params.get("symbol", "unknown")
+            
+            # Manage data buffer for the symbol
             sufficient_history = await self._manage_data_buffer(data, symbol)
             
             # Check if we have enough data to generate signals
@@ -121,7 +156,10 @@ class BaseStrategy(ABC):
                 self.logger.debug(f"Insufficient history for {symbol}, need {self._required_data_points} points")
                 return pd.DataFrame()
             
+            # Generate signals using strategy-specific logic
             signals = await self._generate_signals(self._data_buffer[symbol])
+            
+            # Ensure symbol is set in signals
             if not signals.empty and 'symbol' not in signals.columns:
                 signals['symbol'] = symbol
             
@@ -129,7 +167,10 @@ class BaseStrategy(ABC):
             execution_time = time.time() - start_time
             self._performance_stats['execution_time'] += execution_time
             self._performance_stats['runs'] += 1
-            self._performance_stats['avg_execution_time'] = self._performance_stats['execution_time'] / self._performance_stats['runs']
+            self._performance_stats['avg_execution_time'] = (
+                self._performance_stats['execution_time'] / 
+                self._performance_stats['runs']
+            )
             self._performance_stats['last_run'] = time.time()
             
             if not signals.empty:
@@ -144,14 +185,14 @@ class BaseStrategy(ABC):
     
     async def _manage_data_buffer(self, new_data: pd.DataFrame, symbol: str) -> bool:
         """
-        Manage data buffer for initial collection and updates
+        Manage data buffer for a symbol.
         
         Args:
             new_data: New data to add to buffer
             symbol: Symbol being processed
             
         Returns:
-            True if we have sufficient history, False otherwise
+            bool: True if we have sufficient history for signal generation
         """
         # Initialize buffers if needed
         if symbol not in self._data_buffer:
@@ -159,36 +200,41 @@ class BaseStrategy(ABC):
             self._has_sufficient_history[symbol] = False
             self._factor_cache[symbol] = {}
         
-        # Ensure new_data has datetime column
+        # Ensure datetime column exists
         if 'datetime' not in new_data.columns and 'timestamp' in new_data.columns:
             try:
-                # Try to convert timestamp to datetime
+                # Copy to avoid modifying the original data
                 new_data = new_data.copy()
+                
+                # Convert timestamp to datetime
                 if pd.api.types.is_numeric_dtype(new_data['timestamp']):
                     new_data['datetime'] = pd.to_datetime(new_data['timestamp'], unit='ms')
                 else:
                     new_data['datetime'] = pd.to_datetime(new_data['timestamp'])
+                    
             except Exception as e:
                 self.logger.warning(f"Error converting timestamp to datetime: {e}")
         
-        # Add new data to buffer
+        # Add new data to buffer if not empty
         if not new_data.empty:
-            # Handle different index types gracefully
-            if isinstance(new_data.index, pd.DatetimeIndex) and not isinstance(self._data_buffer[symbol].index, pd.DatetimeIndex):
-                # Convert existing buffer to use DatetimeIndex if new data uses it
-                if not self._data_buffer[symbol].empty:
-                    self._data_buffer[symbol] = self._data_buffer[symbol].set_index('datetime')
-            
-            # Handle DataFrame concatenation
             try:
+                # Handle different index types
+                if isinstance(new_data.index, pd.DatetimeIndex) and not isinstance(self._data_buffer[symbol].index, pd.DatetimeIndex):
+                    if not self._data_buffer[symbol].empty:
+                        # Convert existing buffer to use DatetimeIndex
+                        if 'datetime' in self._data_buffer[symbol].columns:
+                            self._data_buffer[symbol] = self._data_buffer[symbol].set_index('datetime')
+                
+                # Concatenate data
                 self._data_buffer[symbol] = pd.concat([self._data_buffer[symbol], new_data]).drop_duplicates()
+                
             except Exception as e:
                 self.logger.error(f"Error concatenating data: {e}")
-                # Try a more robust approach
+                
+                # Try a more robust approach with common columns
                 buffer_cols = set(self._data_buffer[symbol].columns)
                 new_cols = set(new_data.columns)
                 
-                # Use common columns only
                 common_cols = buffer_cols.intersection(new_cols)
                 if common_cols:
                     self._data_buffer[symbol] = pd.concat([
@@ -200,10 +246,10 @@ class BaseStrategy(ABC):
         if 'datetime' in self._data_buffer[symbol].columns:
             self._data_buffer[symbol] = self._data_buffer[symbol].sort_values('datetime')
         
-        # If we already have sufficient history, just keep the window we need
+        # If we already have sufficient history, trim the buffer
         if self._has_sufficient_history[symbol]:
-            # Keep only required data points plus some buffer
-            buffer_size = min(1000, max(100, self._required_data_points * 2))  # Keep reasonable buffer
+            # Keep a reasonable buffer size to avoid memory issues
+            buffer_size = min(1000, max(100, self._required_data_points * 2))
             self._data_buffer[symbol] = self._data_buffer[symbol].tail(buffer_size)
             return True
         
@@ -219,7 +265,7 @@ class BaseStrategy(ABC):
 
     def calculate_factor(self, data: pd.DataFrame, factor_name: str, symbol: str = None) -> pd.Series:
         """
-        Calculate factor values with caching for efficiency
+        Calculate a factor with efficient caching.
         
         Args:
             data: Data for factor calculation
@@ -227,7 +273,7 @@ class BaseStrategy(ABC):
             symbol: Symbol for caching purposes
             
         Returns:
-            Calculated factor values
+            pd.Series: Calculated factor values
         """
         if factor_name not in self._factor_registry:
             self.logger.warning(f"Factor '{factor_name}' not registered")
@@ -235,32 +281,33 @@ class BaseStrategy(ABC):
         
         factor_info = self._factor_registry[factor_name]
         
-        # Check dependencies
+        # Check dependencies first
         for dep_name in factor_info.get('depends_on', []):
             if dep_name in self._factor_registry and symbol and symbol in self._factor_cache:
                 if dep_name not in self._factor_cache[symbol]:
+                    # Calculate dependency if not in cache
                     self.calculate_factor(data, dep_name, symbol)
         
-        # Calculate factor
+        # Calculate factor if function available
         if factor_info['func'] and callable(factor_info['func']):
             try:
-                # Check cache first
+                # Check if factor is already in cache
                 if symbol and symbol in self._factor_cache and factor_name in self._factor_cache[symbol]:
                     cached_factor = self._factor_cache[symbol][factor_name]
                     # Check if cache is valid for the current data
                     if isinstance(cached_factor, pd.Series) and len(cached_factor) == len(data):
                         return cached_factor
                 
-                # Prepare dependency values
+                # Prepare dependency values for calculation
                 kwargs = {}
                 for dep_name in factor_info.get('depends_on', []):
                     if symbol and symbol in self._factor_cache and dep_name in self._factor_cache[symbol]:
                         kwargs[dep_name] = self._factor_cache[symbol][dep_name]
                 
-                # Calculate
+                # Calculate the factor
                 factor_values = factor_info['func'](data, **kwargs)
                 
-                # Cache result
+                # Cache the result if symbol provided
                 if symbol:
                     if symbol not in self._factor_cache:
                         self._factor_cache[symbol] = {}
@@ -278,27 +325,31 @@ class BaseStrategy(ABC):
     async def _generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """
         Generate trading signals based on market data.
-        Must be implemented by concrete strategy classes.
+        
+        This method must be implemented by concrete strategy classes.
         
         Args:
-            data: Market data for signal generation
+            data: Market data with sufficient history
             
         Returns:
-            Signals with 'timestamp', 'symbol', 'action' columns
+            pd.DataFrame: Signals with columns like timestamp, symbol, action
         """
         pass
     
     async def initialize(self) -> None:
-        """Initialize strategy resources"""
+        """Initialize strategy resources."""
         if not self._is_initialized:
+            # Start async executor
             await self.executor.start()
+            
+            # Mark as initialized
             self._is_initialized = True
             self.logger.info(f"Strategy {self.__class__.__name__} initialized")
     
     async def shutdown(self) -> None:
-        """Clean up strategy resources"""
+        """Clean up strategy resources."""
         if self._is_initialized:
-            # Clear data
+            # Clear data caches
             self._data_buffer.clear()
             self._factor_cache.clear()
             self._has_sufficient_history.clear()
@@ -306,12 +357,13 @@ class BaseStrategy(ABC):
             # Shutdown executor
             await self.executor.shutdown()
             
+            # Mark as not initialized
             self._is_initialized = False
             self.logger.info(f"Strategy {self.__class__.__name__} shutdown complete")
     
     def get_performance_stats(self) -> Dict[str, Any]:
         """
-        Get strategy performance statistics
+        Get strategy performance statistics.
         
         Returns:
             Dict[str, Any]: Performance statistics
@@ -327,36 +379,20 @@ class BaseStrategy(ABC):
             'required_data_points': self._required_data_points
         }
     
-    def register_ma_factor(self, name: str, window_size: int, price_column: str = 'close') -> None:
+    async def shutdown(self) -> None:
         """
-        Utility function to register a moving average factor
-        
-        Args:
-            name: Factor name
-            window_size: Window size for the moving average
-            price_column: Column to calculate MA on (default: close)
+        Clean up resources
         """
-        def calculate_ma(data: pd.DataFrame, **kwargs) -> pd.Series:
-            if price_column in data.columns:
-                return data[price_column].rolling(window=window_size, min_periods=1).mean()
-            return pd.Series(index=data.index)
+        # Call subclass-specific shutdown
+        await self._shutdown_specific()
         
-        self.register_factor(name, window_size, calculate_ma)
-        self.logger.debug(f"Registered MA factor '{name}' with window size {window_size}")
+        # Reset state
+        self._initialized = False
+        
+        self.logger.info(f"{self.__class__.__name__} shutdown completed")
     
-    def register_ema_factor(self, name: str, window_size: int, price_column: str = 'close') -> None:
+    async def _shutdown_specific(self) -> None:
         """
-        Utility function to register an exponential moving average factor
-        
-        Args:
-            name: Factor name
-            window_size: Window size for the EMA
-            price_column: Column to calculate EMA on (default: close)
+        Specific shutdown operations for subclasses
         """
-        def calculate_ema(data: pd.DataFrame, **kwargs) -> pd.Series:
-            if price_column in data.columns:
-                return data[price_column].ewm(span=window_size, adjust=False).mean()
-            return pd.Series(index=data.index)
-        
-        self.register_factor(name, window_size, calculate_ema)
-        self.logger.debug(f"Registered EMA factor '{name}' with window size {window_size}")
+        pass
