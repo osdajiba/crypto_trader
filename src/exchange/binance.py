@@ -6,6 +6,7 @@ Binance exchange implementation.
 Provides interface to Binance exchange API.
 """
 
+import ccxtpro
 import ccxt
 import ccxt.async_support as ccxt_async
 import pandas as pd
@@ -16,11 +17,15 @@ import random
 from typing import Dict, List, Union, Optional, Any, Tuple, Callable
 from datetime import datetime, timedelta
 from functools import wraps
+from decimal import Decimal
 
 from src.common.config_manager import ConfigManager
 from src.common.abstract_factory import register_factory_class
 from src.common.helpers import TimeUtils
-from src.exchange.base import Exchange, ExchangeError, ExchangeAPIError, ExchangeRateLimitError, ExchangeConnectionError
+from src.exchange.base import (
+    Exchange, ExchangeError, ExchangeAPIError, ExchangeRateLimitError, 
+    ExchangeConnectionError, ExchangeOrderError, retry_exchange_operation
+)
 
 
 def retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0):
@@ -94,6 +99,32 @@ class BinanceExchange(Exchange):
         # Set up cache directory
         self.cache_dir = self._get_cache_dir()
         os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # Market types and precisions
+        self._market_precisions = {}
+        self._market_limits = {}
+        
+        # Order type mappings
+        self._order_type_map = {
+            'market': 'MARKET',
+            'limit': 'LIMIT',
+            'stop': 'STOP',
+            'stop_market': 'STOP_MARKET',
+            'stop_limit': 'STOP',
+            'take_profit': 'TAKE_PROFIT',
+            'take_profit_market': 'TAKE_PROFIT_MARKET',
+            'take_profit_limit': 'TAKE_PROFIT',
+            'trailing_stop_market': 'TRAILING_STOP_MARKET'
+        }
+        
+        # Order side mappings
+        self._order_side_map = {
+            'buy': 'BUY',
+            'sell': 'SELL'
+        }
+        
+        # Trading mode
+        self._trading_mode = self.config.get('system', 'operational_mode', default='backtest')
     
     def _get_cache_dir(self) -> str:
         """Get cache directory from configuration"""
@@ -171,6 +202,7 @@ class BinanceExchange(Exchange):
             try:
                 self.exchange.load_markets()
                 self.logger.info("Market data loaded successfully")
+                self._load_market_info()
             except Exception as e:
                 self.logger.warning(f"Failed to load market data: {str(e)}, will load on first call")
             
@@ -179,6 +211,41 @@ class BinanceExchange(Exchange):
         except Exception as e:
             self.logger.error(f"Error initializing Binance exchange: {str(e)}")
             raise ExchangeConnectionError(f"Cannot initialize exchange: {str(e)}")
+    
+    def _load_market_info(self) -> None:
+        """Load market information including precision and limits"""
+        if not self.exchange or not self.exchange.markets:
+            return
+            
+        for symbol, market in self.exchange.markets.items():
+            # Extract precision info
+            if 'precision' in market:
+                self._market_precisions[symbol] = {
+                    'price': market['precision'].get('price', 8),
+                    'amount': market['precision'].get('amount', 8),
+                    'cost': market['precision'].get('cost', 8)
+                }
+            
+            # Extract limits
+            if 'limits' in market:
+                self._market_limits[symbol] = {
+                    'amount': {
+                        'min': market['limits']['amount'].get('min', 0),
+                        'max': market['limits']['amount'].get('max', None)
+                    },
+                    'price': {
+                        'min': market['limits']['price'].get('min', 0),
+                        'max': market['limits']['price'].get('max', None)
+                    },
+                    'cost': {
+                        'min': market['limits']['cost'].get('min', 0),
+                        'max': market['limits']['cost'].get('max', None)
+                    },
+                    'market': {
+                        'min': market['limits'].get('market', {}).get('min', 0),
+                        'max': market['limits'].get('market', {}).get('max', None)
+                    }
+                }
     
     async def _initialize_offline(self) -> None:
         """Initialize exchange in offline mode"""
@@ -278,147 +345,961 @@ class BinanceExchange(Exchange):
         except Exception as e:
             self.logger.error(f"Error closing async exchange: {str(e)}")
     
-    async def _exponential_backoff(self, attempt: int) -> float:
+    @retry_exchange_operation(max_attempts=3, base_delay=2.0, max_delay=30.0)
+    async def create_order(self, 
+                     symbol: str, 
+                     order_type: str, 
+                     side: str, 
+                     amount: float,
+                     price: Optional[float] = None, 
+                     params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Implement exponential backoff with jitter
-        
-        Args:
-            attempt: Current retry attempt number
-            
-        Returns:
-            float: Delay time in seconds
-        """
-        base_delay = 1.0
-        max_delay = 30.0
-        
-        # Calculate exponential backoff time with random jitter
-        delay = min(max_delay, base_delay * (2 ** attempt)) 
-        jitter = random.uniform(0.5, 1.0)  # 50-100% random jitter
-        final_delay = delay * jitter
-        self.logger.info(f"Will wait {final_delay:.2f} seconds before retry (attempt {attempt+1})")
-        await asyncio.sleep(final_delay)
-        return final_delay
-        
-    async def watch_ohlcv(self, 
-                        symbol: str, 
-                        timeframe: str, 
-                        callback: Optional[Callable] = None) -> bool:
-        """
-        Subscribe to real-time OHLCV data using WebSocket
+        Create an order on the exchange with enhanced error handling and validation
         
         Args:
             symbol: Trading pair symbol
-            timeframe: Time period (e.g., '1m', '1h', '1d')
-            callback: Callback function to receive updates
+            order_type: Order type (e.g., 'market', 'limit')
+            side: Order side ('buy' or 'sell')
+            amount: Order amount
+            price: Order price (required for limit orders)
+            params: Additional parameters for the order
             
         Returns:
-            bool: Success status
+            Dict[str, Any]: Order information with standardized format
             
         Raises:
-            ExchangeAPIError: If subscription fails
+            ExchangeOrderError: If order creation fails
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        # Validate parameters
+        self._validate_order_params(symbol, order_type, side, amount, price)
+        
+        # Apply precision and limits
+        amount = self._apply_amount_precision(symbol, amount)
+        if price:
+            price = self._apply_price_precision(symbol, price)
+        
+        # Standardize order type and side
+        std_order_type = self._order_type_map.get(order_type.lower(), 'LIMIT')
+        std_side = self._order_side_map.get(side.lower(), 'BUY')
+        
+        try:
+            # Ensure async exchange is initialized
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            # Handle rate limit
+            await self._handle_rate_limit()
+            
+            # Create order with Binance
+            result = await self.async_exchange.create_order(
+                symbol=symbol,
+                type=std_order_type.lower(),
+                side=std_side.lower(),
+                amount=amount,
+                price=price,
+                params=params or {}
+            )
+            
+            # Standardize response format
+            standardized_result = self._standardize_order_response(result)
+            
+            # Cache order information
+            order_id = standardized_result.get('order_id') or standardized_result.get('id')
+            if order_id:
+                self._active_orders[order_id] = standardized_result
+            
+            # Emit order created event
+            self.emit_event('order_created', {
+                'order_id': order_id,
+                'symbol': symbol,
+                'type': order_type,
+                'side': side,
+                'amount': amount,
+                'price': price,
+                'status': standardized_result.get('status', 'unknown')
+            })
+            
+            return standardized_result
+            
+        except ccxt.OrderNotFound:
+            error_msg = f"Order not found: {symbol} {side} {amount}"
+            self.logger.error(error_msg)
+            raise ExchangeOrderError(error_msg)
+        except ccxt.InsufficientFunds:
+            error_msg = f"Insufficient funds for order: {symbol} {side} {amount}"
+            self.logger.error(error_msg)
+            raise ExchangeOrderError(error_msg)
+        except ccxt.InvalidOrder as e:
+            error_msg = f"Invalid order: {symbol} {side} {amount} - {str(e)}"
+            self.logger.error(error_msg)
+            raise ExchangeOrderError(error_msg)
+        except Exception as e:
+            error_msg = f"Order creation failed: {symbol} {side} {amount} - {str(e)}"
+            self.logger.error(error_msg)
+            raise ExchangeOrderError(error_msg)
+    
+    def _validate_order_params(self, symbol: str, order_type: str, 
+                              side: str, amount: float, price: Optional[float]) -> None:
+        """
+        Validate order parameters against market limits
+        
+        Args:
+            symbol: Trading pair symbol
+            order_type: Order type
+            side: Order side
+            amount: Order amount
+            price: Order price (optional)
+            
+        Raises:
+            ExchangeOrderError: If validation fails
+        """
+        # Check if symbol exists
+        if symbol not in self._market_limits:
+            raise ExchangeOrderError(f"Symbol not found: {symbol}")
+        
+        # Check amount limits
+        limits = self._market_limits[symbol]
+        min_amount = limits['amount']['min']
+        max_amount = limits['amount']['max']
+        
+        if amount < min_amount:
+            raise ExchangeOrderError(f"Amount {amount} below minimum {min_amount} for {symbol}")
+        
+        if max_amount and amount > max_amount:
+            raise ExchangeOrderError(f"Amount {amount} exceeds maximum {max_amount} for {symbol}")
+        
+        # Check price limits for limit orders
+        if price and order_type.lower() in ['limit', 'stop_limit']:
+            min_price = limits['price']['min']
+            max_price = limits['price']['max']
+            
+            if price < min_price:
+                raise ExchangeOrderError(f"Price {price} below minimum {min_price} for {symbol}")
+            
+            if max_price and price > max_price:
+                raise ExchangeOrderError(f"Price {price} exceeds maximum {max_price} for {symbol}")
+        
+        # Check cost (notional) limits
+        if price and order_type.lower() in ['limit', 'market']:
+            estimated_cost = amount * price
+            min_cost = limits['cost']['min']
+            
+            if estimated_cost < min_cost:
+                raise ExchangeOrderError(f"Order value {estimated_cost} below minimum {min_cost} for {symbol}")
+    
+    def _apply_amount_precision(self, symbol: str, amount: float) -> float:
+        """Apply precision to order amount"""
+        if symbol in self._market_precisions:
+            precision = self._market_precisions[symbol]['amount']
+            return round(amount, precision)
+        return amount
+    
+    def _apply_price_precision(self, symbol: str, price: float) -> float:
+        """Apply precision to order price"""
+        if symbol in self._market_precisions:
+            precision = self._market_precisions[symbol]['price']
+            return round(price, precision)
+        return price
+    
+    def _standardize_order_response(self, raw_order: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Standardize order response format for consistency
+        
+        Args:
+            raw_order: Raw order response from exchange
+            
+        Returns:
+            Dict[str, Any]: Standardized order information
+        """
+        standardized = {
+            'order_id': raw_order.get('id'),
+            'client_order_id': raw_order.get('clientOrderId'),
+            'symbol': raw_order.get('symbol'),
+            'order_type': raw_order.get('type', '').lower(),
+            'side': raw_order.get('side', '').lower(),
+            'amount': raw_order.get('amount', 0),
+            'price': raw_order.get('price', 0),
+            'filled': raw_order.get('filled', 0),
+            'remaining': raw_order.get('remaining', 0),
+            'cost': raw_order.get('cost', 0),
+            'average_price': raw_order.get('average', 0),
+            'fee': {
+                'cost': raw_order.get('fee', {}).get('cost', 0),
+                'currency': raw_order.get('fee', {}).get('currency', '')
+            },
+            'status': self.map_order_status(raw_order.get('status', 'unknown')),
+            'timestamp': raw_order.get('timestamp'),
+            'datetime': raw_order.get('datetime'),
+            'raw': raw_order  # Keep original for reference
+        }
+        
+        return standardized
+    
+    @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
+    async def cancel_order(self, order_id: str, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Cancel an order on the exchange
+        
+        Args:
+            order_id: Order ID to cancel
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Cancellation result
         """
         if not self._initialized:
             await self.initialize()
         
         try:
+            # Ensure async exchange is initialized
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            # Cancel order
+            result = await self.async_exchange.cancel_order(order_id, symbol, params)
+            
+            # Update order cache
+            if order_id in self._active_orders:
+                self._active_orders[order_id]['status'] = 'canceled'
+                self._order_history[order_id] = self._active_orders.pop(order_id)
+            
+            # Emit order canceled event
+            self.emit_event('order_canceled', {
+                'order_id': order_id,
+                'symbol': symbol,
+                'status': 'canceled'
+            })
+            
+            return self._standardize_order_response(result)
+            
+        except ccxt.OrderNotFound:
+            self.logger.warning(f"Order {order_id} not found for cancellation")
+            if order_id in self._active_orders:
+                # If locally tracked but not found on exchange, mark as completed
+                self._active_orders[order_id]['status'] = 'filled'
+                self._order_history[order_id] = self._active_orders.pop(order_id)
+            return {'success': False, 'order_id': order_id, 'error': 'Order not found'}
+        except Exception as e:
+            self.logger.error(f"Failed to cancel order {order_id}: {str(e)}")
+            raise ExchangeOrderError(f"Cancel order failed: {str(e)}")
+    
+    @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
+    async def fetch_order(self, order_id: str, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Fetch order details with caching
+        
+        Args:
+            order_id: Order ID to fetch
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Order details
+        """
+        # Check cache first if order might be completed
+        if order_id in self._order_history:
+            return self._order_history[order_id]
+        elif order_id in self._active_orders:
+            cached_order = self._active_orders[order_id]
+            # If cached order is marked as final state and not too old
+            if (cached_order.get('status') in ['filled', 'canceled', 'rejected', 'expired'] 
+                and time.time() - cached_order.get('cache_time', 0) < 300):  # 5 minutes
+                return cached_order
+        
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            # Ensure async exchange is initialized
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            # Fetch order from exchange
+            result = await self.async_exchange.fetch_order(order_id, symbol, params)
+            
+            # Standardize response
+            standardized_result = self._standardize_order_response(result)
+            
+            # Update cache
+            standardized_result['cache_time'] = time.time()
+            
+            if standardized_result['status'] in ['filled', 'canceled', 'rejected', 'expired']:
+                # Move to history if completed
+                if order_id in self._active_orders:
+                    del self._active_orders[order_id]
+                self._order_history[order_id] = standardized_result
+            else:
+                # Keep in active orders
+                self._active_orders[order_id] = standardized_result
+            
+            return standardized_result
+            
+        except ccxt.OrderNotFound:
+            self.logger.warning(f"Order {order_id} not found when fetching")
+            return {'success': False, 'order_id': order_id, 'error': 'Order not found'}
+        except Exception as e:
+            self.logger.error(f"Failed to fetch order {order_id}: {str(e)}")
+            raise ExchangeOrderError(f"Fetch order failed: {str(e)}")
+    
+    async def fetch_open_orders(self, symbol: Optional[str] = None, 
+                         since: Optional[int] = None, 
+                         limit: Optional[int] = None, 
+                         params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Fetch open orders"""
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            # Ensure async exchange is initialized
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            # Fetch open orders
+            result = await self.async_exchange.fetch_open_orders(symbol, since, limit, params)
+            
+            # Standardize and cache results
+            standardized_orders = []
+            for order in result:
+                standardized = self._standardize_order_response(order)
+                standardized['cache_time'] = time.time()
+                
+                order_id = standardized.get('order_id')
+                if order_id:
+                    self._active_orders[order_id] = standardized
+                    
+                standardized_orders.append(standardized)
+            
+            return standardized_orders
+            
+        except Exception as e:
+            self.logger.error(f"Failed to fetch open orders: {str(e)}")
+            return []
+    
+    @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
+    async def fetch_position(self, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Fetch position information for futures trading
+        
+        Args:
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Position information
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            # Ensure async exchange is initialized and in futures mode
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            # Switch to futures mode if needed
+            original_type = self.async_exchange.options.get('defaultType', 'spot')
+            self.async_exchange.options['defaultType'] = 'future'
+            
+            try:
+                # Fetch position
+                result = await self.async_exchange.fetch_position(symbol, params)
+                
+                # Cache position
+                self._position_cache[symbol] = result
+                
+                return result
+            finally:
+                # Restore original mode
+                self.async_exchange.options['defaultType'] = original_type
+                
+        except Exception as e:
+            self.logger.error(f"Failed to fetch position for {symbol}: {str(e)}")
+            raise ExchangeError(f"Fetch position failed: {str(e)}")
+    
+    @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
+    async def set_leverage(self, leverage: float, symbol: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Set leverage for futures trading
+        
+        Args:
+            leverage: Leverage level
+            symbol: Trading pair symbol
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Response from exchange
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            # Ensure async exchange is initialized and in futures mode
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            # Switch to futures mode if needed
+            original_type = self.async_exchange.options.get('defaultType', 'spot')
+            self.async_exchange.options['defaultType'] = 'future'
+            
+            try:
+                # Set leverage
+                result = await self.async_exchange.set_leverage(leverage, symbol, params)
+                
+                self.logger.info(f"Set leverage for {symbol} to {leverage}x")
+                
+                return result
+            finally:
+                # Restore original mode
+                self.async_exchange.options['defaultType'] = original_type
+                
+        except Exception as e:
+            self.logger.error(f"Failed to set leverage for {symbol}: {str(e)}")
+            raise ExchangeError(f"Set leverage failed: {str(e)}")
+    
+    async def get_market_info(self, symbol: str) -> Dict[str, Any]:
+        """
+        Get market information for a symbol
+        
+        Args:
+            symbol: Trading pair symbol
+            
+        Returns:
+            Dict[str, Any]: Market information
+        """
+        if symbol in self._market_cache:
+            return self._market_cache[symbol]
+            
+        if not self.exchange or not self.exchange.markets:
+            try:
+                await self.initialize()
+            except Exception as e:
+                self.logger.error(f"Failed to initialize exchange: {e}")
+                return {}
+        
+        if symbol in self.exchange.markets:
+            market_info = self.exchange.markets[symbol].copy()
+            # Add precision and limits
+            if symbol in self._market_precisions:
+                market_info['precision'] = self._market_precisions[symbol]
+            if symbol in self._market_limits:
+                market_info['limits'] = self._market_limits[symbol]
+            
+            self._market_cache[symbol] = market_info
+            return market_info
+        
+        return {}
+    
+    async def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
+        """Fetch ticker data with caching"""
+        # Check cache
+        if symbol in self._ticker_cache:
+            cache_data, cache_time = self._ticker_cache[symbol]
+            if time.time() - cache_time < 5:  # 5 second cache
+                return cache_data
+        
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            ticker = await self.async_exchange.fetch_ticker(symbol)
+            
+            # Cache ticker data
+            self._ticker_cache[symbol] = (ticker, time.time())
+            
+            return ticker
+        except Exception as e:
+            self.logger.error(f"Failed to fetch ticker for {symbol}: {str(e)}")
+            raise ExchangeError(f"Fetch ticker failed: {str(e)}")
+    
+    @staticmethod
+    def _map_order_status(binance_status: str) -> str:
+        """Map Binance order status to standard status"""
+        binance_status_map = {
+            'NEW': 'created',
+            'PARTIALLY_FILLED': 'partial',
+            'FILLED': 'filled',
+            'CANCELED': 'canceled',
+            'REJECTED': 'rejected',
+            'EXPIRED': 'expired',
+            'PENDING_CANCEL': 'canceling',
+            'PENDING_NEW': 'submitting'
+        }
+        
+        return binance_status_map.get(binance_status.upper(), 'unknown')
+    
+    async def fetch_balance(self, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Fetch account balance
+        
+        Args:
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Account balance information
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            balance = await self.async_exchange.fetch_balance(params)
+            
+            # Standardize balance format
+            standardized = {
+                'info': balance.get('info', {}),
+                'currencies': {}
+            }
+            
+            for currency, data in balance.items():
+                if currency not in ['info', 'free', 'used', 'total']:
+                    standardized['currencies'][currency] = {
+                        'free': data.get('free', 0),
+                        'used': data.get('used', 0),
+                        'total': data.get('total', 0)
+                    }
+            
+            return standardized
+            
+        except Exception as e:
+            self.logger.error(f"Failed to fetch balance: {str(e)}")
+            raise ExchangeError(f"Fetch balance failed: {str(e)}")
+    
+    async def fetch_trades(self, symbol: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Fetch recent public trades for a symbol
+        
+        Args:
+            symbol: Trading pair symbol
+            limit: Number of trades to fetch
+            
+        Returns:
+            List[Dict[str, Any]]: Recent trades
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            trades = await self.async_exchange.fetch_trades(symbol, limit=limit)
+            
+            return trades
+            
+        except Exception as e:
+            self.logger.error(f"Failed to fetch trades for {symbol}: {str(e)}")
+            raise ExchangeError(f"Fetch trades failed: {str(e)}")
+    
+    async def fetch_order_book(self, symbol: str, limit: int = 20) -> Dict[str, Any]:
+        """
+        Fetch order book for a symbol
+        
+        Args:
+            symbol: Trading pair symbol
+            limit: Order book depth
+            
+        Returns:
+            Dict[str, Any]: Order book data
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            order_book = await self.async_exchange.fetch_order_book(symbol, limit=limit)
+            
+            # Cache order book data
+            self._order_book_cache[symbol] = (order_book, time.time())
+            
+            return order_book
+            
+        except Exception as e:
+            self.logger.error(f"Failed to fetch order book for {symbol}: {str(e)}")
+            raise ExchangeError(f"Fetch order book failed: {str(e)}")
+    
+    def set_market_type(self, market_type: str) -> None:
+        """
+        Set market type for trading (override from base)
+        
+        Args:
+            market_type: Market type ('spot', 'future', 'margin', etc.)
+        """
+        super().set_market_type(market_type)
+        
+        # Update exchange options if needed
+        if self.exchange:
+            default_type = 'future' if market_type == 'future' else 'spot'
+            self.exchange.options['defaultType'] = default_type
+        
+        if self.async_exchange:
+            async_default_type = 'future' if market_type == 'future' else 'spot'
+            self.async_exchange.options['defaultType'] = async_default_type
+    
+    async def create_stop_loss_order(self, 
+                              symbol: str, 
+                              side: str, 
+                              amount: float,
+                              stop_price: float,
+                              price: Optional[float] = None,
+                              params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Create a stop loss order
+        
+        Args:
+            symbol: Trading pair symbol
+            side: Order side ('buy' or 'sell')
+            amount: Order amount
+            stop_price: Stop price to trigger the order
+            price: Limit price (for stop limit orders)
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Order information
+        """
+        params = params or {}
+        
+        # Add stop price parameter
+        params['stopPrice'] = stop_price
+        
+        # Determine order type
+        order_type = 'stop_limit' if price else 'stop_market'
+        
+        return await self.create_order(symbol, order_type, side, amount, price, params)
+    
+    async def create_take_profit_order(self, 
+                                symbol: str, 
+                                side: str, 
+                                amount: float,
+                                stop_price: float,
+                                price: Optional[float] = None,
+                                params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Create a take profit order
+        
+        Args:
+            symbol: Trading pair symbol
+            side: Order side ('buy' or 'sell')
+            amount: Order amount
+            stop_price: Stop price to trigger the order
+            price: Limit price (for take profit limit orders)
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Order information
+        """
+        params = params or {}
+        
+        # Add stop price parameter
+        params['stopPrice'] = stop_price
+        
+        # Determine order type
+        order_type = 'take_profit_limit' if price else 'take_profit_market'
+        
+        return await self.create_order(symbol, order_type, side, amount, price, params)
+    
+    async def create_trailing_stop_order(self, 
+                                  symbol: str, 
+                                  side: str, 
+                                  amount: float,
+                                  callback_rate: float,
+                                  activation_price: Optional[float] = None,
+                                  params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Create a trailing stop market order
+        
+        Args:
+            symbol: Trading pair symbol
+            side: Order side ('buy' or 'sell')
+            amount: Order amount
+            callback_rate: Callback rate in percentage
+            activation_price: Activation price for trailing stop
+            params: Additional parameters
+            
+        Returns:
+            Dict[str, Any]: Order information
+        """
+        params = params or {}
+        
+        # Add trailing stop parameters
+        params['callbackRate'] = callback_rate
+        if activation_price:
+            params['activationPrice'] = activation_price
+        
+        return await self.create_order(symbol, 'trailing_stop_market', side, amount, None, params)
+    
+    async def get_order_status_from_exchange(self, order_id: str, symbol: str) -> Dict[str, Any]:
+        """
+        Get real-time order status directly from exchange (not cached)
+        
+        Args:
+            order_id: Order ID
+            symbol: Trading pair symbol
+            
+        Returns:
+            Dict[str, Any]: Order status information
+        """
+        try:
+            order = await self.fetch_order(order_id, symbol)
+            
+            return {
+                'success': True,
+                'order_id': order_id,
+                'symbol': symbol,
+                'status': order.get('status', 'unknown'),
+                'filled_qty': order.get('filled', 0),
+                'unfilled_qty': order.get('remaining', 0),
+                'avg_price': order.get('average_price', 0),
+                'timestamp': order.get('timestamp'),
+                'raw': order
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'order_id': order_id,
+                'symbol': symbol,
+                'error': str(e)
+            }
+    
+    async def cancel_all_open_orders(self, symbol: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Cancel all open orders for a symbol or all symbols
+        
+        Args:
+            symbol: Trading pair symbol (optional)
+            
+        Returns:
+            Dict[str, Any]: Cancellation results
+        """
+        results = {
+            'success': True,
+            'canceled': [],
+            'failed': [],
+            'errors': []
+        }
+        
+        try:
+            # Fetch all open orders
+            open_orders = await self.fetch_open_orders(symbol)
+            
+            # Cancel each order
+            for order in open_orders:
+                order_id = order.get('order_id')
+                order_symbol = order.get('symbol')
+                
+                if order_id and order_symbol:
+                    try:
+                        cancel_result = await self.cancel_order(order_id, order_symbol)
+                        if cancel_result.get('success', True):
+                            results['canceled'].append(order_id)
+                        else:
+                            results['failed'].append(order_id)
+                            results['errors'].append(cancel_result.get('error', 'Unknown error'))
+                    except Exception as e:
+                        results['failed'].append(order_id)
+                        results['errors'].append(str(e))
+                        results['success'] = False
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Failed to cancel all open orders: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'canceled': [],
+                'failed': [],
+                'errors': [str(e)]
+            }
+    
+    def get_order_from_cache(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get order from local cache without hitting the API
+        
+        Args:
+            order_id: Order ID
+            
+        Returns:
+            Optional[Dict[str, Any]]: Order data if found, None otherwise
+        """
+        if order_id in self._active_orders:
+            return self._active_orders[order_id]
+        elif order_id in self._order_history:
+            return self._order_history[order_id]
+        return None
+    
+    def clear_order_cache(self, order_id: Optional[str] = None) -> None:
+        """
+        Clear order cache
+        
+        Args:
+            order_id: Specific order ID to clear, or None to clear all
+        """
+        if order_id:
+            self._active_orders.pop(order_id, None)
+            self._order_history.pop(order_id, None)
+        else:
+            self._active_orders.clear()
+            self._order_history.clear()
+        
+        self.logger.info(f"Cleared order cache for {order_id or 'all orders'}")
+    
+    async def fetch_my_trades(self, 
+                             symbol: Optional[str] = None, 
+                             since: Optional[int] = None, 
+                             limit: Optional[int] = None,
+                             params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch user's trade history
+        
+        Args:
+            symbol: Trading pair symbol (optional)
+            since: Timestamp to fetch trades from
+            limit: Maximum number of trades to fetch
+            params: Additional parameters
+            
+        Returns:
+            List[Dict[str, Any]]: User's trade history
+        """
+        if not self._initialized:
+            await self.initialize()
+        
+        try:
+            if not self.async_exchange:
+                await self._init_async_exchange()
+            
+            trades = await self.async_exchange.fetch_my_trades(symbol, since, limit, params)
+            
+            return trades
+            
+        except Exception as e:
+            self.logger.error(f"Failed to fetch my trades: {str(e)}")
+            raise ExchangeError(f"Fetch my trades failed: {str(e)}")
+    
+    async def get_trading_fees(self, symbol: str) -> Dict[str, Any]:
+        """
+        Get trading fees for a symbol
+        
+        Args:
+            symbol: Trading pair symbol
+            
+        Returns:
+            Dict[str, Any]: Trading fees information
+        """
+        try:
+            market_info = await self.get_market_info(symbol)
+            
+            fees = {
+                'maker': self.config.get('trading', 'fees', 'commission_maker', default=0.001),
+                'taker': self.config.get('trading', 'fees', 'commission_taker', default=0.001)
+            }
+            
+            # Override with market specific fees if available
+            if 'fees' in market_info:
+                if 'trading' in market_info['fees']:
+                    fees.update({
+                        'maker': market_info['fees']['trading'].get('maker', fees['maker']),
+                        'taker': market_info['fees']['trading'].get('taker', fees['taker'])
+                    })
+            
+            return fees
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get trading fees for {symbol}: {str(e)}")
+            return {
+                'maker': 0.001,
+                'taker': 0.001
+            }
+    
+    async def watch_order_updates(self, callback: Callable[[Dict[str, Any]], None]) -> bool:
+        """
+        Subscribe to order updates via WebSocket
+        
+        Args:
+            callback: Callback function to receive order updates
+            
+        Returns:
+            bool: Success status
+        """
+        try:
             # Check if ccxt.pro is installed
             try:
-                import ccxtpro
             except ImportError:
                 self.logger.error("ccxt.pro not installed. Please install ccxt.pro to use WebSocket functionality.")
                 return False
             
-            # Subscription key
-            sub_key = f"{symbol}_{timeframe}"
-            
-            # If already subscribed, avoid duplicate subscription
-            if sub_key in self.ws_subscriptions and self.ws_subscriptions[sub_key]['active']:
-                self.logger.info(f"Already subscribed to WebSocket data stream for {symbol} {timeframe}")
-                return True
-            
-            self.logger.info(f"Starting WebSocket connection to monitor {symbol} {timeframe} in real-time")
+            self.logger.info("Starting WebSocket connection for order updates")
             
             # Get params from config
             params = self._build_params()
             
-            # Initialize exchange
-            exchange = ccxtpro.binance(params)
+            # Initialize WebSocket exchange
+            ws_exchange = ccxtpro.binance(params)
             
             # Configure WebSocket options
-            exchange.options['ws'] = {
-                'heartbeat': True,         # Enable heartbeat
-                'ping_interval': 30000,    # 30 second ping interval
-                'reconnect_rate': 5000,    # 5 second reconnect rate
-                'max_reconnects': 100,     # Maximum reconnect attempts
+            ws_exchange.options['ws'] = {
+                'heartbeat': True,
+                'ping_interval': 30000,
+                'reconnect_rate': 5000,
+                'max_reconnects': 100,
             }
             
-            # Mark as active
-            self.ws_subscriptions[sub_key] = {
-                'active': True,
-                'exchange': exchange,
-                'last_data': None,
-                'errors': 0,
-            }
-            
-            # Launch background task to manage WebSocket connection
-            asyncio.create_task(self._ws_manager(sub_key, symbol, timeframe, callback))
+            # Start WebSocket task
+            asyncio.create_task(self._watch_orders_manager(ws_exchange, callback))
             
             return True
             
         except Exception as e:
-            self.logger.error(f"Error setting up WebSocket connection: {str(e)}")
-            raise ExchangeAPIError(f"Failed to set up WebSocket connection: {str(e)}")
+            self.logger.error(f"Error setting up order updates WebSocket: {str(e)}")
+            return False
     
-    async def _ws_manager(self, sub_key: str, symbol: str, timeframe: str, callback):
+    async def _watch_orders_manager(self, exchange, callback):
         """
-        Manage the continuous operation of a WebSocket connection
+        Manage the continuous operation of order updates WebSocket
         
         Args:
-            sub_key: Subscription key
-            symbol: Trading pair symbol
-            timeframe: Time period
+            exchange: CCXT pro exchange instance
             callback: Callback function to receive updates
         """
-        if sub_key not in self.ws_subscriptions:
-            self.logger.error(f"WebSocket subscription for {sub_key} not found")
-            return
+        retry_delay = 1.0
+        max_retry_delay = 30.0
+        error_count = 0
         
-        sub_info = self.ws_subscriptions[sub_key]
-        exchange = sub_info['exchange']
-        
-        retry_delay = 1.0  # Initial retry delay
-        max_retry_delay = 30.0  # Maximum retry delay
-        
-        while sub_info['active']:
+        while True:
             try:
-                self.logger.debug(f"Waiting for WebSocket update for {symbol} {timeframe}")
-                ohlcv = await exchange.watchOHLCV(symbol, timeframe)
+                self.logger.debug("Waiting for order update...")
+                orders = await exchange.watch_orders()
                 
-                # Data processing
-                sub_info['last_data'] = ohlcv
-                sub_info['errors'] = 0  # Reset error count
+                error_count = 0  # Reset error count on success
+                retry_delay = 1.0  # Reset retry delay
                 
-                # Reset retry delay
-                retry_delay = 1.0
-                
-                # Call callback
-                if callback and callable(callback):
+                # Process and call callback for each order
+                for order in orders:
                     try:
-                        await callback(ohlcv)
+                        standardized_order = self._standardize_order_response(order)
+                        callback(standardized_order)
                     except Exception as callback_error:
-                        self.logger.error(f"Callback processing error: {str(callback_error)}")
+                        self.logger.error(f"Error in callback processing: {str(callback_error)}")
                 
             except Exception as e:
-                sub_info['errors'] += 1
-                self.logger.error(f"WebSocket error ({sub_info['errors']}): {str(e)}")
+                error_count += 1
+                self.logger.error(f"WebSocket error ({error_count}): {str(e)}")
                 
-                # If too many errors, may need complete reconnection
-                if sub_info['errors'] > 10:
-                    self.logger.warning(f"Too many errors, reinitializing WebSocket connection")
+                # If too many errors, reinitialize connection
+                if error_count > 10:
+                    self.logger.warning("Too many errors, reinitializing WebSocket connection")
                     try:
                         await exchange.close()
                         # Recreate exchange instance
-                        import ccxtpro
                         exchange = ccxtpro.binance(self._build_params())
                         exchange.options['ws'] = {
                             'heartbeat': True,
@@ -426,8 +1307,7 @@ class BinanceExchange(Exchange):
                             'reconnect_rate': 5000,
                             'max_reconnects': 100,
                         }
-                        sub_info['exchange'] = exchange
-                        sub_info['errors'] = 0
+                        error_count = 0
                     except Exception as reset_error:
                         self.logger.error(f"Error resetting WebSocket connection: {str(reset_error)}")
                 
@@ -437,432 +1317,3 @@ class BinanceExchange(Exchange):
                 actual_delay = retry_delay * jitter
                 self.logger.info(f"Waiting {actual_delay:.2f} seconds before retrying WebSocket connection")
                 await asyncio.sleep(actual_delay)
-    
-    async def stop_watching(self, symbol: str, timeframe: str) -> bool:
-        """
-        Stop WebSocket data subscription
-        
-        Args:
-            symbol: Trading pair symbol
-            timeframe: Time period
-            
-        Returns:
-            bool: Success status
-        """
-        sub_key = f"{symbol}_{timeframe}"
-        
-        if sub_key in self.ws_subscriptions:
-            try:
-                # Mark as inactive
-                self.ws_subscriptions[sub_key]['active'] = False
-                
-                # Close exchange connection
-                exchange = self.ws_subscriptions[sub_key].get('exchange')
-                if exchange and hasattr(exchange, 'close'):
-                    await exchange.close()
-                    
-                self.logger.info(f"Stopped WebSocket subscription for {symbol} {timeframe}")
-                return True
-            except Exception as e:
-                self.logger.error(f"Error stopping WebSocket subscription: {str(e)}")
-                return False
-        
-        self.logger.warning(f"No active WebSocket subscription found for {symbol} {timeframe}")
-        return False
-    
-    def _get_date_chunks(self, start_dt: datetime, end_dt: datetime, 
-                        timeframe: str, chunk_size_days: Optional[int] = None) -> List[Tuple[datetime, datetime]]:
-        """
-        Break date range into manageable chunks
-        
-        Args:
-            start_dt: Start datetime
-            end_dt: End datetime
-            timeframe: Time period (e.g., '1m', '1h', '1d')
-            chunk_size_days: Optional override for chunk size in days
-            
-        Returns:
-            List[Tuple[datetime, datetime]]: List of (start, end) pairs for each chunk
-        """
-        # Calculate total time span and expected data points
-        total_seconds = (end_dt - start_dt).total_seconds()
-        seconds_per_candle = TimeUtils.timeframe_to_seconds(timeframe)
-        expected_candles = total_seconds / seconds_per_candle
-        
-        # Determine optimal chunk size based on timeframe and total expected candles
-        # Aim for chunks that will yield no more than ~70% of download_chunk_size
-        target_candles_per_chunk = self.download_chunk_size * 0.7
-        
-        # Calculate ideal chunk size in seconds
-        ideal_chunk_seconds = target_candles_per_chunk * seconds_per_candle
-        safety_factor = 0.8
-        ideal_chunk_seconds *= safety_factor  # Add a safety factor
-        ideal_chunk_days = max(0.5, min(30, ideal_chunk_seconds / 86400))  # Convert to days with bounds
-        
-        if chunk_size_days is not None:
-            chunk_size = timedelta(days=chunk_size_days)
-        else:
-            # Round to a half-day or full day for cleaner chunks
-            if ideal_chunk_days < 1:
-                chunk_size = timedelta(hours=12)
-            else:
-                chunk_size = timedelta(days=round(ideal_chunk_days))
-        
-        # For very small timeframes with expected high data volume, use smaller chunks
-        if timeframe in ['1m', '5m'] and expected_candles > 5000:
-            chunk_size = min(chunk_size, timedelta(hours=12))
-        elif timeframe in ['15m', '30m'] and expected_candles > 3000:
-            chunk_size = min(chunk_size, timedelta(days=1))
-        
-        self.logger.info(f"Using {chunk_size} chunk size for {timeframe} data from {start_dt} to {end_dt}")
-        
-        # Generate chunks
-        chunks = []
-        current_start = start_dt
-        
-        while current_start < end_dt:
-            current_end = min(current_start + chunk_size, end_dt)
-            chunks.append((current_start, current_end))
-            current_start = current_end
-            
-        self.logger.info(f"Split request into {len(chunks)} chunks for {expected_candles:.0f} expected data points")
-        
-        return chunks
-        
-    @staticmethod
-    def _process_ohlcv_data(ohlcv_data: List) -> pd.DataFrame:
-        """
-        Convert OHLCV data to DataFrame
-        
-        Args:
-            ohlcv_data: Raw OHLCV data from exchange
-            
-        Returns:
-            pd.DataFrame: Processed OHLCV data
-        """
-        if not ohlcv_data:
-            return pd.DataFrame()
-        
-        try:
-            df = pd.DataFrame(ohlcv_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-            df = df.sort_values('timestamp')
-            
-            return df
-            
-        except Exception as e:
-            # No logger here - static method
-            print(f"Error processing OHLCV data: {str(e)}")
-            return pd.DataFrame()
-    
-    @retry_exchange_operation(max_attempts=3, base_delay=2.0, max_delay=30.0)
-    async def fetch_latest_ohlcv(self, 
-                           symbol: str, 
-                           timeframe: str = '1m', 
-                           limit: int = 100) -> pd.DataFrame:
-        """
-        Fetch latest OHLCV data with retry mechanism
-        
-        Args:
-            symbol: Trading pair symbol
-            timeframe: Time period (e.g., '1m', '1h', '1d')
-            limit: Number of candles to fetch
-            
-        Returns:
-            pd.DataFrame: OHLCV data
-            
-        Raises:
-            ExchangeAPIError: If API call fails
-            ExchangeRateLimitError: If rate limit is exceeded
-        """
-        if not self._initialized:
-            await self.initialize()
-        
-        if not self.exchange:
-            self.logger.error("Exchange not initialized, cannot fetch data")
-            return pd.DataFrame()
-        
-        try:
-            # Handle rate limit
-            await self._handle_rate_limit()
-            
-            # Ensure async exchange is initialized
-            if not self.async_exchange:
-                await self._init_async_exchange()
-            
-            # Fetch data
-            ohlcv = await self.async_exchange.fetch_ohlcv(
-                symbol=symbol, 
-                timeframe=timeframe, 
-                limit=limit
-            )
-
-            df = self._process_ohlcv_data(ohlcv)
-            if not df.empty:
-                self.logger.info(f"Successfully fetched {len(df)} latest records for {symbol} {timeframe}")
-                return df
-            
-            self.logger.warning(f"Empty response when fetching {symbol} data")
-            return pd.DataFrame()
-                
-        except ccxt.RateLimitExceeded as e:
-            self.logger.error(f"Rate limit exceeded: {str(e)}")
-            raise ExchangeRateLimitError(f"Rate limit exceeded when fetching latest OHLCV: {str(e)}")
-        except Exception as e:
-            self.logger.error(f"Error fetching OHLCV data: {str(e)}")
-            raise ExchangeAPIError(f"API error when fetching latest OHLCV: {str(e)}")
-    
-    async def fetch_historical_ohlcv(self, 
-                              symbol: str, 
-                              timeframe: str = '1m',
-                              start_date: Optional[Union[str, datetime]] = None,
-                              end_date: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
-        """
-        Fetch historical OHLCV data
-        
-        Args:
-            symbol: Trading pair symbol
-            timeframe: Time period (e.g., '1m', '1h', '1d')
-            start_date: Start date (string or datetime)
-            end_date: End date (string or datetime)
-            
-        Returns:
-            pd.DataFrame: OHLCV data
-            
-        Raises:
-            ExchangeAPIError: If API call fails
-            ExchangeRateLimitError: If rate limit is exceeded
-        """
-        if not self._initialized:
-            await self.initialize()
-        
-        try:
-            start_dt = TimeUtils.parse_timestamp(start_date, default_days_ago=30)
-            end_dt = TimeUtils.parse_timestamp(end_date, default_days_ago=0)
-            self.logger.info(f"Fetching historical data for {symbol} from {start_dt} to {end_dt}")
-            
-            # Initialize async exchange if needed
-            if not self.async_exchange:
-                await self._init_async_exchange()
-            
-            # Split request into multiple chunks to handle large date ranges
-            chunks = self._get_date_chunks(start_dt, end_dt, timeframe)
-            self.logger.info(f"Split request into {len(chunks)} chunks")
-            
-            all_data = []
-            
-            # Re-evaluate the chunking strategy for very large requests
-            if len(chunks) > 20:  # Arbitrary threshold for large requests
-                self.logger.warning(f"Large number of chunks ({len(chunks)}), implementing special handling")
-                
-                batch_size = 5  # Process 5 chunks at a time
-                
-                for i in range(0, len(chunks), batch_size):
-                    batch_chunks = chunks[i:i+batch_size]
-                    self.logger.info(f"Processing batch {i//batch_size + 1}/{(len(chunks) + batch_size - 1)//batch_size} ({len(batch_chunks)} chunks)")
-                    
-                    # Create tasks for this batch
-                    batch_tasks = []
-                    for j, (chunk_start, chunk_end) in enumerate(batch_chunks):
-                        task = asyncio.create_task(
-                            self._fetch_chunk(i+j, chunk_start, chunk_end, symbol, timeframe)
-                        )
-                        batch_tasks.append(task)
-                    
-                    batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-                    for result in batch_results:
-                        if isinstance(result, Exception):
-                            self.logger.error(f"Chunk processing failed: {str(result)}")
-                        elif isinstance(result, list) and result:
-                            all_data.extend(result)
-                    
-                    # Pause between batches to avoid rate limit issues
-                    if i + batch_size < len(chunks):
-                        pause_time = 3  # 3 seconds between batches
-                        self.logger.info(f"Pausing {pause_time} seconds between batch processing")
-                        await asyncio.sleep(pause_time)
-            else:
-                tasks = []
-                # Process chunks concurrently, but limited by semaphore
-                for i, (chunk_start, chunk_end) in enumerate(chunks):
-                    task = asyncio.create_task(
-                        self._fetch_chunk(i, chunk_start, chunk_end, symbol, timeframe)
-                    )
-                    tasks.append(task)
-        
-                chunk_results = await asyncio.gather(*tasks, return_exceptions=True)
-                for result in chunk_results:
-                    if isinstance(result, Exception):
-                        self.logger.error(f"Chunk processing failed: {str(result)}")
-                    elif isinstance(result, list) and result:
-                        all_data.extend(result)
-            
-            if not all_data:
-                self.logger.warning(f"No historical data found for {symbol}")
-                return pd.DataFrame()
-                
-            df = self._process_ohlcv_data(all_data)
-            
-            if not df.empty:
-                # Ensure datetime column is datetime type
-                if 'datetime' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['datetime']):
-                    df['datetime'] = pd.to_datetime(df['datetime'])
-                df = df[(df['datetime'] >= start_dt) & (df['datetime'] <= end_dt)]
-                if 'datetime' in df.columns:
-                    df = df.drop_duplicates(subset=['datetime'])
-                df = df.sort_values('datetime')
-            
-            self.logger.info(f"Downloaded {len(df)} candle data points for {symbol}")
-            
-            return df
-            
-        except ccxt.RateLimitExceeded as e:
-            self.logger.error(f"Rate limit exceeded: {str(e)}")
-            raise ExchangeRateLimitError(f"Rate limit exceeded when fetching historical OHLCV: {str(e)}")
-        except Exception as e:
-            self.logger.error(f"Failed to fetch historical data for {symbol}: {str(e)}")
-            raise ExchangeAPIError(f"API error when fetching historical OHLCV: {str(e)}")
-    
-    async def _fetch_chunk(self, 
-                       chunk_index: int, 
-                       chunk_start: datetime, 
-                       chunk_end: datetime, 
-                       symbol: str, 
-                       timeframe: str) -> List:
-        """
-        Fetch a single historical data chunk with retries and improved rate limiting
-        
-        Args:
-            chunk_index: Index of the chunk (for logging)
-            chunk_start: Start datetime
-            chunk_end: End datetime
-            symbol: Trading pair symbol
-            timeframe: Time period
-            
-        Returns:
-            List: OHLCV data for the chunk
-            
-        Raises:
-            ExchangeAPIError: If API call fails
-            ExchangeRateLimitError: If rate limit is exceeded
-        """
-        # Use semaphore to limit concurrency
-        async with self.request_semaphore:
-            # Calculate chunk durations and expected data points to determine priority
-            chunk_duration = (chunk_end - chunk_start).total_seconds()
-            seconds_per_candle = TimeUtils.timeframe_to_seconds(timeframe)
-            expected_points = int(chunk_duration / seconds_per_candle)
-            
-            # If this is a large chunk, further subdivide it to avoid rate limit issues
-            if expected_points > self.download_chunk_size / 2 and chunk_duration > 86400:  # More than half max size and >1 day
-                self.logger.debug(f"Splitting large chunk {chunk_index+1} into smaller pieces")
-                
-                mid_point = chunk_start + timedelta(seconds=chunk_duration/2)
-                
-                # Process first half
-                first_half = await self._fetch_chunk(
-                    chunk_index * 2, 
-                    chunk_start, 
-                    mid_point, 
-                    symbol, 
-                    timeframe
-                )
-                
-                await asyncio.sleep(0.5)  # Small delay between sub-chunks
-                
-                # Process second half
-                second_half = await self._fetch_chunk(
-                    chunk_index * 2 + 1, 
-                    mid_point, 
-                    chunk_end, 
-                    symbol, 
-                    timeframe
-                )
-                
-                return first_half + second_half
-            
-            # Regular chunk processing with retries
-            for retry in range(self.max_retry_attempts):
-                try:
-                    await self._handle_rate_limit()
-                    
-                    chunk_since = int(chunk_start.timestamp() * 1000)
-                    chunk_until = int(chunk_end.timestamp() * 1000)
-                    
-                    if chunk_index == 0 or chunk_index % 5 == 0:
-                        self.logger.info(f"Fetching chunk {chunk_index+1}: {chunk_start} to {chunk_end}")
-                    
-                    # Ensure async exchange is initialized
-                    if not self.async_exchange:
-                        await self._init_async_exchange()
-                    
-                    ohlcv = await self.async_exchange.fetch_ohlcv(
-                        symbol=symbol, 
-                        timeframe=timeframe, 
-                        since=chunk_since,
-                        limit=self.download_chunk_size,
-                        params={
-                            "endTime": chunk_until,
-                            "recvWindow": 60000  # Use maximum receive window for high-latency
-                        }
-                    )
-                    
-                    if not ohlcv or len(ohlcv) == 0:
-                        self.logger.debug(f"Chunk {chunk_index+1} returned no data")
-                        return []
-                    
-                    self.logger.debug(f"Chunk {chunk_index+1} successfully fetched {len(ohlcv)} records")
-                    
-                    # Adaptive delay based on how many records we got relative to limit
-                    ratio = len(ohlcv) / self.download_chunk_size
-                    delay = 0.2 + (0.5 * ratio) if ratio > 0.8 else 0.2
-                    await asyncio.sleep(delay)
-                    
-                    return ohlcv
-                    
-                except ccxt.RateLimitExceeded as e:
-                    # Special handling for explicit rate limit errors
-                    self.logger.warning(f"Rate limit exceeded on chunk {chunk_index+1}, attempt {retry+1}")
-                    wait_time = 60.0  # Full minute wait
-                    self.logger.warning(f"Rate limit reached, waiting {wait_time:.2f} seconds")
-                    await asyncio.sleep(wait_time)
-                    
-                except Exception as e:
-                    self.logger.warning(f"Chunk {chunk_index+1}, attempt {retry+1} failed: {str(e)}")
-                    if retry < self.max_retry_attempts - 1:
-                        await self._exponential_backoff(retry)
-            
-            self.logger.error(f"All retry attempts for chunk {chunk_index+1} failed")
-            raise ExchangeAPIError(f"Failed to fetch chunk {chunk_index+1} after {self.max_retry_attempts} attempts")
-            
-    async def fetch_ticker(self, symbol: str) -> Dict[str, Any]:
-        """
-        Fetch current ticker data for a symbol
-        
-        Args:
-            symbol: Trading pair symbol
-            
-        Returns:
-            Dict[str, Any]: Ticker data with price information
-            
-        Raises:
-            ExchangeAPIError: If API call fails
-        """
-        if not self._initialized:
-            await self.initialize()
-            
-        try:
-            # Handle rate limit
-            await self._handle_rate_limit()
-            
-            # Ensure async exchange is initialized
-            if not self.async_exchange:
-                await self._init_async_exchange()
-                
-            # Fetch ticker
-            ticker = await self.async_exchange.fetch_ticker(symbol)
-            
-            return ticker
-        except Exception as e:
-            self.logger.error(f"Error fetching ticker for {symbol}: {str(e)}")
-            raise ExchangeAPIError(f"Failed to fetch ticker for {symbol}: {str(e)}")

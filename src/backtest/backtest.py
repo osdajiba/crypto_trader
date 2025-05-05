@@ -196,7 +196,7 @@ class BacktestMode(BaseTradingMode):
             
         # Close execution engine
         if self.execution_engine:
-            shutdown_tasks.append(self.execution_engine.shutdown())
+            shutdown_tasks.append(self.execution_engine.close())
             
         # Close data source
         if self.data_source:

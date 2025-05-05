@@ -5,15 +5,12 @@ import asyncio
 from enum import Enum
 import importlib
 import inspect
-from typing import Dict, Optional, Any, Type
+from typing import Dict, Optional, Any, Type, Set
 
 from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.portfolio.execution.base import BaseExecutionEngine
-from src.portfolio.execution.live import LiveExecutionEngine
-from src.portfolio.execution.paper import PaperExecutionEngine
-from src.portfolio.execution.backtest import BacktestExecutionEngine
 
 
 class ExecutionMode(Enum):
@@ -41,6 +38,12 @@ class ExecutionFactory(AbstractFactory):
         """
         super().__init__(config)
         self.logger = LogManager.get_logger("execution.factory")
+        
+        # Track created engines
+        self._created_engines = {}
+        
+        # Creation hooks
+        self._creation_hooks = {}
         
         # Register default execution engines
         self._register_default_execution_engines()
@@ -71,7 +74,56 @@ class ExecutionFactory(AbstractFactory):
             )
             self.logger.debug("Completed execution engine discovery")
         except Exception as e:
-            self.logger.warning(f"Error during execution engine discovery: {str(e)}")
+            self.logger.warning(f"Error during execution engine discovery: {e}")
+    
+    def register_creation_hook(self, mode: str, hook: callable) -> None:
+        """
+        Register a hook to be called before engine creation
+        
+        Args:
+            mode: Execution mode
+            hook: Hook function to call
+        """
+        if mode not in self._creation_hooks:
+            self._creation_hooks[mode] = set()
+            
+        self._creation_hooks[mode].add(hook)
+        self.logger.debug(f"Registered creation hook for {mode} execution engines")
+    
+    async def _run_creation_hooks(self, mode: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Run creation hooks for an execution mode
+        
+        Args:
+            mode: Execution mode
+            params: Engine creation parameters
+            
+        Returns:
+            Dict[str, Any]: Modified parameters
+        """
+        # Run global hooks first
+        global_hooks = self._creation_hooks.get('*', set())
+        for hook in global_hooks:
+            try:
+                if asyncio.iscoroutinefunction(hook):
+                    params = await hook(mode, params)
+                else:
+                    params = hook(mode, params)
+            except Exception as e:
+                self.logger.warning(f"Error in global creation hook: {e}")
+        
+        # Run mode specific hooks
+        mode_hooks = self._creation_hooks.get(mode, set())
+        for hook in mode_hooks:
+            try:
+                if asyncio.iscoroutinefunction(hook):
+                    params = await hook(params)
+                else:
+                    params = hook(params)
+            except Exception as e:
+                self.logger.warning(f"Error in {mode} creation hook: {e}")
+                
+        return params
     
     async def _resolve_name(self, name: Optional[str] = None) -> str:
         """
@@ -112,7 +164,8 @@ class ExecutionFactory(AbstractFactory):
             ValueError: If engine not found
         """
         if name not in self._registry:
-            raise ValueError(f"Execution engine not found: {name}")
+            supported = ", ".join(self._registry.keys())
+            raise ValueError(f"Execution engine not found: {name}. Supported engines: {supported}")
             
         # Get class path and load class
         return await self._load_class_from_path(name, BaseExecutionEngine)
@@ -128,10 +181,16 @@ class ExecutionFactory(AbstractFactory):
         Returns:
             Execution engine instance
         """
-        resolved_name = await self._resolve_name(name)
-        concrete_class = await self._get_concrete_class(resolved_name)
+        params = params or {}
         
-        # Get metadata for the engine
+        # Resolve execution engine name
+        resolved_name = await self._resolve_name(name)
+        
+        # Apply creation hooks
+        params = await self._run_creation_hooks(resolved_name, params)
+        
+        # Get concrete class and metadata
+        concrete_class = await self._get_concrete_class(resolved_name)
         engine_metadata = self._metadata.get(resolved_name, {})
         
         # Create combined parameters
@@ -144,17 +203,34 @@ class ExecutionFactory(AbstractFactory):
         historical_data = combined_params.get("historical_data")
         
         self.logger.info(f"Creating {resolved_name} execution engine with mode: {mode}")
-        engine = concrete_class(self.config, mode, historical_data)
         
-        # Initialize if needed
-        if hasattr(engine, 'initialize') and callable(engine.initialize):
-            if asyncio.iscoroutinefunction(engine.initialize):
-                await engine.initialize()
-            else:
-                engine.initialize()
+        try:
+            # Create engine instance
+            engine = concrete_class(self.config, mode, historical_data)
+            
+            # Initialize engine
+            await engine.initialize()
                 
-        self.logger.info(f"Created execution engine: {resolved_name}")
-        return engine
+            # Store in created engines
+            self._created_engines[resolved_name] = engine
+                
+            self.logger.info(f"Created execution engine: {resolved_name}")
+            return engine
+        except Exception as e:
+            self.logger.error(f"Error creating execution engine {resolved_name}: {e}")
+            raise
+    
+    def get_engine_instance(self, name: str) -> Optional[BaseExecutionEngine]:
+        """
+        Get a previously created execution engine by name
+        
+        Args:
+            name: Engine name
+            
+        Returns:
+            Optional[BaseExecutionEngine]: Engine instance if found, None otherwise
+        """
+        return self._created_engines.get(name)
     
     def get_available_engines(self) -> Dict[str, str]:
         """

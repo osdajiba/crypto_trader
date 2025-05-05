@@ -4,7 +4,9 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
 import asyncio
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Callable
+import uuid
+import time
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
@@ -46,11 +48,23 @@ class Asset(ABC):
         self._position_size = Decimal('0')
         self._last_update_time = 0
         self._last_price = Decimal('0')
+        self._initialized = False
+        self._update_in_progress = False
         
         # Trading capabilities (optional)
         self.is_tradable = params.get('tradable', False)
         if self.is_tradable:
             self._setup_trading()
+        
+        # Event subscribers
+        self._subscribers = {}
+        
+        # Status tracking
+        self._status = 'created'
+        self._errors = []
+        
+        # Integration with risk system
+        self._risk_limits = {}
         
     def _setup_trading(self):
         """Initialize trading capabilities if asset is tradable"""
@@ -70,10 +84,12 @@ class Asset(ABC):
         self.active_orders = {}
         self.filled_orders = {}
         self.canceled_orders = {}
+        self.failed_orders = {}
         
         # Set up order event listeners
         self.order_event_bus.subscribe('FILL', self._on_order_fill)
         self.order_event_bus.subscribe('CANCEL', self._on_order_cancel)
+        self.order_event_bus.subscribe('REJECT', self._on_order_reject)
         
         self.logger.info(f"Asset {self.name} initialized with trading capabilities in {self.execution_mode} mode")
     
@@ -83,13 +99,25 @@ class Asset(ABC):
         
         Should be called after creation to properly set up async components.
         """
-        if self.is_tradable:
-            await self._initialize_execution_engine()
+        if self._initialized:
+            return self
             
-        # Additional asset-specific initialization
-        await self._initialize_asset()
-        
-        self.logger.info(f"Asset {self.name} initialized")
+        try:
+            if self.is_tradable:
+                await self._initialize_execution_engine()
+                
+            # Additional asset-specific initialization
+            await self._initialize_asset()
+            
+            self._initialized = True
+            self._status = 'initialized'
+            self.logger.info(f"Asset {self.name} initialized")
+        except Exception as e:
+            self._status = 'initialization_failed'
+            self._errors.append(str(e))
+            self.logger.error(f"Failed to initialize asset {self.name}: {str(e)}")
+            raise
+            
         return self
     
     async def _initialize_asset(self):
@@ -140,13 +168,25 @@ class Asset(ABC):
         Args:
             order: The order that was filled
         """
-        if order.status in (OrderStatus.FILLED, OrderStatus.PARTIAL):
-            if order.status == OrderStatus.FILLED and order.order_id in self.active_orders:
-                self.filled_orders[order.order_id] = order
-                del self.active_orders[order.order_id]
+        if order.status not in (OrderStatus.FILLED, OrderStatus.PARTIAL):
+            return
             
-            self._update_position_from_filled_order(order)
-            self.logger.info(f"Order {order.order_id} filled: {order.filled_quantity} @ {order.avg_filled_price}")
+        if order.status == OrderStatus.FILLED and order.order_id in self.active_orders:
+            self.filled_orders[order.order_id] = order
+            del self.active_orders[order.order_id]
+            
+        self._update_position_from_filled_order(order)
+        self.logger.info(f"Order {order.order_id} filled: {order.filled_quantity} @ {order.avg_filled_price}")
+        
+        # Notify subscribers
+        self._notify_subscribers('order_filled', {
+            'order_id': order.order_id,
+            'symbol': self.name,
+            'direction': order.direction.value,
+            'filled_qty': order.filled_quantity,
+            'avg_price': order.avg_filled_price,
+            'status': order.status.value
+        })
     
     def _on_order_cancel(self, order):
         """
@@ -159,6 +199,34 @@ class Asset(ABC):
             self.canceled_orders[order.order_id] = order
             del self.active_orders[order.order_id]
             self.logger.info(f"Order {order.order_id} canceled")
+            
+            # Notify subscribers
+            self._notify_subscribers('order_canceled', {
+                'order_id': order.order_id,
+                'symbol': self.name,
+                'direction': order.direction.value,
+                'status': 'canceled'
+            })
+    
+    def _on_order_reject(self, order):
+        """
+        Handle order rejection events
+        
+        Args:
+            order: The rejected order
+        """
+        if order.status == OrderStatus.REJECTED and order.order_id in self.active_orders:
+            self.failed_orders[order.order_id] = order
+            del self.active_orders[order.order_id]
+            self.logger.warning(f"Order {order.order_id} rejected")
+            
+            # Notify subscribers
+            self._notify_subscribers('order_rejected', {
+                'order_id': order.order_id,
+                'symbol': self.name,
+                'direction': order.direction.value,
+                'reason': getattr(order, 'rejection_reason', 'Unknown reason')
+            })
 
     def _update_position_from_filled_order(self, order):
         """
@@ -183,6 +251,17 @@ class Asset(ABC):
         
         # Update last price
         self._last_price = Decimal(str(filled_price))
+        
+        # Update last update time
+        self._last_update_time = time.time()
+        
+        # Notify subscribers of position update
+        self._notify_subscribers('position_updated', {
+            'symbol': self.name,
+            'position_size': float(self._position_size),
+            'value': float(self._value),
+            'last_price': float(self._last_price)
+        })
     
     def get_value(self) -> float:
         """
@@ -212,10 +291,33 @@ class Asset(ABC):
         Returns:
             Updated asset value
         """
-        # Basic implementation - subclasses should override
-        if self._position_size > 0 and self._last_price > 0:
-            self._value = self._position_size * self._last_price
-        return float(self._value)
+        # Avoid concurrent updates
+        if self._update_in_progress:
+            return float(self._value)
+            
+        self._update_in_progress = True
+        
+        try:
+            # Basic implementation - subclasses should override
+            if self._position_size > 0 and self._last_price > 0:
+                old_value = self._value
+                self._value = self._position_size * self._last_price
+                self._last_update_time = time.time()
+                
+                # Notify subscribers of significant value changes
+                if old_value > 0 and abs((self._value - old_value) / old_value) > 0.01:  # 1% change
+                    self._notify_subscribers('value_changed', {
+                        'symbol': self.name,
+                        'old_value': float(old_value),
+                        'new_value': float(self._value),
+                        'change_pct': float((self._value - old_value) / old_value),
+                        'position_size': float(self._position_size),
+                        'price': float(self._last_price)
+                    })
+                    
+            return float(self._value)
+        finally:
+            self._update_in_progress = False
     
     async def create_order(self, order_type: str, direction: Direction, 
                           quantity: float, **kwargs) -> Order:
@@ -236,6 +338,13 @@ class Asset(ABC):
         """
         if not self.is_tradable:
             raise ValueError(f"Asset {self.name} is not tradable")
+        
+        # Apply risk limits if provided
+        if self._risk_limits and 'max_order_size' in self._risk_limits:
+            max_order_size = float(self._risk_limits['max_order_size'])
+            if quantity > max_order_size:
+                self.logger.warning(f"Order size {quantity} exceeds risk limit {max_order_size}, limiting order")
+                quantity = max_order_size
         
         order = None
         
@@ -288,6 +397,16 @@ class Asset(ABC):
         # Add to active orders
         self.active_orders[order.order_id] = order
         
+        # Notify subscribers
+        self._notify_subscribers('order_created', {
+            'order_id': order.order_id,
+            'symbol': self.name,
+            'direction': direction.value,
+            'quantity': quantity,
+            'order_type': order_type,
+            'params': kwargs
+        })
+        
         # Execute order if execution engine is available
         if self.execution_engine:
             await self._execute_order(order)
@@ -315,13 +434,37 @@ class Asset(ABC):
             # Log result
             if result.get('success', False):
                 self.logger.info(f"Order {order.order_id} executed successfully")
+                
+                # Notify subscribers
+                self._notify_subscribers('order_executed', {
+                    'order_id': order.order_id,
+                    'symbol': self.name,
+                    'direction': order.direction.value,
+                    'result': result
+                })
             else:
                 self.logger.warning(f"Order {order.order_id} execution failed: {result.get('error', 'Unknown error')}")
+                
+                # Notify subscribers
+                self._notify_subscribers('order_failed', {
+                    'order_id': order.order_id,
+                    'symbol': self.name,
+                    'direction': order.direction.value,
+                    'error': result.get('error', 'Unknown error')
+                })
                 
             return result
             
         except Exception as e:
             self.logger.error(f"Error executing order {order.order_id}: {str(e)}")
+            
+            # Notify subscribers
+            self._notify_subscribers('order_error', {
+                'order_id': order.order_id,
+                'symbol': self.name,
+                'error': str(e)
+            })
+            
             return {"success": False, "error": str(e)}
     
     async def cancel_order(self, order_id: str) -> bool:
@@ -349,10 +492,26 @@ class Asset(ABC):
                 result = await self.execution_engine.cancel_order(order_id, self.name)
                 if result.get('success', False):
                     # Order was canceled by execution engine
+                    
+                    # Notify subscribers
+                    self._notify_subscribers('order_canceled', {
+                        'order_id': order_id,
+                        'symbol': self.name,
+                        'direction': order.direction.value
+                    })
+                    
                     return True
                     
             # If no execution engine or cancellation failed, update order locally
             order.cancel()
+            
+            # Notify subscribers
+            self._notify_subscribers('order_canceled', {
+                'order_id': order_id,
+                'symbol': self.name,
+                'direction': order.direction.value
+            })
+            
             return True
             
         except Exception as e:
@@ -372,6 +531,15 @@ class Asset(ABC):
         results = {}
         for order_id in list(self.active_orders.keys()):
             results[order_id] = await self.cancel_order(order_id)
+            
+        # Notify subscribers
+        if results:
+            self._notify_subscribers('all_orders_canceled', {
+                'symbol': self.name,
+                'order_count': len(results),
+                'success_count': sum(1 for success in results.values() if success)
+            })
+            
         return results
     
     def get_order(self, order_id: str) -> Optional[Order]:
@@ -389,7 +557,8 @@ class Asset(ABC):
         
         return (self.active_orders.get(order_id) or 
                 self.filled_orders.get(order_id) or 
-                self.canceled_orders.get(order_id))
+                self.canceled_orders.get(order_id) or
+                self.failed_orders.get(order_id))
     
     def get_active_orders(self) -> List[Order]:
         """
@@ -402,6 +571,41 @@ class Asset(ABC):
             return []
         
         return list(self.active_orders.values())
+    
+    async def get_order_status(self, order_id: str) -> Dict[str, Any]:
+        """
+        Get the current status of an order
+        
+        Args:
+            order_id: Order ID to check
+            
+        Returns:
+            Order status dictionary
+        """
+        if not self.is_tradable:
+            return {"success": False, "error": "Trading not available"}
+            
+        # Check local status first
+        order = self.get_order(order_id)
+        if order:
+            return {
+                "success": True,
+                "order_id": order_id,
+                "symbol": order.symbol,
+                "status": order.status.value,
+                "filled_qty": order.filled_quantity,
+                "unfilled_qty": order.quantity - order.filled_quantity,
+                "price": getattr(order, 'price', None),
+                "avg_price": order.avg_filled_price,
+                "direction": order.direction.value,
+                "timestamp": order.timestamp
+            }
+            
+        # If not found locally, check with execution engine
+        if self.execution_engine:
+            return await self.execution_engine.get_order_status(order_id, self.name)
+            
+        return {"success": False, "error": "Order not found"}
     
     async def buy(self, amount: float, **kwargs) -> Dict[str, Any]:
         """
@@ -423,6 +627,15 @@ class Asset(ABC):
             return {"success": False, "error": f"Asset {self.name} is not tradable"}
         
         try:
+            # Basic validation
+            if amount <= 0:
+                return {
+                    "success": False,
+                    "error": "Amount must be positive",
+                    "direction": "buy",
+                    "amount": amount
+                }
+                
             order_type = kwargs.get('order_type', 'market').lower()
             order = await self.create_order(order_type, Direction.BUY, amount, **kwargs)
             
@@ -463,6 +676,24 @@ class Asset(ABC):
             return {"success": False, "error": f"Asset {self.name} is not tradable"}
         
         try:
+            # Basic validation
+            if amount <= 0:
+                return {
+                    "success": False,
+                    "error": "Amount must be positive",
+                    "direction": "sell",
+                    "amount": amount
+                }
+                
+            # Check if we have enough to sell (for spot assets)
+            if not kwargs.get('allow_partial', False) and isinstance(self._position_size, Decimal) and amount > float(self._position_size):
+                return {
+                    "success": False,
+                    "error": f"Insufficient balance: have {float(self._position_size)}, need {amount}",
+                    "direction": "sell",
+                    "amount": amount
+                }
+                
             order_type = kwargs.get('order_type', 'market').lower()
             order = await self.create_order(order_type, Direction.SELL, amount, **kwargs)
             
@@ -483,41 +714,6 @@ class Asset(ABC):
                 "amount": amount
             }
     
-    async def get_order_status(self, order_id: str) -> Dict[str, Any]:
-        """
-        Get the current status of an order
-        
-        Args:
-            order_id: Order ID to check
-            
-        Returns:
-            Order status dictionary
-        """
-        if not self.is_tradable or not self.execution_engine:
-            return {"success": False, "error": "Trading not available"}
-            
-        # Check local status first
-        order = self.get_order(order_id)
-        if order:
-            return {
-                "success": True,
-                "order_id": order_id,
-                "symbol": order.symbol,
-                "status": order.status.value,
-                "filled_qty": order.filled_quantity,
-                "unfilled_qty": order.quantity - order.filled_quantity,
-                "price": getattr(order, 'price', None),
-                "avg_price": order.avg_filled_price,
-                "direction": order.direction.value,
-                "timestamp": order.timestamp
-            }
-            
-        # If not found locally, check with execution engine
-        if self.execution_engine:
-            return await self.execution_engine.get_order_status(order_id, self.name)
-            
-        return {"success": False, "error": "Order not found"}
-    
     def set_exchange(self, exchange) -> None:
         """
         Set/update the exchange interface
@@ -526,6 +722,59 @@ class Asset(ABC):
             exchange: Exchange interface
         """
         self.exchange = exchange
+        
+        # Notify subscribers
+        self._notify_subscribers('exchange_updated', {
+            'symbol': self.name,
+            'exchange': exchange.__class__.__name__
+        })
+    
+    def set_risk_limits(self, limits: Dict[str, Any]) -> None:
+        """
+        Set risk limits for this asset
+        
+        Args:
+            limits: Risk limits dictionary
+        """
+        self._risk_limits = limits
+        self.logger.info(f"Updated risk limits for {self.name}")
+        
+        # Notify subscribers
+        self._notify_subscribers('risk_limits_updated', {
+            'symbol': self.name,
+            'limits': limits
+        })
+    
+    def subscribe(self, event_type: str, callback: Callable[[Dict[str, Any]], None]) -> None:
+        """
+        Subscribe to asset events
+        
+        Args:
+            event_type: Event type to subscribe to
+            callback: Callback function to call when event occurs
+        """
+        if event_type not in self._subscribers:
+            self._subscribers[event_type] = []
+            
+        self._subscribers[event_type].append(callback)
+        self.logger.debug(f"Added subscriber for {event_type} events")
+    
+    def _notify_subscribers(self, event_type: str, event_data: Dict[str, Any]) -> None:
+        """
+        Notify subscribers of an event
+        
+        Args:
+            event_type: Event type
+            event_data: Event data
+        """
+        if event_type not in self._subscribers:
+            return
+            
+        for callback in self._subscribers[event_type]:
+            try:
+                callback(event_data)
+            except Exception as e:
+                self.logger.error(f"Error in subscriber callback for {event_type}: {str(e)}")
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -540,17 +789,39 @@ class Asset(ABC):
             'value': float(self._value),
             'position_size': float(self._position_size),
             'last_price': float(self._last_price),
-            'tradable': self.is_tradable
+            'last_update': self._last_update_time,
+            'tradable': self.is_tradable,
+            'status': self._status
         }
         
         if self.is_tradable:
             data.update({
                 'active_orders': len(self.active_orders),
                 'filled_orders': len(self.filled_orders),
+                'canceled_orders': len(self.canceled_orders),
+                'failed_orders': len(self.failed_orders),
                 'execution_mode': self.execution_mode
             })
             
         return data
+    
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get detailed asset status
+        
+        Returns:
+            Detailed status dictionary
+        """
+        return {
+            'name': self.name,
+            'status': self._status,
+            'initialized': self._initialized,
+            'last_update': self._last_update_time,
+            'errors': self._errors,
+            'position_size': float(self._position_size),
+            'value': float(self._value),
+            'last_price': float(self._last_price)
+        }
     
     async def close(self):
         """
@@ -561,25 +832,14 @@ class Asset(ABC):
             await self.cancel_all_orders()
             
             # Close execution engine
-            if self.execution_engine:
+            if self.execution_engine and hasattr(self.execution_engine, 'close'):
                 await self.execution_engine.close()
         
-        self.logger.info(f"Closed asset {self.name}")
+        # Reset subscriptions
+        self._subscribers = {}
         
-    async def shutdown(self) -> None:
-        """
-        Clean up resources
-        """
-        # Call subclass-specific shutdown
-        await self._shutdown_specific()
-        
-        # Reset state
+        # Update status
+        self._status = 'closed'
         self._initialized = False
         
-        self.logger.info(f"{self.__class__.__name__} shutdown completed")
-    
-    async def _shutdown_specific(self) -> None:
-        """
-        Specific shutdown operations for subclasses
-        """
-        pass
+        self.logger.info(f"Closed asset {self.name}")

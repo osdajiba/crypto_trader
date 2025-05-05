@@ -10,7 +10,7 @@ import pandas as pd
 import asyncio
 import time
 from decimal import Decimal
-from typing import Dict, List, Any, Optional, Set, Union
+from typing import Callable, Dict, List, Any, Optional, Set, Union
 from abc import ABC, abstractmethod
 from datetime import datetime
 
@@ -747,7 +747,135 @@ class BaseRiskManager(ABC):
             report: Report dictionary to modify in-place
         """
         pass
-    
+
+    def update_portfolio_value(self, value: float) -> None:
+        """
+        Update portfolio value without recalculating drawdown
+        
+        Args:
+            value: New portfolio value
+        """
+        self._last_portfolio_value = Decimal(str(value))
+        
+    def register_event_handler(self, event_type: str, handler: Callable) -> None:
+        """
+        Register an event handler
+        
+        Args:
+            event_type: Event type
+            handler: Event handler function
+        """
+        if not hasattr(self, '_event_handlers'):
+            self._event_handlers = {}
+            
+        if event_type not in self._event_handlers:
+            self._event_handlers[event_type] = []
+            
+        self._event_handlers[event_type].append(handler)
+        self.logger.debug(f"Registered handler for {event_type} events")
+        
+    async def trigger_event(self, event_type: str, data: Dict[str, Any]) -> None:
+        """
+        Trigger an event to notify registered handlers
+        
+        Args:
+            event_type: Event type
+            data: Event data
+        """
+        if not hasattr(self, '_event_handlers'):
+            return
+            
+        handlers = self._event_handlers.get(event_type, [])
+        
+        for handler in handlers:
+            try:
+                await handler(data)
+            except Exception as e:
+                self.logger.error(f"Error in event handler for {event_type}: {e}")
+        
+    async def handle_event(self, event_type: str, data: Dict[str, Any]) -> None:
+        """
+        Handle an event from the portfolio manager
+        
+        Args:
+            event_type: Event type
+            data: Event data
+        """
+        # Process different event types
+        if event_type == 'order_executed':
+            # Update risk state based on new order
+            await self._process_order_execution(data)
+        elif event_type == 'significant_value_change':
+            # Handle significant value changes
+            await self._process_value_change(data)
+        elif event_type == 'asset_added' or event_type == 'asset_removed':
+            # Update asset tracking
+            await self._update_asset_tracking()
+        elif event_type == 'sync_completed':
+            # Update risk after portfolio sync
+            await self.execute_risk_control()
+        
+    async def _process_order_execution(self, data: Dict[str, Any]) -> None:
+        """
+        Process order execution event
+        
+        Args:
+            data: Order execution data
+        """
+        asset_name = data.get('asset_name')
+        direction = data.get('direction')
+        amount = data.get('amount')
+        
+        # Update position tracking
+        if asset_name in self._current_positions:
+            if direction == 'buy':
+                self._current_positions[asset_name] += amount
+            elif direction == 'sell':
+                self._current_positions[asset_name] -= amount
+        else:
+            if direction == 'buy':
+                self._current_positions[asset_name] = amount
+            
+        # Check for risk limit breaches
+        await self.check_position_limits()
+        
+    async def _process_value_change(self, data: Dict[str, Any]) -> None:
+        """
+        Process significant value change event
+        
+        Args:
+            data: Value change data
+        """
+        change_pct = data.get('change_pct', 0)
+        
+        # Check for large drawdowns
+        if change_pct < -0.05:  # More than 5% drop
+            drawdown = self._calculate_current_drawdown()
+            max_drawdown = Decimal(str(self.get_risk_limit('max_drawdown', 0.2)))
+            
+            # Send notification for significant drawdowns
+            if drawdown > max_drawdown * Decimal('0.7'):  # Over 70% of max
+                await self.trigger_event('risk_breach', {
+                    'type': 'approaching_max_drawdown',
+                    'severity': 'warning',
+                    'current': float(drawdown),
+                    'max': float(max_drawdown),
+                    'percentage': float(drawdown / max_drawdown * 100)
+                })
+
+    async def _update_asset_tracking(self) -> None:
+        """Update internal asset tracking after asset changes"""
+        if not self._portfolio:
+            return
+            
+        # Update position tracking
+        self._current_positions = {}
+        for asset_name, asset in self._portfolio.assets.items():
+            if hasattr(asset, 'get_position_size'):
+                self._current_positions[asset_name] = asset.get_position_size()
+                
+        
+            
     async def shutdown(self) -> None:
         """
         Clean up resources
@@ -765,3 +893,4 @@ class BaseRiskManager(ABC):
         Specific shutdown operations for subclasses
         """
         pass
+    

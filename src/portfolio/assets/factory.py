@@ -2,13 +2,14 @@
 # src/portfolio/assets/factory.py
 
 import asyncio
-from typing import Type, Dict, Any, Optional
+from typing import Type, Dict, Any, Optional, List, Set
+import inspect
+import importlib
 
 from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.portfolio.assets.base import Asset
-from src.portfolio.execution.factory import get_execution_factory
 
 
 logger = LogManager.get_logger("portfolio.assets.factory")
@@ -35,7 +36,36 @@ class AssetFactory(AbstractFactory):
             AssetFactory: Singleton factory instance
         """
         return cls.get_instance(config)
+    
+    def __init__(self, config: ConfigManager):
+        """
+        Initialize asset factory
         
+        Args:
+            config: Configuration manager
+        """
+        super().__init__(config)
+        self.logger = LogManager.get_logger("factory.asset")
+        
+        # Asset creation handlers
+        self._creation_hooks = {}
+        
+        # Track created assets
+        self._created_assets = {}
+        
+        # Register default assets
+        self._register_default_assets()
+    
+    def _register_default_assets(self) -> None:
+        """Register default asset types"""
+        # Register spot asset as default
+        self.register("spot", "src.portfolio.assets.spot.Spot")
+        
+        # Register other built-in assets
+        self.register("future", "src.portfolio.assets.future.Future")
+        
+        logger.info("Registered default asset types")
+    
     async def _get_concrete_class(self, name: str) -> Type[Asset]:
         """
         Get concrete asset class by name
@@ -50,11 +80,12 @@ class AssetFactory(AbstractFactory):
             ValueError: If asset type not found
         """
         if name not in self._registry:
-            raise ValueError(f"Asset type not found: {name}")
+            supported = ", ".join(self._registry.keys())
+            raise ValueError(f"Asset type not found: {name}. Supported types: {supported}")
             
         return await self._load_class_from_path(name, Asset)
         
-    async def _resolve_name(self, name: str) -> str:
+    async def _resolve_name(self, name: Optional[str]) -> str:
         """
         Resolve asset type name
         
@@ -71,19 +102,55 @@ class AssetFactory(AbstractFactory):
             return 'spot'
         return name.lower()
     
-    def create_asset(self, asset_type: str, params: dict) -> Asset:
+    def register_creation_hook(self, asset_type: str, hook: callable) -> None:
         """
-        Create an asset synchronously
+        Register a hook to be called before asset creation
         
         Args:
-            asset_type: Type of asset to create
+            asset_type: Asset type
+            hook: Hook function to call
+        """
+        if asset_type not in self._creation_hooks:
+            self._creation_hooks[asset_type] = set()
+            
+        self._creation_hooks[asset_type].add(hook)
+        logger.debug(f"Registered creation hook for {asset_type} assets")
+    
+    async def _run_creation_hooks(self, asset_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Run creation hooks for an asset type
+        
+        Args:
+            asset_type: Asset type
             params: Asset creation parameters
             
         Returns:
-            Asset: Created asset instance
+            Dict[str, Any]: Modified parameters
         """
-        return self.create_sync(asset_type, params)
+        # Run global hooks first
+        global_hooks = self._creation_hooks.get('*', set())
+        for hook in global_hooks:
+            try:
+                if asyncio.iscoroutinefunction(hook):
+                    params = await hook(asset_type, params)
+                else:
+                    params = hook(asset_type, params)
+            except Exception as e:
+                logger.warning(f"Error in global creation hook: {e}")
         
+        # Run asset type specific hooks
+        type_hooks = self._creation_hooks.get(asset_type, set())
+        for hook in type_hooks:
+            try:
+                if asyncio.iscoroutinefunction(hook):
+                    params = await hook(params)
+                else:
+                    params = hook(params)
+            except Exception as e:
+                logger.warning(f"Error in {asset_type} creation hook: {e}")
+                
+        return params
+    
     async def create(self, asset_type: str, params: Optional[Dict[str, Any]] = None) -> Asset:
         """
         Create an asset instance asynchronously
@@ -100,6 +167,9 @@ class AssetFactory(AbstractFactory):
         # Resolve asset type name
         resolved_name = await self._resolve_name(asset_type)
         
+        # Run creation hooks
+        params = await self._run_creation_hooks(resolved_name, params)
+        
         # Get concrete asset class
         concrete_class = await self._get_concrete_class(resolved_name)
         
@@ -115,41 +185,58 @@ class AssetFactory(AbstractFactory):
         if 'config' not in combined_params:
             combined_params['config'] = self.config
         
+        # Get asset name for tracking
+        asset_name = combined_params.get('name')
+        if not asset_name:
+            raise ValueError("Asset name must be specified")
+        
         # Create asset instance
-        asset = concrete_class(**combined_params)
-        
-        # Initialize asset if it has an async initialize method
-        if hasattr(asset, 'initialize') and callable(asset.initialize):
-            try:
+        try:
+            asset = concrete_class(**combined_params)
+            
+            # Initialize asset if it has an async initialize method
+            if hasattr(asset, 'initialize') and callable(asset.initialize):
                 await asset.initialize()
-            except Exception as e:
-                logger.error(f"Error initializing asset {asset.name}: {str(e)}")
-                raise
+                
+            # Track created asset
+            self._created_assets[asset_name] = {
+                'type': resolved_name,
+                'instance': asset
+            }
+                
+            logger.info(f"Created {resolved_name} asset: {asset.name}")
+            return asset
+        except Exception as e:
+            logger.error(f"Error creating {resolved_name} asset {asset_name}: {e}")
+            raise
+    
+    def get_asset_instance(self, asset_name: str) -> Optional[Asset]:
+        """
+        Get a previously created asset instance by name
         
-        logger.info(f"Created {resolved_name} asset: {asset.name}")
-        return asset
-        
+        Args:
+            asset_name: Asset name
+            
+        Returns:
+            Optional[Asset]: Asset instance if found, None otherwise
+        """
+        asset_info = self._created_assets.get(asset_name)
+        if asset_info:
+            return asset_info['instance']
+        return None
+    
     def discover_assets(self) -> None:
         """
         Auto-discover asset classes with the asset_factory registration
         """
         try:
+            # Discover and register asset implementations
             self.discover_registrable_classes(Asset, 'src.portfolio.assets', 'asset_factory')
             logger.info(f"Discovered {len(self._registry)} asset types")
         except Exception as e:
             logger.error(f"Error during asset discovery: {str(e)}")
             logger.info("Registering default assets only")
-            self._register_default_assets()
     
-    def _register_default_assets(self) -> None:
-        """Register default asset types"""
-        # Register spot asset as default
-        self.register("spot", "src.portfolio.assets.spot.SpotAsset")
-        # Register other built-in assets
-        self.register("future", "src.portfolio.assets.future.FutureAsset")
-        
-        logger.info("Registered default asset types")
-        
     async def create_multi_assets(self, asset_configs: Dict[str, Dict[str, Any]], 
                                  exchange=None) -> Dict[str, Asset]:
         """
@@ -178,21 +265,19 @@ class AssetFactory(AbstractFactory):
             asset_type = config.pop('type', 'spot')
             
             # Create task for asset creation
-            create_tasks.append(
-                self.create(asset_type, config)
+            task = asyncio.create_task(
+                self.create(asset_type, config),
+                name=f"create_{asset_name}"
             )
+            create_tasks.append((asset_name, task))
         
         # Wait for all assets to be created
-        if create_tasks:
-            created_assets = await asyncio.gather(*create_tasks, return_exceptions=True)
-            
-            # Process results
-            for i, result in enumerate(created_assets):
-                asset_name = list(asset_configs.keys())[i]
-                if isinstance(result, Exception):
-                    logger.error(f"Error creating asset {asset_name}: {str(result)}")
-                else:
-                    assets[asset_name] = result
+        for asset_name, task in create_tasks:
+            try:
+                asset = await task
+                assets[asset_name] = asset
+            except Exception as e:
+                logger.error(f"Error creating asset {asset_name}: {e}")
         
         return assets
         
@@ -254,7 +339,7 @@ class AssetFactory(AbstractFactory):
                 logger.warning("Exchange does not support market fetching")
                 
         except Exception as e:
-            logger.error(f"Error initializing markets: {str(e)}")
+            logger.error(f"Error initializing markets: {e}")
 
 
 def get_asset_factory(config: ConfigManager) -> AssetFactory:

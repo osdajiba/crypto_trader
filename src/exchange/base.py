@@ -14,6 +14,7 @@ import functools
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Any, Union, List, Callable, Type, Set, TypeVar
 from datetime import datetime
+from decimal import Decimal
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
@@ -36,6 +37,16 @@ class ExchangeAPIError(ExchangeError):
 
 class ExchangeRateLimitError(ExchangeError):
     """Rate limit exceeded"""
+    pass
+
+
+class ExchangeAuthError(ExchangeError):
+    """Authentication error"""
+    pass
+
+
+class ExchangeOrderError(ExchangeError):
+    """Order-related error"""
     pass
 
 
@@ -194,6 +205,25 @@ class Exchange(ABC):
         
         # Rate limiting
         self._setup_rate_limiting()
+        
+        # Order tracking
+        self._active_orders = {}
+        self._order_history = {}
+        
+        # Market data cache
+        self._market_cache = {}
+        self._ticker_cache = {}
+        self._order_book_cache = {}
+        
+        # Trading modes
+        self._trading_mode = None
+        self._market_type = None  # 'spot', 'future', 'option'
+        
+        # Position tracking for futures
+        self._position_cache = {}
+        
+        # Event handlers
+        self._event_handlers = {}
     
     def _setup_rate_limiting(self) -> None:
         """Set up rate limiting using token bucket"""
@@ -635,3 +665,116 @@ class Exchange(ABC):
             bool: Connection status
         """
         return self._connected
+    
+    def set_market_type(self, market_type: str) -> None:
+        """
+        Set market type for trading
+        
+        Args:
+            market_type: Market type ('spot', 'future', 'margin', etc.)
+        """
+        self._market_type = market_type.lower()
+        self.logger.info(f"Set market type to: {self._market_type}")
+    
+    def get_market_type(self) -> Optional[str]:
+        """
+        Get current market type
+        
+        Returns:
+            Optional[str]: Current market type
+        """
+        return self._market_type
+    
+    @staticmethod
+    def map_order_status(exchange_status: str) -> str:
+        """
+        Map exchange order status to standardized status
+        
+        Args:
+            exchange_status: Exchange-specific order status
+            
+        Returns:
+            str: Standardized order status
+        """
+        status_map = {
+            'new': 'created',
+            'pending': 'submitted',
+            'open': 'submitted',
+            'partially_filled': 'partial',
+            'filled': 'filled',
+            'closed': 'filled',
+            'canceled': 'canceled',
+            'cancelled': 'canceled',
+            'expired': 'expired',
+            'rejected': 'rejected',
+            'suspended': 'suspended',
+            'untriggered': 'created'
+        }
+        
+        standardized = status_map.get(exchange_status.lower(), 'unknown')
+        if standardized == 'unknown':
+            LogManager.get_logger("exchange.base").warning(f"Unknown order status: {exchange_status}")
+        
+        return standardized
+    
+    def register_event_handler(self, event_type: str, handler: Callable) -> None:
+        """
+        Register an event handler
+        
+        Args:
+            event_type: Event type to handle
+            handler: Event handler function
+        """
+        if event_type not in self._event_handlers:
+            self._event_handlers[event_type] = []
+            
+        self._event_handlers[event_type].append(handler)
+        self.logger.debug(f"Registered handler for {event_type} events")
+    
+    def emit_event(self, event_type: str, event_data: Dict[str, Any]) -> None:
+        """
+        Emit an event to registered handlers
+        
+        Args:
+            event_type: Event type
+            event_data: Event data
+        """
+        if event_type not in self._event_handlers:
+            return
+            
+        for handler in self._event_handlers[event_type]:
+            try:
+                handler(event_data)
+            except Exception as e:
+                self.logger.error(f"Error in event handler for {event_type}: {e}")
+    
+    async def fetch_markets(self) -> List[Dict[str, Any]]:
+        """
+        Fetch market information
+        
+        Returns:
+            List[Dict[str, Any]]: Market information
+        """
+        raise NotImplementedError("fetch_markets not implemented by this exchange")
+    
+    async def get_market_info(self, symbol: str) -> Dict[str, Any]:
+        """
+        Get market information for a symbol
+        
+        Args:
+            symbol: Trading pair symbol
+            
+        Returns:
+            Dict[str, Any]: Market information
+        """
+        if symbol in self._market_cache:
+            return self._market_cache[symbol]
+            
+        try:
+            markets = await self.fetch_markets()
+            market_info = next((m for m in markets if m.get('symbol') == symbol), {})
+            self._market_cache[symbol] = market_info
+            return market_info
+        except Exception as e:
+            self.logger.error(f"Failed to fetch market info for {symbol}: {e}")
+            return {}

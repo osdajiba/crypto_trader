@@ -4,9 +4,8 @@
 import asyncio
 import time
 from decimal import Decimal
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Callable
 import pandas as pd
-from common.abstract_factory import AbstractFactory
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
@@ -42,7 +41,7 @@ class PortfolioManager:
         self.exchange = exchange
         self._exchange_factory = None
         
-        # Initialize asset factory
+        # Initialize factories
         self.asset_factory = get_asset_factory(self.config)
         self.execution_factory = get_execution_factory(self.config)
         self.risk_management_factory = get_risk_factory(self.config)
@@ -55,6 +54,16 @@ class PortfolioManager:
         # Order tracking
         self._all_orders: Dict[str, Dict[str, Any]] = {}
         
+        # Risk manager (will be initialized in _initialize)
+        self.risk_manager = None
+        
+        # Risk event callbacks
+        self._risk_callbacks = {}
+        
+        # Execution engine
+        self.execution_engine = None
+        
+        # Initialize components
         self._initialize()
                 
         self.logger.info("Portfolio manager initialized")
@@ -71,9 +80,26 @@ class PortfolioManager:
             self.exchange = await self.exchange_factory.create()
             self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
         
-        # Initialize all asset in asset_list
+        # Initialize assets from configuration
         self.asset_factory.discover_assets()
         self.logger.info("Asset types discovered")
+        await self._initialize_configured_assets()
+        
+        # Initialize risk manager
+        await self._initialize_risk_manager()
+        
+        # Initialize execution engine
+        self.execution_engine = await self.execution_factory.create()
+        self.logger.info(f"Execution engine initialized: {self.execution_engine.__class__.__name__}")
+        
+        # Register for risk events
+        self._register_risk_events()
+        
+        self.logger.info("Portfolio manager initialization complete")
+        return self
+
+    async def _initialize_configured_assets(self) -> None:
+        """Initialize assets defined in configuration"""
         assets_config = self.config.get("portfolio", "assets", default={})
         
         for asset_name, asset_config in assets_config.items():
@@ -93,42 +119,179 @@ class PortfolioManager:
                 self.logger.info(f"Initialized pre-configured asset: {asset_name} ({self.exchange.__class__.__name__} : {asset_type})")
             except Exception as e:
                 self.logger.error(f"Failed to initialize asset {asset_name}: {str(e)}")
+
+    async def _initialize_risk_manager(self) -> None:
+        """Initialize risk manager component"""
+        try:
+            # Create risk manager instance
+            self.risk_manager = await self.risk_management_factory.create_with_config_params(self)
+            
+            # Perform initial risk assessment
+            if self.risk_manager:
+                await self.risk_manager.execute_risk_control()
+                self.logger.info(f"Risk manager initialized: {self.risk_manager.__class__.__name__}")
+            else:
+                self.logger.warning("Failed to initialize risk manager")
+        except Exception as e:
+            self.logger.error(f"Error initializing risk manager: {str(e)}")
+            raise
+
+    def _register_risk_events(self) -> None:
+        """Register for risk event notifications"""
+        if not self.risk_manager:
+            return
+            
+        # Register for risk breach events
+        self._risk_callbacks['risk_breach'] = self._on_risk_breach
+        self._risk_callbacks['emergency_action'] = self._on_emergency_action
+        self._risk_callbacks['position_limit'] = self._on_position_limit
         
-        # Initialize risk manager
-        self.risk_manager = await self.risk_management_factory.create_with_config_params(self)
-        self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
+        # Set up event handlers in risk manager if it supports the interface
+        if hasattr(self.risk_manager, 'register_event_handler'):
+            for event, callback in self._risk_callbacks.items():
+                self.risk_manager.register_event_handler(event, callback)
+
+    async def _on_risk_breach(self, event_data: Dict[str, Any]) -> None:
+        """
+        Handle risk breach event
         
-        # Initialize execution
-        self.execution_engine = await self.execution_factory.create()
-        self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")        
+        Args:
+            event_data: Risk breach event details
+        """
+        breach_type = event_data.get('type', 'unknown')
+        severity = event_data.get('severity', 'high')
         
-        self.logger.info("Portfolio manager initialization complete")
-        return self
-    
-    def _init_risk_management_params(self) -> None:
-        """Initialize risk management parameters"""
-        risk_config = self.config.get("portfolio", "risk", default={})
+        self.logger.warning(f"Risk breach detected: {breach_type} (severity: {severity})")
         
-        # Maximum allowed drawdown before stopping trading
-        self.max_drawdown = Decimal(str(risk_config.get("max_drawdown", 0.25)))
+        # Take appropriate action based on breach type and severity
+        if severity == 'critical' and event_data.get('auto_action', False):
+            # For critical breaches, we might want to reduce positions automatically
+            if 'action' in event_data and event_data['action'] == 'reduce_positions':
+                reduction_pct = event_data.get('reduction_pct', 0.5)
+                await self._reduce_positions(reduction_pct)
+
+    async def _on_emergency_action(self, event_data: Dict[str, Any]) -> None:
+        """
+        Handle emergency action event
         
-        # Maximum percentage of portfolio in a single position
-        self.max_position_pct = Decimal(str(risk_config.get("max_position_pct", 0.25)))
+        Args:
+            event_data: Emergency action details
+        """
+        action = event_data.get('action', 'unknown')
         
-        # Maximum leverage allowed (if applicable)
-        self.max_leverage = Decimal(str(risk_config.get("max_leverage", 1.0)))
+        self.logger.warning(f"Emergency action required: {action}")
         
-        # Position sizing method
-        self.position_sizing_method = risk_config.get("position_sizing", "fixed")
+        if action == 'reduce_positions':
+            reduction_pct = event_data.get('reduction_pct', 0.5)
+            await self._reduce_positions(reduction_pct)
+        elif action == 'close_all_positions':
+            await self._close_all_positions()
+        elif action == 'pause_trading':
+            # Implement pause trading functionality
+            pass
+
+    async def _on_position_limit(self, event_data: Dict[str, Any]) -> None:
+        """
+        Handle position limit event
         
-        # Risk per trade (percentage of portfolio)
-        self.risk_per_trade = Decimal(str(risk_config.get("risk_per_trade", 0.01)))
+        Args:
+            event_data: Position limit details
+        """
+        asset_name = event_data.get('asset_name', 'unknown')
+        limit_type = event_data.get('limit_type', 'unknown')
         
-        # Historical drawdown values
-        self.peak_value = Decimal('0')
-        self.current_drawdown = Decimal('0')
+        self.logger.warning(f"Position limit reached for {asset_name}: {limit_type}")
         
-        self.logger.info(f"Risk management initialized: max drawdown {self.max_drawdown}, max position {self.max_position_pct}")
+        # Take appropriate action based on limit type
+        if limit_type == 'max_position' and event_data.get('auto_action', False):
+            # Reduce position if auto action is enabled
+            if asset_name in self.assets:
+                reduction_pct = event_data.get('reduction_pct', 0.25)
+                await self._reduce_asset_position(asset_name, reduction_pct)
+
+    async def _reduce_positions(self, reduction_pct: float) -> None:
+        """
+        Reduce positions by a percentage
+        
+        Args:
+            reduction_pct: Percentage to reduce (0.0-1.0)
+        """
+        self.logger.info(f"Reducing all positions by {reduction_pct * 100:.0f}%")
+        
+        for asset_name, asset in self.assets.items():
+            await self._reduce_asset_position(asset_name, reduction_pct)
+
+    async def _reduce_asset_position(self, asset_name: str, reduction_pct: float) -> None:
+        """
+        Reduce a specific asset position
+        
+        Args:
+            asset_name: Asset name
+            reduction_pct: Percentage to reduce (0.0-1.0)
+        """
+        if asset_name not in self.assets:
+            return
+            
+        asset = self.assets[asset_name]
+        
+        # Skip if not a tradable asset
+        if not hasattr(asset, 'get_position_size'):
+            return
+            
+        # Get position size
+        position_size = asset.get_position_size()
+        
+        if position_size > 0:
+            # Calculate reduction amount
+            reduction_amount = position_size * reduction_pct
+            
+            if reduction_amount > 0:
+                self.logger.info(f"Reducing {asset_name} position by {reduction_amount} units")
+                
+                # Execute the sell
+                try:
+                    await self.sell_asset(asset_name, float(reduction_amount))
+                except Exception as e:
+                    self.logger.error(f"Error reducing position for {asset_name}: {e}")
+
+    async def _close_all_positions(self) -> None:
+        """Close all open positions"""
+        self.logger.warning("Closing all positions")
+        
+        for asset_name, asset in self.assets.items():
+            # Skip if not a tradable asset
+            if not hasattr(asset, 'get_position_size'):
+                continue
+                
+            # Get position size
+            position_size = asset.get_position_size()
+            
+            if position_size > 0:
+                self.logger.info(f"Closing position for {asset_name}: {position_size} units")
+                
+                # Execute the sell
+                try:
+                    await self.sell_asset(asset_name, float(position_size))
+                except Exception as e:
+                    self.logger.error(f"Error closing position for {asset_name}: {e}")
+
+    async def notify_risk_manager(self, event_type: str, data: Dict[str, Any]) -> None:
+        """
+        Notify risk manager of an event
+        
+        Args:
+            event_type: Event type
+            data: Event data
+        """
+        if not self.risk_manager:
+            return
+            
+        # Check if risk manager has the appropriate method
+        if hasattr(self.risk_manager, 'handle_event'):
+            try:
+                await self.risk_manager.handle_event(event_type, data)
+            except Exception as e:
+                self.logger.error(f"Error notifying risk manager of {event_type}: {e}")
 
     async def add_asset(self, asset: Asset) -> None:
         """
@@ -153,6 +316,12 @@ class PortfolioManager:
             
         self.assets[asset.name] = asset
         self.logger.info(f"Added asset {asset.name} to portfolio")
+        
+        # Notify risk manager of new asset
+        await self.notify_risk_manager('asset_added', {
+            'asset_name': asset.name,
+            'asset_type': asset.__class__.__name__
+        })
 
     async def create_asset(self, asset_type: str, params: dict) -> Asset:
         """
@@ -201,8 +370,14 @@ class PortfolioManager:
         if hasattr(asset, 'close') and callable(asset.close):
             await asset.close()
             
+        # Remove from portfolio
         del self.assets[asset_name]
         self.logger.info(f"Removed asset {asset_name} from portfolio")
+        
+        # Notify risk manager of asset removal
+        await self.notify_risk_manager('asset_removed', {
+            'asset_name': asset_name
+        })
 
     def get_total_value(self) -> float:
         """
@@ -214,22 +389,13 @@ class PortfolioManager:
         total = sum(asset.get_value() for asset in self.assets.values())
         self._total_value = Decimal(str(total))
         
-        # Update peak value and drawdown
-        self._update_drawdown()
+        # Notify risk manager of value update
+        if self.risk_manager:
+            # Use appropriate method if available
+            if hasattr(self.risk_manager, 'update_portfolio_value'):
+                self.risk_manager.update_portfolio_value(float(self._total_value))
         
         return float(self._total_value)
-
-    def _update_drawdown(self) -> None:
-        """Update peak value and current drawdown"""
-        if self._total_value > self.peak_value:
-            self.peak_value = self._total_value
-            self.current_drawdown = Decimal('0')
-        elif self.peak_value > 0:
-            self.current_drawdown = (self.peak_value - self._total_value) / self.peak_value
-            
-        # Check if drawdown exceeds limit
-        if self.current_drawdown > self.max_drawdown:
-            self.logger.warning(f"DRAWDOWN ALERT: Current drawdown {self.current_drawdown:.2%} exceeds maximum {self.max_drawdown:.2%}")
 
     async def update_all_values(self) -> float:
         """
@@ -265,11 +431,23 @@ class PortfolioManager:
             for asset in self.assets.values():
                 total += Decimal(str(asset.get_value()))
                 
+            old_value = self._total_value
             self._total_value = total
             self._last_update_time = time.time()
             
-            # Update drawdown metrics
-            self._update_drawdown()
+            # Notify risk manager of value update
+            if self.risk_manager:
+                # Use appropriate method if available
+                if hasattr(self.risk_manager, 'update_portfolio_value'):
+                    self.risk_manager.update_portfolio_value(float(self._total_value))
+                
+                # Notify of significant value changes
+                if old_value > 0 and abs((self._total_value - old_value) / old_value) > 0.05:
+                    await self.notify_risk_manager('significant_value_change', {
+                        'old_value': float(old_value),
+                        'new_value': float(self._total_value),
+                        'change_pct': float((self._total_value - old_value) / old_value)
+                    })
             
             return float(self._total_value)
         finally:
@@ -299,15 +477,18 @@ class PortfolioManager:
         if not hasattr(asset, 'buy') or not callable(asset.buy):
             raise ValueError(f"Asset {asset_name} does not support buy operations")
         
-        # Apply risk checks
-        if not await self._check_position_risk(asset_name, amount, 'buy'):
-            return {
-                'success': False,
-                'error': 'Trade rejected due to risk limits',
-                'asset_name': asset_name,
-                'action': 'buy',
-                'amount': amount
-            }
+        # Apply risk checks via risk manager
+        if self.risk_manager:
+            validation = await self.risk_manager.validate_order(asset_name, 'buy', amount, **kwargs)
+            if not validation.get('allowed', False):
+                return {
+                    'success': False,
+                    'error': 'Trade rejected due to risk limits',
+                    'asset_name': asset_name,
+                    'action': 'buy',
+                    'amount': amount,
+                    'reasons': validation.get('reasons', ['Risk check failed'])
+                }
         
         # Execute buy
         result = await asset.buy(amount, **kwargs)
@@ -322,6 +503,15 @@ class PortfolioManager:
                 'timestamp': time.time(),
                 'params': kwargs
             }
+            
+            # Notify risk manager of new order
+            await self.notify_risk_manager('order_executed', {
+                'asset_name': asset_name,
+                'direction': 'buy',
+                'amount': amount,
+                'order_id': result['order_id'],
+                'result': result
+            })
                 
         return result
 
@@ -349,15 +539,18 @@ class PortfolioManager:
         if not hasattr(asset, 'sell') or not callable(asset.sell):
             raise ValueError(f"Asset {asset_name} does not support sell operations")
         
-        # Apply risk checks (simplified for sells)
-        if not await self._check_position_risk(asset_name, amount, 'sell'):
-            return {
-                'success': False,
-                'error': 'Trade rejected due to risk limits',
-                'asset_name': asset_name,
-                'action': 'sell',
-                'amount': amount
-            }
+        # Apply risk checks via risk manager (simplified for sells)
+        if self.risk_manager:
+            validation = await self.risk_manager.validate_order(asset_name, 'sell', amount, **kwargs)
+            if not validation.get('allowed', False):
+                return {
+                    'success': False,
+                    'error': 'Trade rejected due to risk limits',
+                    'asset_name': asset_name,
+                    'action': 'sell',
+                    'amount': amount,
+                    'reasons': validation.get('reasons', ['Risk check failed'])
+                }
         
         # Execute sell
         result = await asset.sell(amount, **kwargs)
@@ -372,54 +565,17 @@ class PortfolioManager:
                 'timestamp': time.time(),
                 'params': kwargs
             }
+            
+            # Notify risk manager of new order
+            await self.notify_risk_manager('order_executed', {
+                'asset_name': asset_name,
+                'direction': 'sell',
+                'amount': amount,
+                'order_id': result['order_id'],
+                'result': result
+            })
                 
         return result
-
-    async def _check_position_risk(self, asset_name: str, amount: float, action: str) -> bool:
-        """
-        Check if a trade would violate risk management rules
-        
-        Args:
-            asset_name: Asset name
-            amount: Trade amount
-            action: Trade action ('buy' or 'sell')
-            
-        Returns:
-            True if trade is acceptable, False if it should be rejected
-        """
-        # Skip checks for sales (risk reduction)
-        if action.lower() == 'sell':
-            return True
-            
-        # Check overall portfolio drawdown
-        if self.current_drawdown > self.max_drawdown:
-            self.logger.warning(f"Trade rejected: current drawdown ({self.current_drawdown:.2%}) exceeds maximum ({self.max_drawdown:.2%})")
-            return False
-            
-        # Get asset's current value and portfolio total
-        asset = self.assets[asset_name]
-        current_value = Decimal(str(asset.get_value()))
-        total_value = self._total_value if self._total_value > 0 else self.get_total_value()
-        
-        # Estimate the new position size based on the trade
-        # Note: This is a simplification and should be refined based on asset type
-        if hasattr(asset, '_last_price') and asset._last_price > 0:
-            # Use last price for estimate
-            trade_value = Decimal(str(amount)) * asset._last_price
-        else:
-            # Rough approximation
-            trade_value = Decimal(str(amount))
-        
-        new_position_value = current_value + trade_value
-        
-        # Check position size as percentage of portfolio
-        if total_value > 0:
-            position_pct = new_position_value / total_value
-            if position_pct > self.max_position_pct:
-                self.logger.warning(f"Trade rejected: position size ({position_pct:.2%}) would exceed maximum ({self.max_position_pct:.2%})")
-                return False
-        
-        return True
 
     async def place_order(self, asset_name: str, order_type: str, direction: str, 
                       amount: float, **kwargs) -> Dict[str, Any]:
@@ -486,12 +642,20 @@ class PortfolioManager:
                     success = await asset.cancel_order(order_id)
                     
                     if success:
-                        return {
+                        result = {
                             'success': True,
                             'order_id': order_id,
                             'asset_name': asset_name,
                             'status': 'canceled'
                         }
+                        
+                        # Notify risk manager of order cancellation
+                        await self.notify_risk_manager('order_canceled', {
+                            'asset_name': asset_name,
+                            'order_id': order_id
+                        })
+                        
+                        return result
                     else:
                         return {
                             'success': False,
@@ -520,6 +684,12 @@ class PortfolioManager:
                 try:
                     success = await asset.cancel_order(order_id)
                     if success:
+                        # Notify risk manager of order cancellation
+                        await self.notify_risk_manager('order_canceled', {
+                            'asset_name': asset_name,
+                            'order_id': order_id
+                        })
+                        
                         return {
                             'success': True,
                             'order_id': order_id,
@@ -680,6 +850,21 @@ class PortfolioManager:
             total = sum(asset.get_value() for asset in self.assets.values())
             self._total_value = Decimal(str(total))
             
+            # Update risk manager
+            if self.risk_manager:
+                # Update portfolio value
+                if hasattr(self.risk_manager, 'update_portfolio_value'):
+                    self.risk_manager.update_portfolio_value(float(self._total_value))
+                    
+                # Execute risk control
+                await self.risk_manager.execute_risk_control()
+                
+                # Notify of sync completion
+                await self.notify_risk_manager('sync_completed', {
+                    'total_value': float(self._total_value),
+                    'asset_count': len(self.assets)
+                })
+            
             return {
                 'success': True,
                 'total_value': float(self._total_value),
@@ -706,10 +891,26 @@ class PortfolioManager:
         if missing:
             return {'success': False, 'error': f"Missing required columns: {missing}"}
         
+        # Validate signals with risk manager if available
+        valid_signals = signals
+        if self.risk_manager:
+            try:
+                valid_signals = await self.risk_manager.validate_signals(signals)
+            except Exception as e:
+                self.logger.error(f"Error validating signals: {e}")
+                # Continue with original signals if validation fails
+        
+        # Notify risk manager of batch execution start
+        if self.risk_manager:
+            await self.notify_risk_manager('batch_execution_start', {
+                'signal_count': len(valid_signals),
+                'symbols': valid_signals['symbol'].unique().tolist() if not valid_signals.empty else []
+            })
+        
         results = []
         
         # Process each signal
-        for _, signal in signals.iterrows():
+        for _, signal in valid_signals.iterrows():
             symbol = signal['symbol']
             action = signal['action'].lower()
             amount = float(signal['quantity'])
@@ -770,64 +971,24 @@ class PortfolioManager:
         
         # Summarize results
         success_count = sum(1 for r in results if r.get('success', False))
+        failed_count = len(results) - success_count
+        
+        # Notify risk manager of batch execution completion
+        if self.risk_manager:
+            await self.notify_risk_manager('batch_execution_complete', {
+                'total': len(results),
+                'successful': success_count,
+                'failed': failed_count
+            })
         
         return {
             'success': True,
             'executed': len(results),
             'successful': success_count,
-            'failed': len(results) - success_count,
+            'failed': failed_count,
             'results': results
         }
         
-    def calculate_portfolio_risk(self, method: str = 'var') -> Dict[str, float]:
-        """
-        Calculate portfolio risk using specified method
-        
-        Args:
-            method: Risk calculation method ('var', 'std', 'drawdown', etc.)
-            
-        Returns:
-            Dict with risk metrics
-        """
-        # Get current drawdown
-        current_drawdown = float(self.current_drawdown)
-        
-        # Get portfolio weights
-        weights = self.get_asset_weights()
-        
-        # Basic portfolio risk metrics
-        if method == 'var':
-            # Simple Value at Risk estimate
-            # In a real implementation, would use historical returns and proper VaR calculation
-            var_estimate = 0.05  # 5% VaR (placeholder)
-            return {
-                'var': var_estimate,
-                'drawdown': current_drawdown,
-                'max_position': max(weights.values()) if weights else 0.0
-            }
-        elif method == 'std':
-            # Standard deviation (volatility) estimate
-            # Placeholder - real implementation would calculate from return series
-            volatility = 0.15  # 15% volatility
-            return {
-                'volatility': volatility,
-                'drawdown': current_drawdown,
-                'max_position': max(weights.values()) if weights else 0.0
-            }
-        elif method == 'drawdown':
-            # Just return current and maximum drawdown
-            return {
-                'current_drawdown': current_drawdown,
-                'max_drawdown': float(self.max_drawdown),
-                'max_position': max(weights.values()) if weights else 0.0
-            }
-        else:
-            self.logger.warning(f"Unsupported risk calculation method: {method}")
-            return {
-                'drawdown': current_drawdown,
-                'error': f"Unsupported method: {method}"
-            }
-
     def get_portfolio_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the portfolio state
@@ -835,19 +996,36 @@ class PortfolioManager:
         Returns:
             Dict with portfolio summary
         """
-        return {
+        # Basic portfolio information
+        summary = {
             'total_value': float(self._total_value),
             'assets': len(self.assets),
             'asset_values': {name: asset.get_value() for name, asset in self.assets.items()},
             'weights': self.get_asset_weights(),
-            'drawdown': float(self.current_drawdown),
             'last_update': self._last_update_time
         }
+        
+        # Add risk information if available
+        if self.risk_manager:
+            risk_report = self.risk_manager.get_risk_report()
+            # Only add risk metrics, not the full position details which are already in the summary
+            risk_metrics = {k: v for k, v in risk_report.items() 
+                           if k not in ['positions', 'position_count']}
+            summary['risk'] = risk_metrics
+        
+        return summary
         
     async def close(self):
         """
         Close the portfolio manager and clean up resources
         """
+        # Notify risk manager of shutdown
+        if self.risk_manager:
+            await self.notify_risk_manager('portfolio_shutdown', {
+                'total_value': float(self._total_value),
+                'asset_count': len(self.assets)
+            })
+        
         # Cancel all orders
         for asset_name, asset in self.assets.items():
             try:
@@ -858,6 +1036,20 @@ class PortfolioManager:
                     await asset.close()
             except Exception as e:
                 self.logger.error(f"Error closing asset {asset_name}: {str(e)}")
+        
+        # Close risk manager
+        if self.risk_manager:
+            try:
+                await self.risk_manager.shutdown()
+            except Exception as e:
+                self.logger.error(f"Error shutting down risk manager: {str(e)}")
+        
+        # Close execution engine
+        if self.execution_engine and hasattr(self.execution_engine, 'close'):
+            try:
+                await self.execution_engine.close()
+            except Exception as e:
+                self.logger.error(f"Error closing execution engine: {str(e)}")
         
         # Close exchange connection if we own it
         if self.exchange and hasattr(self.exchange, 'close'):
