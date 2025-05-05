@@ -312,3 +312,4 @@ class AbstractFactory:
         except Exception as e:
             self.logger.warning(f"Could not get base class {class_name}: {str(e)}")
             return None
+        

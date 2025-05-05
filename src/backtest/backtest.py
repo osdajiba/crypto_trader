@@ -10,7 +10,8 @@ from tqdm import tqdm
 from src.common.config_manager import ConfigManager
 from src.common.helpers import TimeUtils
 from src.common.abstract_factory import register_factory_class
-from src.trading.base import BaseTradingMode
+from src.trading.factory import BaseTradingMode
+from src.backtest.engine.factory import get_backtest_engine_factory
 
 
 @register_factory_class('trading_mode_factory', 'backtest', 

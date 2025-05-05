@@ -13,7 +13,6 @@ from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.portfolio.risk.base import BaseRiskManager
-from src.portfolio.manager import PortfolioManager
 
 
 class RiskManager(Enum):
@@ -173,7 +172,7 @@ class RiskManagerFactory(AbstractFactory):
         return metadata.get('features', [])
     
     async def create_with_config_params(self, 
-                                      portfolio_manager: Optional[PortfolioManager],
+                                      portfolio_manager,
                                       name: Optional[str] = None, 
                                       ) -> BaseRiskManager:
         """

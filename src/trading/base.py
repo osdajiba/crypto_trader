@@ -53,6 +53,7 @@ class BaseTradingMode(ABC):
         self.performance_factory = get_analyzer_factory(config)
         self.execution_factory = get_execution_factory(config)  # Use the new factory
         self.strategy_factory = get_strategy_factory(config)
+        
           
         # Components will be initialized later
         self.data_source = None

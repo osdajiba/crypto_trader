@@ -6,12 +6,14 @@ import time
 from decimal import Decimal
 from typing import Dict, List, Any, Optional, Union
 import pandas as pd
+from common.abstract_factory import AbstractFactory
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
+from src.exchange.factory import get_exchange_factory
 from src.portfolio.assets.base import Asset
 from src.portfolio.assets.factory import get_asset_factory
-from src.exchange.factory import get_exchange_factory
+from src.portfolio.risk.factory import get_risk_factory
 from src.portfolio.execution.factory import get_execution_factory
 
 
@@ -42,6 +44,8 @@ class PortfolioManager:
         
         # Initialize asset factory
         self.asset_factory = get_asset_factory(self.config)
+        self.execution_factory = get_execution_factory(self.config)
+        self.risk_management_factory = get_risk_factory(self.config)
         
         # Portfolio state tracking
         self._total_value = Decimal('0')
@@ -51,35 +55,25 @@ class PortfolioManager:
         # Order tracking
         self._all_orders: Dict[str, Dict[str, Any]] = {}
         
-        # Risk management parameters
-        self._init_risk_management()
-        
+        self._initialize()
+                
         self.logger.info("Portfolio manager initialized")
 
-    async def initialize(self) -> None:
+    async def _initialize(self) -> None:
         """
         Initialize the portfolio manager and its components.
         
         Should be called after creation to properly set up async resources.
         """
-        # Initialize exchange if needed
+        # Initialize exchange
         if not self.exchange:
-            self._exchange_factory = get_exchange_factory(self.config)
-            self.exchange = await self._exchange_factory.create()
+            self.exchange_factory = get_exchange_factory(self.config)
+            self.exchange = await self.exchange_factory.create()
             self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
         
-        # Auto-discover all asset types
+        # Initialize all asset in asset_list
         self.asset_factory.discover_assets()
         self.logger.info("Asset types discovered")
-        
-        # Initialize any pre-configured assets
-        await self._init_preconfigured_assets()
-        
-        self.logger.info("Portfolio manager initialization complete")
-        return self
-    
-    async def _init_preconfigured_assets(self) -> None:
-        """Initialize assets defined in configuration"""
         assets_config = self.config.get("portfolio", "assets", default={})
         
         for asset_name, asset_config in assets_config.items():
@@ -96,12 +90,22 @@ class PortfolioManager:
                     "name": asset_name,
                     **params
                 })
-                
-                self.logger.info(f"Initialized pre-configured asset: {asset_name} ({asset_type})")
+                self.logger.info(f"Initialized pre-configured asset: {asset_name} ({self.exchange.__class__.__name__} : {asset_type})")
             except Exception as e:
                 self.logger.error(f"Failed to initialize asset {asset_name}: {str(e)}")
-
-    def _init_risk_management(self) -> None:
+        
+        # Initialize risk manager
+        self.risk_manager = await self.risk_management_factory.create_with_config_params(self)
+        self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
+        
+        # Initialize execution
+        self.execution_engine = await self.execution_factory.create()
+        self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")        
+        
+        self.logger.info("Portfolio manager initialization complete")
+        return self
+    
+    def _init_risk_management_params(self) -> None:
         """Initialize risk management parameters"""
         risk_config = self.config.get("portfolio", "risk", default={})
         

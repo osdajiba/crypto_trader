@@ -164,8 +164,7 @@ class ExchangeFactory(AbstractFactory):
         exchange_config = self.config.get("exchange", "exchanges", resolved_name, default={})
         
         return await self.create(resolved_name, params=exchange_config)
-
-
+    
 def get_exchange_factory(config: ConfigManager) -> ExchangeFactory:
     """
     Get or create singleton instance of ExchangeFactory
