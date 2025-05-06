@@ -195,7 +195,7 @@ class DataSourceFactory(AbstractFactory):
         metadata = self._metadata.get(source_name.lower(), {})
         return metadata.get('features', [])
     
-    async def create_with_config_params(self, name: Optional[str] = None) -> BaseDataSource:
+    async def create_datasource(self, name: Optional[str] = None) -> BaseDataSource:
         """
         Create a data source with parameters from configuration
         

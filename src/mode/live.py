@@ -3,12 +3,11 @@
 
 from typing import Dict, List, Any, Optional
 import asyncio
-import pandas as pd
 from datetime import datetime
 
 from src.common.abstract_factory import register_factory_class
 from src.common.config_manager import ConfigManager
-from src.trading.base import BaseTradingMode
+from src.mode.base import BaseTradingMode
 
 
 @register_factory_class('trading_mode_factory', 'live', 
@@ -22,26 +21,12 @@ class LiveMode(BaseTradingMode):
         """Initialize live trading mode"""
         super().__init__(config, params)
         self.status_interval = 3600  # Default hourly status check
+        self.execution_factory = None  # Will be initialized later
     
     async def _initialize_mode_specific(self) -> None:
         """Initialize live trading mode components"""
         self.logger.info("Initializing live-specific components")
-        
-        # Create live trading specific execution engine
-        execution_params = {
-            "mode": "live",
-            "exchange": self.config.get("exchange", "name", default="binance")
-        }
-        self.execution_engine = await self.execution_factory.create("live_execution", execution_params)
-        
-        # Get strategy configuration from params first, then config
-        strategy_name = self.params.get("strategy_name") or self.config.get("live_trading", "strategy", default=None)
-        strategy_params = self.params.get("strategy_params") or self.config.get("live_trading", "strategy_params", default={})
-        
-        # Create strategy instance
-        self.strategy = await self.strategy_factory.create(strategy_name, strategy_params)
-        self.logger.info(f"Strategy initialized: {self.strategy.__class__.__name__}")
-        
+
         # Verify exchange connectivity
         if not await self._verify_exchange_connectivity():
             raise ConnectionError("Failed to connect to exchange API")
@@ -78,26 +63,29 @@ class LiveMode(BaseTradingMode):
         """Verify account credentials and check balances"""
         try:
             # Fetch account balance
-            balance = await self.execution_engine.get_account_balance()
+            balance = await self.portfolio.get_account_balance()
             
-            if balance is None:
+            if not balance:
                 self.logger.error("Failed to fetch account balance")
                 return False
             
             # Check minimum required balance
             min_balance = self.config.get("live_trading", "min_required_balance", default=0)
             
+            # Calculate total equity value (simple sum of all balances)
+            total_equity = sum(balance.values())
+            
             # Store initial balance data
             self.state['initial_balance'] = balance
-            self.state['current_equity'] = sum(balance.values()) if isinstance(balance, dict) else 0
-            self.state['peak_equity'] = self.state['current_equity']
+            self.state['current_equity'] = total_equity
+            self.state['peak_equity'] = total_equity
             self.state['last_balance_check'] = datetime.now()
             
             # Log balance information
             self.logger.info(f"Account balance verified: {balance}")
             
-            if self.state['current_equity'] < min_balance:
-                self.logger.warning(f"Account balance below minimum required: {self.state['current_equity']} < {min_balance}")
+            if total_equity < min_balance:
+                self.logger.warning(f"Account balance below minimum required: {total_equity} < {min_balance}")
                 return False
             
             return True
@@ -105,7 +93,7 @@ class LiveMode(BaseTradingMode):
         except Exception as e:
             self.logger.error(f"Account verification error: {e}")
             return False
-    
+                
     async def _prepare_run(self, symbols: List[str], timeframe: str) -> None:
         """Live mode specific preparation"""
         # Initialize state tracking
@@ -127,14 +115,17 @@ class LiveMode(BaseTradingMode):
                     await self._update_account_status()
                     self.state['last_balance_check'] = current_time
                 
-                # Get market data
-                data_map = await self.data_source.fetch_all_data_for_symbols(symbols, timeframe)
+                # Fetch market data using the new method
+                data_map = await self._fetch_market_data(symbols, timeframe)
                 
-                # Process market data
-                await self._process_market_data(data_map)
+                # Process market data if we have any
+                if data_map:
+                    await self._process_market_data(data_map)
+                else:
+                    self.logger.warning("No market data received, skipping trading cycle")
                 
                 # Check risk control
-                if self.risk_manager and hasattr(self.risk_manager, 'execute_risk_control'):
+                if hasattr(self, 'risk_manager') and self.risk_manager and hasattr(self.risk_manager, 'execute_risk_control'):
                     if await self.risk_manager.execute_risk_control():
                         self.logger.critical("Risk control triggered, stopping live trading")
                         self._running = False
@@ -143,8 +134,12 @@ class LiveMode(BaseTradingMode):
                 # Wait for next interval
                 await self._sleep_interval()
             
-            # Return default report structure
-            return self._generate_report()
+            # Return basic result
+            return {
+                "status": "completed" if self._running else "stopped_by_risk_control", 
+                "symbols": symbols,
+                "timeframe": timeframe
+            }
             
         except asyncio.CancelledError:
             self.logger.warning("Live trading cancelled")
@@ -158,18 +153,28 @@ class LiveMode(BaseTradingMode):
         """Update account balance and position information"""
         try:
             # Fetch current account balance
-            balance = await self.execution_engine.get_account_balance()
+            balance = await self.portfolio.get_account_balance()
             
-            if balance is not None:
-                # Update equity value
-                self.state['current_equity'] = sum(balance.values()) if isinstance(balance, dict) else 0
+            if balance:
+                # Calculate total equity (simple sum of all balances)
+                total_equity = sum(balance.values())
                 
-                # Update peak equity and drawdown
-                self._update_performance_metrics()
+                # Update state with current equity
+                self.state['current_equity'] = total_equity
+                
+                # Update peak equity if new peak reached
+                if total_equity > self.state.get('peak_equity', 0):
+                    self.state['peak_equity'] = total_equity
+                
+                # Calculate drawdown
+                peak_equity = self.state.get('peak_equity', total_equity)
+                if peak_equity > 0:
+                    drawdown = (peak_equity - total_equity) / peak_equity
+                    self.state['max_drawdown'] = max(self.state.get('max_drawdown', 0), drawdown)
                 
                 # Log updated balance
-                self.logger.info(f"Account status updated | Equity: ${self.state['current_equity']:,.2f} | " +
-                               f"Drawdown: {self.state['max_drawdown']*100:.2f}%")
+                self.logger.info(f"Account status updated | Equity: ${total_equity:,.2f} | " +
+                            f"Drawdown: {self.state.get('max_drawdown', 0)*100:.2f}%")
                 
         except Exception as e:
             self.logger.error(f"Failed to update account status: {e}")
@@ -195,43 +200,25 @@ class LiveMode(BaseTradingMode):
         
         # Cancel any open orders if configured
         should_cancel_orders = self.config.get("live_trading", "cancel_orders_on_shutdown", default=True)
-        if should_cancel_orders and self.execution_engine and hasattr(self.execution_engine, 'get_open_orders'):
+        if should_cancel_orders and self.portfolio and hasattr(self.portfolio, 'get_open_orders'):
             try:
                 # Get open orders
-                open_orders = await self.execution_engine.get_open_orders()
+                open_orders = await self.portfolio.get_open_orders()
                 if open_orders:
                     self.logger.info(f"Cancelling {len(open_orders)} open orders")
                     for order in open_orders:
-                        await self.execution_engine.cancel_order(order['id'], order.get('symbol'))
+                        order_id = order.get('id') or order.get('order_id')
+                        symbol = order.get('symbol')
+                        if order_id:
+                            await self.portfolio.cancel_order(order_id)
             except Exception as e:
                 self.logger.error(f"Error cancelling open orders: {e}")
-        
-        # Close components
-        shutdown_tasks = []
-        
-        # Close strategy
-        if self.strategy:
-            shutdown_tasks.append(self.strategy.shutdown())
-            
+                
         # Close execution engine
-        if self.execution_engine and hasattr(self.execution_engine, 'shutdown'):
-            shutdown_tasks.append(self.execution_engine.shutdown())
+        if self.portfolio and hasattr(self.portfolio, 'shutdown'):
+            await self.portfolio.shutdown()
             
-        # Close data source
-        if self.data_source:
-            shutdown_tasks.append(self.data_source.shutdown())
+        # Call parent shutdown
+        await super().shutdown()
             
-        # Close risk manager
-        if self.risk_manager:
-            shutdown_tasks.append(self.risk_manager.shutdown())
-            
-        # Close performance analyzer
-        if self.performance_analyzer:
-            shutdown_tasks.append(self.performance_analyzer.shutdown())
-        
-        # Wait for all shutdown tasks to complete
-        if shutdown_tasks:
-            await asyncio.gather(*shutdown_tasks, return_exceptions=True)
-            
-        self._running = False
         self.logger.info("Live trading mode shutdown complete")

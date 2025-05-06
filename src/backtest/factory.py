@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# src/backtest/engine/factory.py
+# src/backtest/factory.py
 
 """
 Backtest engine factory module.
@@ -12,7 +12,7 @@ from typing import Dict, Optional, Any, Type, List
 from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.backtest.engine.base import BaseBacktestEngine
+from src.backtest.base import BaseBacktestEngine
 
 
 class BacktestEngine(Enum):
@@ -90,7 +90,7 @@ class BacktestEngineFactory(AbstractFactory):
         """Auto-discover additional backtest engine modules"""
         try:
             # Discover implementations from the engines directory
-            module_path = "src.backtest.engine.implementations"
+            module_path = "src.backtest"
             self.discover_registrable_classes(
                 BaseBacktestEngine, 
                 module_path, 
@@ -193,7 +193,7 @@ class BacktestEngineFactory(AbstractFactory):
         metadata = self._metadata.get(engine_name.lower(), {})
         return metadata.get('features', [])
     
-    async def create_with_config_params(self, name: Optional[str] = None) -> BaseBacktestEngine:
+    async def create_backtest_engine(self, name: Optional[str] = None) -> BaseBacktestEngine:
         """
         Create a backtest engine with parameters from configuration
         

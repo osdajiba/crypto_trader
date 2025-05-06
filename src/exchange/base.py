@@ -215,7 +215,7 @@ class Exchange(ABC):
         self._ticker_cache = {}
         self._order_book_cache = {}
         
-        # Trading modes
+        # Trading mode
         self._trading_mode = None
         self._market_type = None  # 'spot', 'future', 'option'
         
@@ -778,3 +778,53 @@ class Exchange(ABC):
         except Exception as e:
             self.logger.error(f"Failed to fetch market info for {symbol}: {e}")
             return {}
+    
+    async def shutdown(self) -> None:
+        """
+        Shutdown exchange connection and cleanup resources safely.
+        Performs security checks, closes remote connections, and cleans up resources.
+        """
+        if not self._initialized:
+            self.logger.info(f"{self.__class__.__name__} exchange is not initialized, shutdown skipped.")
+            return
+
+        try:
+            self.logger.info(f"Initiating shutdown for {self.__class__.__name__} exchange...")
+
+            # Security Check 1: Check for active WebSocket subscriptions
+            if hasattr(self, '_event_handlers') and self._event_handlers:
+                self.logger.info(f"Closing {len(self._event_handlers)} active event handlers...")
+                self._event_handlers.clear()
+
+            # Security Check 2: Check for active orders
+            if self._active_orders:
+                active_order_count = len(self._active_orders)
+                self.logger.warning(f"Found {active_order_count} active orders during shutdown. "
+                                "Initiating forced cleanup...")
+                # Optionally attempt to cancel orders here if supported
+                self._active_orders.clear()
+
+            # Security Check 3: Clear connection-related caches
+            self.logger.info("Clearing market data caches...")
+            self._market_cache.clear()
+            self._ticker_cache.clear()
+            self._order_book_cache.clear()
+            self._position_cache.clear()
+
+            # Execute exchange-specific shutdown routine
+            self.logger.info("Initiating exchange-specific shutdown procedures...")
+            await self._shutdown_exchange()
+
+            # Final status update
+            self._initialized = False
+            self._connected = False
+            self.logger.info(f"{self.__class__.__name__} exchange shutdown completed successfully.")
+
+        except Exception as e:
+            self.logger.error(f"Critical error during shutdown: {str(e)}", exc_info=True)
+            raise ExchangeError(f"Unsafe shutdown detected: {str(e)}") from e
+        finally:
+            # Force cleanup even if exception occurs
+            self._initialized = False
+            self._connected = False
+            self.logger.debug("Resource cleanup finalized.")

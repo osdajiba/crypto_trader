@@ -14,7 +14,7 @@ import time
 import asyncio
 
 from src.common.abstract_factory import register_factory_class
-from src.backtest.engine.base import BaseBacktestEngine, BacktestEngineError
+from src.backtest.base import BaseBacktestEngine, BacktestEngineError
 
 
 class OHLCVEngineError(BacktestEngineError):

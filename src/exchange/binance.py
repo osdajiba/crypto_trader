@@ -9,15 +9,12 @@ Provides interface to Binance exchange API.
 import ccxtpro
 import ccxt
 import ccxt.async_support as ccxt_async
-import pandas as pd
 import asyncio
 import time
 import os
 import random
 from typing import Dict, List, Union, Optional, Any, Tuple, Callable
-from datetime import datetime, timedelta
 from functools import wraps
-from decimal import Decimal
 
 from src.common.config_manager import ConfigManager
 from src.common.abstract_factory import register_factory_class
@@ -1231,12 +1228,6 @@ class BinanceExchange(Exchange):
             bool: Success status
         """
         try:
-            # Check if ccxt.pro is installed
-            try:
-            except ImportError:
-                self.logger.error("ccxt.pro not installed. Please install ccxt.pro to use WebSocket functionality.")
-                return False
-            
             self.logger.info("Starting WebSocket connection for order updates")
             
             # Get params from config

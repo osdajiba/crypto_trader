@@ -110,7 +110,7 @@ class PerformanceAnalyzerFactory(AbstractFactory):
         }
         return descriptions.get(analyzer, "Unknown performance analyzer")
     
-    async def create_with_config_params(self, name: Optional[str] = None) -> BasePerformanceAnalyzer:
+    async def create_performance_analyzer(self, name: Optional[str] = None) -> BasePerformanceAnalyzer:
         """Create a performance analyzer with parameters from configuration"""
         resolved_name = await self._resolve_name(name)
         

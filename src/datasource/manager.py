@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.helpers import TimeUtils
-from src.datasource.sources.factory import DataSourceFactory, DataSource
+from src.datasource.sources.factory import DataSource, get_datasource_factory
 from src.datasource.integrity import DataIntegrityChecker
 from src.datasource.engine import DataEngine
 from src.datasource.processor import DataProcessor
@@ -67,35 +67,35 @@ class DataManager:
     def _init_data_sources(self) -> None:
         """Initialize appropriate data sources based on mode and source_type"""
         try:
-            factory = DataSourceFactory()
+            factory = get_datasource_factory(self.config)
             
             # For backtest mode
             if self.mode == "BACKTEST":
                 if self.source_type == "hybrid":
-                    self.primary_source = factory.create_source("local", self.config)
-                    self.backup_source = factory.create_source("exchange", self.config)
+                    self.primary_source = factory.create_datasource("local")
+                    self.backup_source = factory.create_datasource("exchange")
                 else:
-                    self.primary_source = factory.create_source(self.source_type, self.config)
+                    self.primary_source = factory.create_datasource(self.source_type)
                     self.backup_source = None
             
             # For live and paper trading
             elif self.mode in ["LIVE", "PAPER"]:
                 if self.source_type == "local":
                     self.logger.warning(f"Local source not ideal for {self.mode} mode, using hybrid source")
-                    self.primary_source = factory.create_source("hybrid", self.config)
+                    self.primary_source = factory.create_datasource("hybrid")
                 else:
-                    self.primary_source = factory.create_source(self.source_type, self.config)
+                    self.primary_source = factory.create_datasource(self.source_type)
                 
                 # Always have a local backup
                 if not isinstance(self.primary_source, DataSource):
-                    self.backup_source = factory.create_source("local", self.config)
+                    self.backup_source = factory.create_datasource("local")
                 else:
                     self.backup_source = None
             
             # Unknown mode
             else:
                 self.logger.warning(f"Unknown trading mode: {self.mode}, defaulting to local source")
-                self.primary_source = factory.create_source("local", self.config)
+                self.primary_source = factory.create_datasource("local")
                 self.backup_source = None
                 
         except Exception as e:
@@ -534,7 +534,39 @@ class DataManager:
             end = datetime.now()
             start = end - timedelta(hours=1)  # Get last hour
             return await self.get_historical_data(symbol, timeframe, start, end)
+    
+    async def get_latest_data_for_symbols(self, symbols: List[str], timeframe: str) -> Dict[str, pd.DataFrame]:
+        """
+        Get the latest data for multiple symbols
+        
+        Args:
+            symbols: List of symbols to fetch data for
+            timeframe: Data timeframe
             
+        Returns:
+            Dict[str, pd.DataFrame]: Symbol -> DataFrame mapping
+        """
+        result = {}
+        
+        # Create tasks to load data for each symbol concurrently
+        tasks = []
+        for symbol in symbols:
+            tasks.append(self.get_real_time_data(symbol, timeframe))
+        
+        # Run all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results
+        for i, data in enumerate(results):
+            symbol = symbols[i]
+            
+            if isinstance(data, Exception):
+                self.logger.error(f"Error loading real-time data for {symbol}: {data}")
+            elif data is not None and not data.empty:
+                result[symbol] = data
+        
+        return result
+
     async def get_orderbook(self, symbol: str, limit: int = 10) -> Dict[str, Any]:
         """
         Get latest orderbook data (for live trading modes)
@@ -704,7 +736,7 @@ class DataManager:
         # Close data sources
         if hasattr(self, 'primary_source') and self.primary_source:
             try:
-                await self.primary_source.close()
+                self.primary_source.close()
                 self.logger.debug("Closed primary data source")
             except Exception as e:
                 self.logger.error(f"Error closing primary data source: {e}")

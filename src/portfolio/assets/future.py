@@ -6,6 +6,8 @@ import asyncio
 from decimal import Decimal
 from typing import Dict, Any, Optional, Union
 
+import pandas as pd
+
 from src.exchange.base import retry_exchange_operation
 from src.common.abstract_factory import register_factory_class
 from src.common.log_manager import LogManager
@@ -113,6 +115,70 @@ class Future(Asset):
             # For shorts: entry_price * (1 + 1/leverage - maintenance_margin)
             self._liquidation_price = self._entry_price * (Decimal('1') + Decimal('1') / self.leverage - self.maintenance_margin)
     
+    
+    async def update_data(self, data: pd.DataFrame) -> None:
+        """
+        Update future contract with market data
+        
+        Args:
+            data: DataFrame containing market data
+        """
+        if data.empty:
+            return
+            
+        try:
+            # Get latest price from data
+            if 'close' in data.columns and len(data) > 0:
+                last_row = data.iloc[-1]
+                old_price = self.price
+                
+                # Update price
+                self.price = Decimal(str(last_row['close']))
+                
+                # Update position value
+                self._value = self._contracts * self.contract_size * self.price
+                self._last_update_time = time.time()
+                
+                # If we have an open position, calculate unrealized PnL
+                if self._contracts > 0 and self._entry_price > 0:
+                    if self.position_type == 'long':
+                        price_change = self.price - self._entry_price
+                    else:  # short
+                        price_change = self._entry_price - self.price
+                        
+                    self._unrealized_pnl = self._contracts * self.contract_size * price_change
+                    
+                    # Recalculate liquidation price if needed
+                    self._calculate_liquidation_price()
+                
+                # Calculate and log price change if significant
+                price_change_pct = 0
+                if old_price > 0:
+                    price_change_pct = (self.price - old_price) * 100 / old_price
+                    
+                if abs(price_change_pct) > 0.1:  # Only log significant changes
+                    self.logger.info(f"Updated {self.symbol} price: ${float(self.price):.2f} "
+                                f"({float(price_change_pct):.2f}%), value: ${float(self._value):.2f}, "
+                                f"unrealized PnL: ${float(self._unrealized_pnl):.2f}")
+                else:
+                    self.logger.debug(f"Updated {self.symbol} price: ${float(self.price):.2f}, "
+                                    f"value: ${float(self._value):.2f}")
+                
+                # Notify subscribers of value changes
+                self._notify_subscribers('value_changed', {
+                    'symbol': self.symbol,
+                    'old_price': float(old_price),
+                    'new_price': float(self.price),
+                    'change_pct': float(price_change_pct),
+                    'position_size': float(self._contracts),
+                    'value': float(self._value),
+                    'unrealized_pnl': float(self._unrealized_pnl),
+                    'liquidation_price': float(self._liquidation_price)
+                })
+        
+        except Exception as e:
+            self.logger.error(f"Error updating {self.symbol} with market data: {str(e)}")
+            
     @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
     async def update_value(self) -> float:
         """

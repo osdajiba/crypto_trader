@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Callable, Any
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.async_executor import AsyncExecutor
-from src.trading.factory import get_trading_mode_factory
+from src.mode.factory import get_trading_mode_factory
 
 
 class TradingCore:
@@ -62,7 +62,7 @@ class TradingCore:
         self._running = True
         
         try:
-            self.trading_mode = await self.mode_factory.create(self.mode)            
+            self.trading_mode = await self.mode_factory.create_trading_mode(self.mode)            
             
             # Apply stored progress callback if available
             if hasattr(self, '_progress_callback') and self._progress_callback and hasattr(self.trading_mode, 'set_progress_callback'):
@@ -111,7 +111,7 @@ class TradingCore:
         if not self._running:
             return
         
-        self.logger.info("Initiating system shutdown...")
+        self.logger.info("Trading system shutdown...")
         self._running = False
         
         # Shutdown trading mode if it exists

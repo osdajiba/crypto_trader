@@ -37,9 +37,13 @@ class PortfolioManager:
         self.config = config if config else ConfigManager()
         self.logger = LogManager.get_logger("portfolio.manager")
         
-        # Initialize exchange
+        # Initialize plugins
         self.exchange = exchange
         self._exchange_factory = None
+        self._all_orders: Dict[str, Dict[str, Any]] = {}    # Order tracking
+        self.risk_manager = None
+        self._risk_callbacks = {}
+        self.execution_engine = None        
         
         # Initialize factories
         self.asset_factory = get_asset_factory(self.config)
@@ -51,52 +55,41 @@ class PortfolioManager:
         self._last_update_time = 0
         self._is_syncing = False
         
-        # Order tracking
-        self._all_orders: Dict[str, Dict[str, Any]] = {}
-        
-        # Risk manager (will be initialized in _initialize)
-        self.risk_manager = None
-        
-        # Risk event callbacks
-        self._risk_callbacks = {}
-        
-        # Execution engine
-        self.execution_engine = None
-        
-        # Initialize components
-        self._initialize()
-                
         self.logger.info("Portfolio manager initialized")
 
-    async def _initialize(self) -> None:
+    async def initialize(self) -> None:
         """
         Initialize the portfolio manager and its components.
         
         Should be called after creation to properly set up async resources.
         """
-        # Initialize exchange
-        if not self.exchange:
-            self.exchange_factory = get_exchange_factory(self.config)
-            self.exchange = await self.exchange_factory.create()
-            self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
-        
-        # Initialize assets from configuration
-        self.asset_factory.discover_assets()
-        self.logger.info("Asset types discovered")
-        await self._initialize_configured_assets()
-        
-        # Initialize risk manager
-        await self._initialize_risk_manager()
-        
-        # Initialize execution engine
-        self.execution_engine = await self.execution_factory.create()
-        self.logger.info(f"Execution engine initialized: {self.execution_engine.__class__.__name__}")
-        
-        # Register for risk events
-        self._register_risk_events()
-        
-        self.logger.info("Portfolio manager initialization complete")
-        return self
+        try:
+            # Initialize exchange
+            if not self.exchange:
+                self.exchange_factory = get_exchange_factory(self.config)
+                self.exchange = await self.exchange_factory.create_exchange('binance')
+                self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
+            
+            # Initialize assets from configuration
+            self.asset_factory.discover_assets()
+            self.logger.info("Asset types discovered")
+            await self._initialize_configured_assets()
+            
+            # Initialize risk manager
+            await self._initialize_risk_manager()
+            
+            # Initialize execution engine
+            self.execution_engine = await self.execution_factory.create()
+            self.logger.info(f"Execution engine initialized: {self.execution_engine.__class__.__name__}")
+            
+            # Register for risk events
+            self._register_risk_events()
+            
+            self.logger.info("Portfolio manager initialization complete")
+
+        except Exception as e:
+            self.logger.error(f"Failed to initialize portfolio manager: {str(e)}")
+            raise
 
     async def _initialize_configured_assets(self) -> None:
         """Initialize assets defined in configuration"""
@@ -124,7 +117,8 @@ class PortfolioManager:
         """Initialize risk manager component"""
         try:
             # Create risk manager instance
-            self.risk_manager = await self.risk_management_factory.create_with_config_params(self)
+            risk_management_type = {"backtest": "backtest", "standard": "paper", "conservative": "live"}.get(self.mode_name, "backtest")
+            self.risk_manager = await self.risk_management_factory.create_risk_mamager(self, risk_management_type)
             
             # Perform initial risk assessment
             if self.risk_manager:
@@ -187,7 +181,7 @@ class PortfolioManager:
         elif action == 'close_all_positions':
             await self._close_all_positions()
         elif action == 'pause_trading':
-            # Implement pause trading functionality
+            # TODO: Implement pause trading functionality
             pass
 
     async def _on_position_limit(self, event_data: Dict[str, Any]) -> None:
@@ -397,6 +391,56 @@ class PortfolioManager:
         
         return float(self._total_value)
 
+    async def update_market_data(self, data_map: Dict[str, pd.DataFrame]) -> None:
+        """
+        Update assets with the latest market data
+        
+        Args:
+            data_map: Dictionary mapping symbols to their market data DataFrames
+        """
+        if not data_map:
+            self.logger.warning("Empty data map provided to update_market_data")
+            return
+            
+        # Create update tasks for each asset with corresponding data
+        update_tasks = []
+        
+        for asset_name, asset in self.assets.items():
+            # Direct match - asset name matches a symbol in data_map
+            if asset_name in data_map:
+                df = data_map[asset_name]
+                if not df.empty:
+                    update_tasks.append(asset.update_data(df))
+            else:
+                # Try alternative matching for pairs like BTC/USDT matching BTC asset
+                matched = False
+                for symbol, df in data_map.items():
+                    # Check if symbol starts with asset name (e.g., BTC/USDT for BTC asset)
+                    # Or if asset name contains symbol (e.g., "BTCUSDT" asset for "BTC/USDT" symbol)
+                    if (symbol.startswith(asset_name + "/") or 
+                        asset_name.startswith(symbol + "/") or
+                        asset_name.replace("/", "") == symbol.replace("/", "")):
+                        if not df.empty:
+                            update_tasks.append(asset.update_data(df))
+                            matched = True
+                            break
+                
+                if not matched:
+                    self.logger.debug(f"No market data provided for asset {asset_name}")
+        
+        # Execute all updates concurrently
+        if update_tasks:
+            results = await asyncio.gather(*update_tasks, return_exceptions=True)
+            
+            # Check for exceptions
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    asset_name = list(self.assets.keys())[i]
+                    self.logger.error(f"Error updating {asset_name} with market data: {str(result)}")
+        
+        # After updating all assets, recalculate portfolio total value
+        await self.update_all_values()
+
     async def update_all_values(self) -> float:
         """
         Update values for all assets in the portfolio
@@ -442,7 +486,7 @@ class PortfolioManager:
                     self.risk_manager.update_portfolio_value(float(self._total_value))
                 
                 # Notify of significant value changes
-                if old_value > 0 and abs((self._total_value - old_value) / old_value) > 0.05:
+                if old_value > 0 and abs((self._total_value - old_value) / old_value) > 0.001:
                     await self.notify_risk_manager('significant_value_change', {
                         'old_value': float(old_value),
                         'new_value': float(self._total_value),
@@ -768,7 +812,69 @@ class PortfolioManager:
             'success': False,
             'error': 'Order not found'
         }
+        
+    async def get_account_balance(self) -> Dict[str, float]:
+        """
+        Get account balance from the exchange
+        
+        Returns:
+            Dict[str, float]: Currency balances where key is currency code and value is amount
+        """
+        if not self.exchange:
+            self.logger.error("No exchange available to fetch account balance")
+            return {}
+        
+        try:
+            # Ensure exchange is initialized
+            if not self.exchange.is_initialized():
+                await self.exchange.initialize()
+            
+            # Fetch balance from exchange
+            balance_data = await self.exchange.fetch_balance()
+            
+            if not balance_data or 'currencies' not in balance_data:
+                self.logger.error("Invalid balance data format returned from exchange")
+                return {}
+            
+            # Extract free balances for each currency
+            balances = {}
+            for currency, data in balance_data['currencies'].items():
+                if 'free' in data and data['free'] > 0:
+                    balances[currency] = data['free']
+            
+            self.logger.info(f"Retrieved account balance for {len(balances)} currencies")
+            return balances
+        
+        except Exception as e:
+            self.logger.error(f"Failed to fetch account balance: {str(e)}")
+            return {}
 
+    async def get_open_orders(self) -> List[Dict[str, Any]]:
+        """
+        Get all open orders from the exchange
+        
+        Returns:
+            List[Dict[str, Any]]: List of open orders
+        """
+        if not self.exchange:
+            self.logger.error("No exchange available to fetch open orders")
+            return []
+        
+        try:
+            # Ensure exchange is initialized
+            if not self.exchange.is_initialized():
+                await self.exchange.initialize()
+            
+            # Fetch open orders from exchange
+            open_orders = await self.exchange.fetch_open_orders()
+            
+            self.logger.info(f"Retrieved {len(open_orders)} open orders from exchange")
+            return open_orders
+        
+        except Exception as e:
+            self.logger.error(f"Failed to fetch open orders: {str(e)}")
+            return []
+    
     def list_assets(self) -> List[str]:
         """
         Get a list of all asset names
@@ -792,6 +898,47 @@ class PortfolioManager:
             
         return {name: float(Decimal(str(asset.get_value())) / total_value) 
                 for name, asset in self.assets.items()}
+        
+    def is_risk_breached(self) -> bool:
+        """
+        Check if any risk limits have been breached
+        
+        This method checks with the risk manager to determine if any risk 
+        parameters have been violated that would require stopping the trading.
+        
+        Returns:
+            bool: True if risk limits are breached, False otherwise
+        """
+        # If no risk manager is available, assume no risk breach
+        if not self.risk_manager:
+            return False
+        
+        # Check if risk manager has a method to check risk breach
+        if hasattr(self.risk_manager, 'is_risk_breached') and callable(getattr(self.risk_manager, 'is_risk_breached')):
+            try:
+                return self.risk_manager.is_risk_breached()
+            except Exception as e:
+                self.logger.error(f"Error checking risk breach status: {e}")
+                # Default to stopping trading if we can't check risk (safety first)
+                return True
+        
+        # Alternative check: look for critical risk levels
+        if hasattr(self.risk_manager, 'get_risk_level') and callable(getattr(self.risk_manager, 'get_risk_level')):
+            try:
+                risk_level = self.risk_manager.get_risk_level()
+                # Assume risk levels might be numeric (higher = more risky) or string-based
+                if isinstance(risk_level, (int, float)):
+                    critical_threshold = self.config.get("risk", "critical_threshold", default=0.8)
+                    return risk_level >= critical_threshold
+                elif isinstance(risk_level, str):
+                    critical_levels = ['critical', 'emergency', 'severe', 'extreme']
+                    return risk_level.lower() in critical_levels
+            except Exception as e:
+                self.logger.error(f"Error getting risk level: {e}")
+                return True
+        
+        # If we can't determine risk status, default to safe (continue trading)
+        return False
 
     def set_exchange(self, exchange) -> None:
         """
@@ -873,122 +1020,122 @@ class PortfolioManager:
         finally:
             self._is_syncing = False
     
-    async def execute_signal_batch(self, signals: pd.DataFrame) -> Dict[str, Any]:
+    async def process_signals(self, signals: pd.DataFrame, data: pd.DataFrame = None) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Execute a batch of trading signals
+        Process and execute trading signals
         
         Args:
-            signals: DataFrame with columns: 'timestamp', 'symbol', 'action', 'quantity', 'price'
-            
+            signals: DataFrame containing trading signals
+            data: DataFrame containing market data (optional, for auto-sizing)
+        
         Returns:
-            Dict[str, Any]: Execution results
+            List[Dict[str, Any]] or Dict[str, Any]: Either list of trade results or structured results dictionary
         """
+        # Handle empty signals case
         if signals.empty:
-            return {'success': True, 'executed': 0, 'message': 'No signals to execute'}
+            self.logger.info("No signals to process")
+            return []
         
-        required_cols = ['timestamp', 'symbol', 'action', 'quantity']
-        missing = [col for col in required_cols if col not in signals.columns]
-        if missing:
-            return {'success': False, 'error': f"Missing required columns: {missing}"}
+        # Validate signal format
+        required_columns = ['symbol', 'action', 'timestamp']
+        if not all(col in signals.columns for col in required_columns):
+            missing = [col for col in required_columns if col not in signals.columns]
+            self.logger.error(f"Invalid signal format, missing columns: {missing}")
+            return []
         
-        # Validate signals with risk manager if available
-        valid_signals = signals
-        if self.risk_manager:
+        # Apply risk management rules
+        validated_signals = signals
+        if self.risk_manager and hasattr(self.risk_manager, 'validate_signals'):
             try:
-                valid_signals = await self.risk_manager.validate_signals(signals)
+                validated_signals = await self.risk_manager.validate_signals(signals)
+                if len(validated_signals) < len(signals):
+                    self.logger.info(f"Risk manager filtered out {len(signals) - len(validated_signals)} signals")
             except Exception as e:
                 self.logger.error(f"Error validating signals: {e}")
-                # Continue with original signals if validation fails
         
-        # Notify risk manager of batch execution start
+        # Notify risk manager of batch start
         if self.risk_manager:
             await self.notify_risk_manager('batch_execution_start', {
-                'signal_count': len(valid_signals),
-                'symbols': valid_signals['symbol'].unique().tolist() if not valid_signals.empty else []
+                'signal_count': len(validated_signals),
+                'symbols': validated_signals['symbol'].unique().tolist() if not validated_signals.empty else []
             })
         
-        results = []
+        executed_trades = []
         
         # Process each signal
-        for _, signal in valid_signals.iterrows():
+        for _, signal in validated_signals.iterrows():
             symbol = signal['symbol']
             action = signal['action'].lower()
-            amount = float(signal['quantity'])
-            price = signal.get('price', None)
+            timestamp = signal['timestamp']
             
-            # Find the corresponding asset
-            asset = self.assets.get(symbol)
-            if not asset:
-                results.append({
-                    'success': False,
-                    'symbol': symbol,
-                    'action': action,
-                    'error': f"Asset {symbol} not found in portfolio"
-                })
+            # Handle quantity with auto-sizing if needed
+            quantity = signal.get('quantity')
+            if quantity is None and data is not None and 'close' in data.columns:
+                position_size_pct = self.config.get("trading", "position_size_pct", default=0.02)
+                portfolio_value = self.get_total_value()
+                latest_price = data['close'].iloc[-1]
+                quantity = (portfolio_value * position_size_pct) / latest_price
+                self.logger.info(f"Auto-sizing: {symbol} {quantity:.6f} units ({position_size_pct*100:.1f}% of portfolio)")
+            elif quantity is None:
+                self.logger.error(f"No quantity provided for {symbol} and no market data for auto-sizing")
                 continue
             
+            # Execute the trade
             try:
-                # Execute buy or sell
-                if action in ('buy', 'long'):
-                    kwargs = {}
-                    if price:
-                        kwargs['price'] = price
-                        kwargs['order_type'] = 'limit'
+                # Check if asset exists
+                if symbol not in self.assets:
+                    self.logger.warning(f"Asset not found: {symbol}")
+                    continue
                     
-                    result = await self.buy_asset(symbol, amount, **kwargs)
-                elif action in ('sell', 'short'):
-                    kwargs = {}
-                    if price:
-                        kwargs['price'] = price
-                        kwargs['order_type'] = 'limit'
-                    
-                    result = await self.sell_asset(symbol, amount, **kwargs)
+                # Prepare trade parameters
+                kwargs = {}
+                price = signal.get('price')
+                if price is not None:
+                    kwargs['price'] = price
+                    kwargs['order_type'] = 'limit'
+                
+                # Execute appropriate action
+                trade_result = None
+                if action in ['buy', 'long']:
+                    trade_result = await self.buy_asset(symbol, float(quantity), **kwargs)
+                elif action in ['sell', 'short']:
+                    trade_result = await self.sell_asset(symbol, float(quantity), **kwargs)
                 else:
-                    result = {
-                        'success': False,
+                    self.logger.warning(f"Unsupported action: {action}")
+                    continue
+                
+                # Process result
+                if trade_result and trade_result.get('success', False):
+                    trade_result.update({
                         'symbol': symbol,
                         'action': action,
-                        'error': f"Unsupported action: {action}"
-                    }
-                
-                # Add signal info to result
-                result.update({
-                    'symbol': symbol,
-                    'action': action,
-                    'amount': amount,
-                    'timestamp': signal['timestamp']
-                })
-                
-                results.append(result)
+                        'amount': float(quantity),
+                        'timestamp': timestamp
+                    })
+                    executed_trades.append(trade_result)
+                    self.logger.info(f"Executed {action} for {symbol}: {quantity} units at {price or 'market price'}")
+                else:
+                    error = trade_result.get('error', 'Unknown error') if trade_result else 'No result'
+                    self.logger.error(f"Failed to execute {action} for {symbol}: {error}")
+                    
             except Exception as e:
-                results.append({
-                    'success': False,
-                    'symbol': symbol,
-                    'action': action,
-                    'amount': amount,
-                    'error': str(e)
-                })
+                self.logger.error(f"Error processing signal for {symbol}: {e}")
         
-        # Summarize results
-        success_count = sum(1 for r in results if r.get('success', False))
-        failed_count = len(results) - success_count
-        
-        # Notify risk manager of batch execution completion
+        # Notify risk manager of completion
         if self.risk_manager:
+            success_count = sum(1 for trade in executed_trades if trade.get('success', False))
             await self.notify_risk_manager('batch_execution_complete', {
-                'total': len(results),
+                'total': len(validated_signals),
                 'successful': success_count,
-                'failed': failed_count
+                'failed': len(validated_signals) - success_count
             })
         
-        return {
-            'success': True,
-            'executed': len(results),
-            'successful': success_count,
-            'failed': failed_count,
-            'results': results
-        }
+        # Log summary
+        if executed_trades:
+            self.logger.info(f"Executed {len(executed_trades)} trades from {len(validated_signals)} signals")
         
+        return executed_trades
+    
     def get_portfolio_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the portfolio state

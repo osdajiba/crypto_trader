@@ -7,7 +7,7 @@ from typing import Dict, Optional, Any, Type, List
 from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.trading.base import BaseTradingMode
+from src.mode.base import BaseTradingMode
 
 
 class TradingMode(Enum):    
@@ -33,20 +33,20 @@ class TradingModeFactory(AbstractFactory):
     
     def _register_default_modes(self) -> None:
         """Register default trading modes with consistent metadata"""
-        self.register(TradingMode.BACKTEST.value, "src.backtest.backtest.BacktestMode", {
+        self.register(TradingMode.BACKTEST.value, "src.mode.backtest.BacktestMode", {
             "description": "Historical data backtesting",
             "features": ["historical_data", "performance_analysis"],
             "category": "simulation"
         })
         
-        self.register(TradingMode.PAPER.value, "src.trading.paper.PaperMode", {
+        self.register(TradingMode.PAPER.value, "src.mode.paper.PaperMode", {
             "description": "Paper trading (uses real market data without real funds)",
             "features": ["real_time_data", "virtual_execution"],
             "category": "simulation"
         })
         
-        self.register(TradingMode.LIVE.value, "src.trading.live.LiveMode", {
-            "description": "Live trading (uses real funds on exchange)",
+        self.register(TradingMode.LIVE.value, "src.mode.live.LiveMode", {
+            "description": "Live trading (uses real market data on exchange)",
             "features": ["real_time_data", "real_execution", "risk_management"],
             "category": "production"
         })
@@ -54,7 +54,7 @@ class TradingModeFactory(AbstractFactory):
     def _discover_trading_modes(self) -> None:
         """Auto-discover trading mode modules"""
         try:
-            mode_dir = "src.backtest" if self.config.get('system','operational_mode')=="backtest" else "src.trading"
+            mode_dir = "src.mode"
             self.discover_registrable_classes(BaseTradingMode, mode_dir, "trading_mode_factory")
         except Exception as e:
             self.logger.error(f"Error auto-discovering trading modes: {e}")
@@ -110,7 +110,7 @@ class TradingModeFactory(AbstractFactory):
         metadata = self._metadata.get(mode_name.lower(), {})
         return metadata.get('features', [])
     
-    async def create_with_config_params(self, name: Optional[str] = None) -> BaseTradingMode:
+    async def create_trading_mode(self, name: Optional[str] = None) -> BaseTradingMode:
         """Create a trading mode with parameters from configuration"""
         resolved_name = await self._resolve_name(name)
         

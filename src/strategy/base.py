@@ -33,6 +33,7 @@ class BaseStrategy(ABC):
         self.config = config
         self.params = params or {}
         self.logger = LogManager.get_logger(f"strategy.{self.__class__.__name__.lower()}")
+        self.id = self.__class__.__name__.lower()
         
         # Internal state tracking
         self._is_initialized = False
@@ -71,6 +72,9 @@ class BaseStrategy(ABC):
         """
         pass
     
+    def get_strategy_id(self):
+        return self.id
+        
     def register_factor(self, name: str, window_size: int, func: Callable = None, 
                        depends_on: List[str] = None, is_differential: bool = False) -> None:
         """

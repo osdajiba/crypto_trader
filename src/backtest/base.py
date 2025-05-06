@@ -8,14 +8,11 @@ Provides abstract base class for all backtest engines.
 
 from abc import ABC, abstractmethod
 import pandas as pd
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional
 from collections import deque
-import time
-import asyncio
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-
 
 class BacktestEngineError(Exception):
     """Base exception for backtest engine errors"""
@@ -149,7 +146,7 @@ class BaseBacktestEngine(ABC):
             from src.strategy.factory import get_strategy_factory
             
             strategy_factory = get_strategy_factory(self.config)
-            self.strategy = await strategy_factory.create(strategy_name, strategy_params)
+            self.strategy = await strategy_factory.create_strategy(strategy_name, strategy_params)
             
             self.logger.info(f"Strategy '{strategy_name}' loaded and initialized")
         except Exception as e:

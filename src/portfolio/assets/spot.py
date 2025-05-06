@@ -2,7 +2,10 @@
 # src/portfolio/assets/spot.py
 
 from decimal import Decimal
+import time
 from typing import Dict, Any
+
+import pandas as pd
 
 from src.common.abstract_factory import register_factory_class
 from src.common.log_manager import LogManager
@@ -61,7 +64,54 @@ class Spot(Asset):
         self._value = self.quantity * self.price
         
         logger.info(f"Updated {self.symbol} position: {float(self.quantity)} @ ${float(self.price):.2f}")
-    
+
+    async def update_data(self, data: pd.DataFrame) -> None:
+        """
+        Update spot asset with market data
+        
+        Args:
+            data: DataFrame containing market data
+        """
+        if data.empty:
+            return
+            
+        try:
+            # Get latest price and update asset value
+            if 'close' in data.columns and len(data) > 0:
+                last_row = data.iloc[-1]
+                old_price = self.price
+                
+                # Update price
+                self.price = Decimal(str(last_row['close']))
+                
+                # Update position value
+                self._value = self.quantity * self.price
+                self._last_update_time = time.time()
+                
+                # Calculate and log price change if significant
+                price_change_pct = 0
+                if old_price > 0:
+                    price_change_pct = (self.price - old_price) * 100 / old_price
+                    
+                if abs(price_change_pct) > 0.1:  # Only log significant changes
+                    self.logger.info(f"Updated {self.symbol} price: ${float(self.price):.2f} " 
+                                f"({float(price_change_pct):.2f}%), value: ${float(self._value):.2f}")
+                else:
+                    self.logger.debug(f"Updated {self.symbol} price: ${float(self.price):.2f}, value: ${float(self._value):.2f}")
+                
+                # Notify subscribers of value changes
+                self._notify_subscribers('value_changed', {
+                    'symbol': self.symbol,
+                    'old_price': float(old_price),
+                    'new_price': float(self.price),
+                    'change_pct': float(price_change_pct),
+                    'position_size': float(self.quantity),
+                    'value': float(self._value)
+                })
+        
+        except Exception as e:
+            self.logger.error(f"Error updating {self.symbol} with market data: {str(e)}")
+            
     async def update_value(self) -> float:
         """Update asset value by fetching latest price"""
         if not self.exchange:

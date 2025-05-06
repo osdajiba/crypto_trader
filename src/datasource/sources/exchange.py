@@ -126,7 +126,7 @@ class ExchangeDataSource(BaseDataSource):
             exchange_name = self.config.get("exchange", "name", default="binance")
             
             exchange_factory = get_exchange_factory(self.config)
-            self.exchange = await exchange_factory.create(exchange_name)
+            self.exchange = await exchange_factory.create_exchange(exchange_name)
             
             self.logger.info(f"Exchange connection initialized: {exchange_name}")
         except Exception as e:

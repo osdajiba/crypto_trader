@@ -171,7 +171,7 @@ class RiskManagerFactory(AbstractFactory):
         metadata = self._metadata.get(risk_manager_name.lower(), {})
         return metadata.get('features', [])
     
-    async def create_with_config_params(self, 
+    async def create_risk_mamager(self, 
                                       portfolio_manager,
                                       name: Optional[str] = None, 
                                       ) -> BaseRiskManager:

@@ -33,6 +33,7 @@ class ExchangeFactory(AbstractFactory):
             config: Configuration manager instance
         """
         super().__init__(config)
+        self._active_connections = {}    # ensure singleton implenmentation
         
         # Initialize logger with proper category
         self.logger = LogManager.get_logger(f"factory.{self.__class__.__name__.lower()}")
@@ -265,31 +266,7 @@ class ExchangeFactory(AbstractFactory):
         metadata = self._metadata.get(exchange_name.lower(), {})
         return metadata.get('supported_market_types', [])
     
-    async def create_with_config_params(self, name: Optional[str] = None) -> Exchange:
-        """
-        Create an exchange with parameters from configuration
-        
-        Args:
-            name: Optional exchange name
-            
-        Returns:
-            Exchange: Exchange instance
-        """
-        resolved_name = await self._resolve_name(name)
-        
-        # Get exchange-specific configuration
-        exchange_config = self.config.get("exchange", "exchanges", resolved_name, default={})
-        
-        # Create exchange instance
-        exchange = await self.create(resolved_name, params=exchange_config)
-        
-        # Store instance for reuse
-        self._created_exchanges[resolved_name] = exchange
-        
-        return exchange
-    
-    async def get_or_create_exchange(self, name: Optional[str] = None, 
-                                   force_recreate: bool = False) -> Exchange:
+    async def create_exchange(self, name: Optional[str] = None, force_recreate: bool = False) -> Exchange:
         """
         Get existing exchange instance or create new one
         
@@ -317,9 +294,17 @@ class ExchangeFactory(AbstractFactory):
                         return exchange
                 except Exception as e:
                     self.logger.warning(f"Failed to reconnect exchange {resolved_name}: {e}")
+                
+        # Get exchange-specific configuration
+        exchange_config = self.config.get("exchange", "exchanges", resolved_name, default={})
         
-        # Create new instance
-        return await self.create_with_config_params(name)
+        # Create exchange instance
+        exchange = await self.create(resolved_name, params=exchange_config)
+        
+        # Store instance for reuse
+        self._created_exchanges[resolved_name] = exchange
+        
+        return exchange
     
     async def create(self, name: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> Exchange:
         """

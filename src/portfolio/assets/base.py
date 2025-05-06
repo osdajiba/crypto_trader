@@ -8,6 +8,8 @@ from typing import Dict, Any, Optional, List, Union, Callable
 import uuid
 import time
 
+import pandas as pd
+
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.portfolio.execution.factory import get_execution_factory
@@ -281,6 +283,59 @@ class Asset(ABC):
         """
         return float(self._position_size)
     
+    async def update_data(self, data: pd.DataFrame) -> None:
+        """
+        Update asset with market data
+        
+        This method should be implemented by asset subclasses to 
+        update their state based on market data.
+        
+        Args:
+            data: DataFrame containing market data for this asset
+        """
+        if data.empty:
+            return
+            
+        try:
+            # Avoid concurrent updates
+            if self._update_in_progress:
+                return
+                
+            self._update_in_progress = True
+            
+            # Get latest price from data (typically close price from the latest candle)
+            if 'close' in data.columns and len(data) > 0:
+                last_row = data.iloc[-1]
+                old_price = self._last_price
+                self._last_price = Decimal(str(last_row['close']))
+                
+                # Update value based on new price
+                self._value = self._position_size * self._last_price
+                self._last_update_time = time.time()
+                
+                # Calculate price change percentage
+                price_change_pct = 0
+                if old_price > 0:
+                    price_change_pct = (self._last_price - old_price) * 100 / old_price
+                
+                # Notify subscribers of value changes
+                if abs(price_change_pct) > 0:
+                    self._notify_subscribers('value_changed', {
+                        'symbol': self.name,
+                        'old_price': float(old_price),
+                        'new_price': float(self._last_price),
+                        'change_pct': float(price_change_pct),
+                        'position_size': float(self._position_size),
+                        'value': float(self._value)
+                    })
+                    
+                self.logger.debug(f"Updated {self.name} with latest price: {float(self._last_price):.2f}, value: {float(self._value):.2f}")
+        
+        except Exception as e:
+            self.logger.error(f"Error updating {self.name} with market data: {str(e)}")
+        finally:
+            self._update_in_progress = False
+            
     async def update_value(self) -> float:
         """
         Update and return current asset value
@@ -305,7 +360,7 @@ class Asset(ABC):
                 self._last_update_time = time.time()
                 
                 # Notify subscribers of significant value changes
-                if old_value > 0 and abs((self._value - old_value) / old_value) > 0.01:  # 1% change
+                if old_value > 0 and abs((self._value - old_value) / old_value) > 0.0:
                     self._notify_subscribers('value_changed', {
                         'symbol': self.name,
                         'old_value': float(old_value),
