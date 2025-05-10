@@ -2,7 +2,8 @@
 # src/portfolio/manager.py
 
 from typing import Dict, List
-from portfolio.assets.base import Asset
+
+from src.portfolio.assets.base import Asset
 
 class PortfolioManager:
     def __init__(self):

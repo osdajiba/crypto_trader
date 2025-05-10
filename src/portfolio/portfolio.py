@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # src/portfolio/portfolio.py
 
-from portfolio.assets.base import Asset
-from .manager import PortfolioManager
+from src.portfolio.assets.base import Asset
+from src.portfolio.manager import PortfolioManager
 
 class Portfolio(Asset):
     def __init__(self, name: str):
