@@ -248,6 +248,154 @@ class DualMAStrategy(BaseStrategy):
             self.logger.error(f"Error generating signals: {str(e)}")
             return pd.DataFrame()
     
+    async def generate_signals_vectorized(self, data: pd.DataFrame, symbol: str, factor_values: Dict[str, pd.Series] = None) -> pd.DataFrame:
+        """
+        Generate trading signals for an entire dataset at once.
+        
+        This is a vectorized version of signal generation for improved performance
+        in backtesting, especially with the OHLCVEngine.
+        
+        Args:
+            data: Market data DataFrame for the entire period
+            symbol: Trading symbol
+            factor_values: Pre-calculated factor values (optional)
+            
+        Returns:
+            pd.DataFrame: DataFrame with trading signals
+        """
+        if data.empty:
+            self.logger.warning("Empty data, cannot generate signals")
+            return pd.DataFrame()
+        
+        # Determine symbol from data or use provided symbol
+        if symbol is None and 'symbol' in data.columns and not data.empty:
+            symbol = data['symbol'].iloc[0]
+        elif symbol is None:
+            symbol = self.primary_symbol
+        
+        try:
+            # Use pre-calculated factors if provided, otherwise calculate them
+            if factor_values and 'short_ma' in factor_values and 'long_ma' in factor_values:
+                short_ma = factor_values['short_ma']
+                long_ma = factor_values['long_ma']
+                short_ema = factor_values.get('short_ema')
+                long_ema = factor_values.get('long_ema')
+                price_change = factor_values.get('price_change')
+            else:
+                # Calculate moving averages
+                short_ma = data['close'].rolling(window=self.short_window, min_periods=1).mean()
+                long_ma = data['close'].rolling(window=self.long_window, min_periods=1).mean()
+                
+                # Calculate EMAs for confirmation
+                short_ema = data['close'].ewm(span=self.short_window, adjust=False).mean()
+                long_ema = data['close'].ewm(span=self.long_window, adjust=False).mean()
+                
+                # Calculate price change for volatility
+                price_change = data['close'].pct_change(10)
+            
+            # Add indicators to data for analysis
+            processed_data = data.copy()
+            processed_data['short_ma'] = short_ma
+            processed_data['long_ma'] = long_ma
+            processed_data['short_ema'] = short_ema if short_ema is not None else short_ma
+            processed_data['long_ema'] = long_ema if long_ema is not None else long_ma
+            processed_data['price_change'] = price_change if price_change is not None else data['close'].pct_change(10)
+            
+            # Calculate MA spread (percentage difference)
+            processed_data['ma_spread'] = (processed_data['short_ma'] - processed_data['long_ma']) / processed_data['long_ma']
+            
+            # Need at least 2 rows to detect crossovers
+            if len(processed_data) < 2:
+                return pd.DataFrame()
+            
+            # Calculate conditions vectorized
+            # Buy condition: MA crossover from below to above
+            ma_cross_up = (processed_data['ma_spread'] > 0) & (processed_data['ma_spread'].shift(1) < 0)
+            
+            # Sell condition: MA crossover from above to below
+            ma_cross_down = (processed_data['ma_spread'] < 0) & (processed_data['ma_spread'].shift(1) > 0)
+            
+            # EMA confirmation
+            ema_diff = processed_data['short_ema'] - processed_data['long_ema']
+            ema_cross_up = (ema_diff > 0) & (ema_diff.shift(1) < 0)
+            ema_cross_down = (ema_diff < 0) & (ema_diff.shift(1) > 0)
+            
+            # Price confirmation
+            price_up = processed_data['close'] > processed_data['close'].shift(1)
+            price_down = processed_data['close'] < processed_data['close'].shift(1)
+            
+            # Spread threshold
+            spread_significant = processed_data['ma_spread'].abs() > self.signal_threshold
+            
+            # Combined conditions
+            buy_signals = ma_cross_up & ema_cross_up & price_up & spread_significant
+            sell_signals = ma_cross_down & ema_cross_down & price_down & spread_significant
+            
+            # Extract signal rows
+            buy_rows = processed_data[buy_signals].copy()
+            sell_rows = processed_data[sell_signals].copy()
+            
+            # Create signals DataFrame
+            signals_list = []
+            
+            # Process buy signals
+            if not buy_rows.empty:
+                for idx, row in buy_rows.iterrows():
+                    # Calculate position size
+                    quantity = self.calculate_position_size(
+                        row['close'],
+                        self.config.get("trading", "capital", "initial", default=100000)
+                    )
+                    
+                    # Create signal data
+                    signal_data = {
+                        'timestamp': idx if isinstance(idx, pd.Timestamp) else row.get('timestamp', row.get('datetime', pd.Timestamp.now())),
+                        'symbol': symbol,
+                        'action': 'buy',
+                        'price': float(row['close']),
+                        'quantity': quantity,
+                        'ma_spread': float(row['ma_spread']),
+                        'reason': 'MA Crossover with EMA confirmation',
+                        'short_ma': float(row['short_ma']),
+                        'long_ma': float(row['long_ma'])
+                    }
+                    signals_list.append(signal_data)
+            
+            # Process sell signals
+            if not sell_rows.empty:
+                for idx, row in sell_rows.iterrows():
+                    # Calculate position size
+                    quantity = self.calculate_position_size(
+                        row['close'],
+                        self.config.get("trading", "capital", "initial", default=100000)
+                    )
+                    
+                    # Create signal data
+                    signal_data = {
+                        'timestamp': idx if isinstance(idx, pd.Timestamp) else row.get('timestamp', row.get('datetime', pd.Timestamp.now())),
+                        'symbol': symbol,
+                        'action': 'sell',
+                        'price': float(row['close']),
+                        'quantity': quantity,
+                        'ma_spread': float(row['ma_spread']),
+                        'reason': 'MA Crossover with EMA confirmation',
+                        'short_ma': float(row['short_ma']),
+                        'long_ma': float(row['long_ma'])
+                    }
+                    signals_list.append(signal_data)
+            
+            # Create DataFrame from signals list
+            signals_df = pd.DataFrame(signals_list) if signals_list else pd.DataFrame()
+            
+            if not signals_df.empty:
+                self.logger.info(f"Generated {len(signals_df)} vectorized signals for {symbol}")
+            
+            return signals_df
+            
+        except Exception as e:
+            self.logger.error(f"Error generating vectorized signals: {str(e)}")
+            return pd.DataFrame()
+    
     def calculate_position_size(self, price: float, capital: float) -> float:
         """
         Calculate position size based on price and available capital.

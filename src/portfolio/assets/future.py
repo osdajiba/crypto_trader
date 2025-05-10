@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # src/portfolio/assets/future.py
 
-import time
-import asyncio
 from decimal import Decimal
-from typing import Dict, Any, Optional, Union
-
+import time
+from typing import Dict, Any, Optional
 import pandas as pd
 
-from src.exchange.base import retry_exchange_operation
-from src.common.abstract_factory import register_factory_class
+from common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.portfolio.execution.order import Order, Direction, OrderStatus
+from src.common.abstract_factory import register_factory_class
+from exchange.base import Exchange, retry_exchange_operation
+from portfolio.execution.base import BaseExecutionEngine
 from src.portfolio.assets.base import Asset
+from src.portfolio.execution.order import Direction, Order, OrderStatus
 
 
 logger = LogManager.get_logger("asset.future")
@@ -25,7 +25,11 @@ class Future(Asset):
     Integrates with CCXT exchange API futures markets and execution engine
     """
     
-    def __init__(self, config, params):
+    def __init__(self, name: str, 
+                 exchange: Exchange = None, 
+                 execution_engine: BaseExecutionEngine = None, 
+                 config: Optional[ConfigManager] = None, 
+                 params: Optional[Dict[str, Any]] = None):
         """
         Initialize future asset
         
@@ -40,9 +44,10 @@ class Future(Asset):
                 exchange: Exchange interface (optional)
                 execution_mode: Execution mode ('live', 'backtest', 'simple_backtest')
         """
-        name = params.get('name', '')
-        exchange = params.get('exchange', None)
-        super().__init__(name, exchange, config, params)
+        params = params or {}
+        # Ensure spot assets are tradable
+        params['tradable'] = True
+        super().__init__(name, exchange, execution_engine, config, params)
         
         # Asset specific properties
         self.contract_size = Decimal(str(params.get('contract_size', 1)))

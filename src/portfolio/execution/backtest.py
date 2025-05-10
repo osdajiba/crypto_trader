@@ -25,8 +25,7 @@ class BacktestExecutionEngine(BaseExecutionEngine):
     for market impact of orders.
     """
     
-    def __init__(self, config: ConfigManager, mode: str = "backtest", 
-                 historical_data: Optional[Dict[str, pd.DataFrame]] = None):
+    def __init__(self, config: ConfigManager, mode: str = "backtest"):
         """
         Initialize the backtest execution engine.
 
@@ -35,7 +34,7 @@ class BacktestExecutionEngine(BaseExecutionEngine):
             mode (str): Should be "backtest".
             historical_data (Optional[Dict[str, pd.DataFrame]]): Historical OHLCV data for backtesting.
         """
-        super().__init__(config, mode, historical_data)
+        super().__init__(config, mode)
         
         # Backtest-specific configuration
         self.volume_participation = config.get("trading", "backtest", "volume_participation", default=0.1)  # Max volume percent per bar
@@ -43,10 +42,8 @@ class BacktestExecutionEngine(BaseExecutionEngine):
         self.market_impact_factor = config.get("trading", "backtest", "market_impact_factor", default=0.1)  # Impact strength
         self.realistic_slippage = config.get("trading", "backtest", "realistic_slippage", default=True)  # More realistic slippage model
         
-        # Need historical data for backtesting
-        if not historical_data:
-            self.logger.warning("No historical data provided for backtest engine")
-        
+        self.historical_data = None    # Need historical data for backtest execution
+
         self.logger.info(f"Backtest execution engine initialized with market impact {'enabled' if self.use_market_impact else 'disabled'}")
 
     async def execute(self, signals: pd.DataFrame, prices: Optional[Dict[str, float]] = None) -> Tuple[pd.DataFrame, Optional[Dict[str, pd.DataFrame]]]:
@@ -489,3 +486,7 @@ class BacktestExecutionEngine(BaseExecutionEngine):
         # Store the validated data
         self.historical_data = data
         self.logger.info(f"Historical data set for {len(data)} symbols")
+        
+    async def _close_specific(self):
+        if self.historical_data:
+            self.historical_data.clear()

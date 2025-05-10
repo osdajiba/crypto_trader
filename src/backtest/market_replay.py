@@ -3,14 +3,16 @@
 
 """
 Market Replay backtest engine implementation.
-Simulates trading with sequential processing of market data.
+Simulates trading with sequential processing of market data bar by bar.
 """
 
 import asyncio
+from collections import deque
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List
 import time
+from tqdm import tqdm
 
 from src.common.abstract_factory import register_factory_class
 from src.backtest.base import BaseBacktestEngine, BacktestEngineError
@@ -22,17 +24,16 @@ class MarketReplayEngineError(BacktestEngineError):
 
 
 @register_factory_class('backtest_engine_factory', "market_replay", 
-    description="Market Replay Backtest Engine for sequential data processing",
+    description="Market Replay Backtest Engine for sequential bar-by-bar data processing",
     features=["sequential", "realistic_execution", "detailed_simulation"],
     category="backtest")
 class MarketReplayEngine(BaseBacktestEngine):
     """
     Market Replay Backtest Engine
     
-    Processes data sequentially, simulating real-time market conditions with
-    realistic order execution and position tracking. This engine provides
-    a more accurate simulation of live trading conditions compared to
-    vectorized approaches.
+    Processes data sequentially bar by bar, generating signals and executing trades
+    in real-time sequence. This engine provides a more accurate simulation of 
+    live trading conditions compared to vectorized approaches.
     """
     
     def __init__(self, config, params=None):
@@ -51,7 +52,6 @@ class MarketReplayEngine(BaseBacktestEngine):
             'initial_capital', 
             self.config.get("trading", "capital", "initial", default=100000)
         )
-        # TODO: different commission fee when the role is taker or maker (not implemented) 
         self.commission_rate = self.params.get(
             'commission_rate', 
             self.config.get("trading", "fees", "commission_taker", default=0.005)
@@ -61,15 +61,60 @@ class MarketReplayEngine(BaseBacktestEngine):
             self.config.get("trading", "fees", "slippage", default=0.0001)
         )
         
-        # Portfolio state
-        self.cash = self.initial_capital
-        self.positions = {}  # symbol -> quantity
+        # Execution and tracking
         self.trades = []
-        self.portfolio_history = []  # Snapshots of portfolio value over time
+        self.portfolio_history = []
+        self.baseline_history = []
+        
+        # Track the current timestamp for each symbol
+        self.symbol_timestamps = {}
+        
+        # Window size for tracking required history (will be determined from strategy)
+        self.window_sizes = {}
+        
+        self.logger.info(f"Market Replay Engine initialized with capital={self.initial_capital}")
+
+    async def initialize(self) -> None:
+        """
+        Initialize the market replay engine
+        """
+        await super().initialize()
+        
+        # If strategy is set, determine required window sizes
+        if self.strategy:
+            self.determine_window_sizes()
+            
+    def determine_window_sizes(self) -> None:
+        """
+        Determine required window sizes for each factor in the strategy
+        """
+        # Reset window sizes
+        self.window_sizes = {}
+        
+        # Default window size from params
+        default_window = self.params.get('window_size', 100)
+        
+        # Try to get window sizes from strategy factors
+        if hasattr(self.strategy, '_factor_registry'):
+            for factor_name, factor_info in self.strategy._factor_registry.items():
+                window = factor_info.get('window', default_window)
+                self.window_sizes[factor_name] = window
+                
+            # Find the largest window size
+            if self.window_sizes:
+                max_window = max(self.window_sizes.values())
+                # Add extra padding
+                self.required_window_size = max_window + 1
+                self.logger.info(f"Set required window size to {self.required_window_size} based on strategy factors")
+                return
+                
+        # If no factor registry or no window sizes, use default
+        self.required_window_size = default_window
+        self.logger.info(f"Using default window size of {self.required_window_size}")
 
     async def run_backtest(self, data: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
         """
-        Run market replay backtest, processing data sequentially
+        Run market replay backtest, processing data bar by bar in sequence
         
         Args:
             data: Dictionary of symbol -> DataFrame market data
@@ -83,21 +128,22 @@ class MarketReplayEngine(BaseBacktestEngine):
         if not self._is_initialized:
             await self.initialize()
         
+        # Check for portfolio manager
+        if not self.portfolio:
+            raise MarketReplayEngineError("Portfolio manager not set, cannot run backtest")
+            
+        # Check for strategy
+        if not self.strategy:
+            raise MarketReplayEngineError("Strategy not set, cannot run backtest")
+        
         start_time = time.time()
         self._is_running = True
         
-        # Initialize portfolio state
-        self.cash = self.initial_capital
-        self.positions = {}
+        # Reset state for clean run
         self.trades = []
         self.portfolio_history = []
-        
-        results = {
-            'signals': {},
-            'trades': [],
-            'equity_curve': pd.DataFrame(),
-            'metrics': {}
-        }
+        self.baseline_history = []
+        self.symbol_timestamps = {}
         
         try:
             # Prepare initial data buffers
@@ -110,16 +156,21 @@ class MarketReplayEngine(BaseBacktestEngine):
             timeline = self._get_common_timeline(data)
             self.logger.info(f"Running market replay with {len(timeline)} time points")
             
-            # Track signals by symbol
-            all_signals = {}
-            
-            # Track baseline performance (underlying asset prices)
-            baseline_history = []
-            
-            # Get main symbol (first in list if multiple)
+            # Get main symbol (first in list if multiple) for baseline tracking
             symbols = list(data.keys())
             main_symbol = symbols[0] if symbols else None
             self.logger.info(f"Using {main_symbol} as the baseline asset")
+            
+            # Set up progress display if enabled
+            show_progress = self.params.get('show_progress', True)
+            progress_bar = tqdm(total=len(timeline), desc="Market Replay") if show_progress else None
+            
+            # Track initial portfolio value
+            initial_value = self.portfolio.get_total_value()
+            self.portfolio_history.append({
+                'timestamp': timeline[0] if timeline else pd.Timestamp.now(),
+                'portfolio_value': initial_value
+            })
             
             # Process each time point sequentially
             self.logger.info("Beginning market replay simulation")
@@ -131,106 +182,140 @@ class MarketReplayEngine(BaseBacktestEngine):
                 # Get data for current timestamp across all symbols
                 current_data = self._get_data_at_timestamp(data, timestamp)
                 
-                # Update portfolio value based on current prices
-                portfolio_value = self._calculate_portfolio_value(current_data)
-                self.portfolio_history.append({
-                    'timestamp': timestamp,
-                    'cash': self.cash,
-                    'portfolio_value': portfolio_value
-                })
+                # Update portfolio with current market data
+                await self.portfolio.update_market_data(current_data)
                 
                 # Track baseline (underlying asset) price
                 if main_symbol in current_data and not current_data[main_symbol].empty:
                     baseline_price = current_data[main_symbol]['close'].iloc[0]
-                    baseline_history.append({
+                    self.baseline_history.append({
                         'timestamp': timestamp,
                         'price': baseline_price
                     })
                 
-                # Process each symbol's data point
+                # Process each symbol's data point to generate signals immediately
+                all_signals_for_timestamp = []
+                
                 for symbol, data_point in current_data.items():
-                    # Process data through strategy
+                    # Process data point to generate signals
                     signals = await self.process_data_point(data_point, symbol)
                     
-                    # Store signals
+                    # If signals were generated, execute them immediately
                     if not signals.empty:
-                        if symbol not in all_signals:
-                            all_signals[symbol] = []
-                        all_signals[symbol].append(signals)
-                        
-                        # Execute signals
-                        new_trades = self._execute_signals(signals, current_data)
-                        self.trades.extend(new_trades)
-                
-                # Log progress
-                if i % 100 == 0:
-                    self.logger.debug(f"Processed {i}/{len(timeline)} time points")
+                        # Execute the signals
+                        executed_trades = await self.portfolio.process_signals(signals, current_data)
+                        if executed_trades:
+                            self.trades.extend(executed_trades)
+                            self.logger.debug(f"Executed {len(executed_trades)} trades for {symbol} at {timestamp}")
+                            # Update performance analyzer if available
+                            if hasattr(self, 'performance_analyzer') and self.performance_analyzer:
+                                for trade in executed_trades:
+                                    self.performance_analyzer.record_trade(trade)
+                    
+                # Update portfolio value after processing all symbols at this timestamp
+                portfolio_value = self.portfolio.get_total_value()
+                self.portfolio_history.append({
+                    'timestamp': timestamp,
+                    'portfolio_value': portfolio_value
+                })
+
+                # Update progress bar
+                if progress_bar:
+                    progress_bar.update(1)
                 
                 # Simulate real-time delay if specified
                 if self.replay_speed > 0 and i % 10 == 0:
                     await asyncio.sleep(self.replay_speed / 1000)  # Convert to seconds
-            
-            # Combine signals
-            for symbol, signals_list in all_signals.items():
-                if signals_list:
-                    results['signals'][symbol] = pd.concat(signals_list)
-                else:
-                    results['signals'][symbol] = pd.DataFrame()
-            
-            # Create equity curve
-            if self.portfolio_history:
-                results['equity_curve'] = pd.DataFrame(self.portfolio_history)
-            
-            # Add baseline prices to results
-            if baseline_history:
-                results['baseline_prices'] = pd.DataFrame(baseline_history)
-                self.logger.info(f"Stored {len(baseline_history)} baseline price points")
-            
-            # Store trades
-            results['trades'] = self.trades
-            
-            # Calculate metrics
-            execution_time = time.time() - start_time
-            self.metrics['processing_time'] = execution_time
-            
-            # Calculate final portfolio value
-            final_value = self.portfolio_history[-1]['portfolio_value'] if self.portfolio_history else self.initial_capital
-            
-            # Calculate baseline performance metrics
-            if baseline_history:
-                initial_price = baseline_history[0]['price']
-                final_price = baseline_history[-1]['price']
                 
+                try:
+                    if hasattr(self, 'performance_analyzer') and self.performance_analyzer:
+                        self.performance_analyzer.update_equity(timestamp, portfolio_value)
+                except Exception as analyzer_error:
+                    self.logger.warning(f"Error updating performance metrics: {analyzer_error}")
+                    
+            # Clean up progress bar
+            if progress_bar:
+                progress_bar.close()
+            
+            # Prepare results
+            execution_time = time.time() - start_time
+            
+            # Create equity curve DataFrame
+            equity_curve_df = pd.DataFrame(self.portfolio_history)
+            
+            # Create baseline prices DataFrame
+            baseline_df = pd.DataFrame(self.baseline_history) if self.baseline_history else pd.DataFrame()
+            
+            # Calculate performance metrics
+            final_value = self.portfolio.get_total_value()
+            
+            # Calculate baseline performance
+            baseline_return_pct = None
+            if not baseline_df.empty:
+                initial_price = baseline_df['price'].iloc[0]
+                final_price = baseline_df['price'].iloc[-1]
                 baseline_return = (final_price - initial_price) / initial_price
                 baseline_return_pct = baseline_return * 100
-                
-                # Add baseline metrics to results
+            
+            # Prepare result object
+            results = {
+                'status': 'completed',
+                'trades': self.trades,
+                'equity_curve': equity_curve_df,
+                'baseline_prices': baseline_df,
+                'metrics': {
+                    'processing_time': execution_time,
+                    'initial_capital': self.initial_capital,
+                    'final_value': final_value,
+                    'total_return': final_value - self.initial_capital,
+                    'total_return_pct': ((final_value / self.initial_capital) - 1) * 100,
+                    'total_trades': len(self.trades),
+                    'symbols_traded': len(set(trade.get('symbol', '') for trade in self.trades)) if self.trades else 0
+                },
+                'symbols': list(data.keys()),
+                'strategy': self.strategy.__class__.__name__,
+                'engine': self.__class__.__name__,
+                'start_timestamp': timeline[0] if timeline else None,
+                'end_timestamp': timeline[-1] if timeline else None
+            }
+            
+            # Add baseline metrics if available
+            if baseline_return_pct is not None:
                 results['metrics']['baseline_initial_price'] = initial_price
                 results['metrics']['baseline_final_price'] = final_price
                 results['metrics']['baseline_return_pct'] = baseline_return_pct
                 
                 # Calculate alpha (strategy outperformance)
-                strategy_return_pct = ((final_value / self.initial_capital) - 1) * 100
+                strategy_return_pct = results['metrics']['total_return_pct']
                 results['metrics']['alpha'] = strategy_return_pct - baseline_return_pct
             
-            # Calculate performance metrics
-            results['metrics'] = {
-                **self.metrics,
-                'initial_capital': self.initial_capital,
-                'final_value': final_value,
-                'total_return': final_value - self.initial_capital,
-                'total_return_pct': ((final_value / self.initial_capital) - 1) * 100,
-                'total_trades': len(self.trades),
-                'symbols_traded': len(set(trade['symbol'] for trade in self.trades)) if self.trades else 0
-            }
-            
-            self.logger.info(f"Market replay completed in {execution_time:.2f}s")
+            self.logger.info(f"Market replay completed in {execution_time:.2f}s with "
+                           f"{len(self.trades)} trades and "
+                           f"{results['metrics']['total_return_pct']:.2f}% return")
             
             return results
-            
+        
         except Exception as e:
             self.logger.error(f"Error during market replay: {str(e)}")
-            raise MarketReplayEngineError(f"Market replay failed: {str(e)}")
+            # More graceful failure - return partial results if available
+            if self.portfolio_history:
+                # Try to salvage what data we have
+                self.logger.warning("Returning partial results despite error")
+                return {
+                    'status': 'partial',
+                    'error': str(e),
+                    'trades': self.trades,
+                    'equity_curve': pd.DataFrame(self.portfolio_history),
+                    'baseline_prices': pd.DataFrame(self.baseline_history) if self.baseline_history else pd.DataFrame(),
+                    'metrics': {
+                        'error_occurred': True,
+                        'initial_capital': self.initial_capital,
+                        'processed_bars': i if 'i' in locals() else 0,
+                        'total_bars': len(timeline)
+                    }
+                }
+            else:
+                raise MarketReplayEngineError(f"Market replay failed: {str(e)}")
         finally:
             self._is_running = False
 
@@ -251,6 +336,8 @@ class MarketReplayEngine(BaseBacktestEngine):
                 all_timestamps.extend(df.index.tolist())
             elif 'datetime' in df.columns:
                 all_timestamps.extend(df['datetime'].tolist())
+            elif 'timestamp' in df.columns:
+                all_timestamps.extend(df['timestamp'].tolist())
         
         # Sort and remove duplicates
         return sorted(set(all_timestamps))
@@ -277,151 +364,130 @@ class MarketReplayEngine(BaseBacktestEngine):
                 mask = df['datetime'] == timestamp
                 if mask.any():
                     result[symbol] = df[mask]
+            elif 'timestamp' in df.columns:
+                mask = df['timestamp'] == timestamp
+                if mask.any():
+                    result[symbol] = df[mask]
+            
+            # Update the current timestamp for this symbol
+            if symbol in result:
+                self.symbol_timestamps[symbol] = timestamp
         
         return result
-    
-    def _execute_signals(self, signals: pd.DataFrame, current_data: Dict[str, pd.DataFrame]) -> List[Dict]:
+
+    async def process_data_point(self, data_point: pd.DataFrame, symbol: str) -> pd.DataFrame:
         """
-        Execute trading signals and return transactions
+        Process a single data point for a symbol, immediately generating signals
+        
+        This implementation maintains a rolling window of data specifically sized
+        for the strategy's factor calculation needs, then calls the strategy to
+        generate signals based on the accumulated data.
         
         Args:
-            signals: Trading signals DataFrame
-            current_data: Current market data for all symbols
+            data_point: DataFrame containing a single data point
+            symbol: Symbol being processed
             
         Returns:
-            List[Dict]: List of executed trades
+            pd.DataFrame: Generated signals, if any
         """
-        if signals.empty:
-            return []
+        if symbol not in self.data_buffers:
+            self.data_buffers[symbol] = pd.DataFrame()
+            self.data_queues[symbol] = deque(maxlen=self.required_window_size)
+            self.has_sufficient_history[symbol] = False
         
-        trades = []
+        # Skip empty data points
+        if data_point.empty:
+            return pd.DataFrame()
         
-        for _, signal in signals.iterrows():
-            symbol = signal['symbol']
-            action = signal['action'].lower()
-            timestamp = signal.get('timestamp')
+        # Add to queue if using window
+        if self.required_window_size > 0:
+            self.data_queues[symbol].append(data_point)
             
-            # Get current price
-            if symbol not in current_data or current_data[symbol].empty:
-                continue
-            
-            price_data = current_data[symbol]
-            price = price_data['close'].iloc[0]
-            
-            # Apply slippage
-            if action == 'buy':
-                execution_price = price * (1 + self.slippage)
-            else:  # sell
-                execution_price = price * (1 - self.slippage)
-            
-            # Determine quantity
-            quantity = signal.get('quantity')
-            if quantity is None:
-                # Calculate default position size (1% of portfolio)
-                risk_pct = self.params.get('risk_per_trade', 0.01)
-                quantity = (self.cash * risk_pct) / execution_price
-            
-            # Execute trade
-            if action == 'buy':
-                # Check if we have enough cash
-                cost = quantity * execution_price
-                commission = cost * self.commission_rate
-                total_cost = cost + commission
+            # If we don't have enough data yet, no signal
+            if len(self.data_queues[symbol]) < self.required_window_size:
+                return pd.DataFrame()  # Empty DataFrame = no signal
                 
-                if total_cost > self.cash:
-                    # Adjust quantity to available cash
-                    max_quantity = self.cash / (execution_price * (1 + self.commission_rate))
-                    quantity = max_quantity
-                    cost = quantity * execution_price
-                    commission = cost * self.commission_rate
-                    total_cost = cost + commission
-                
-                if quantity > 0:
-                    # Update cash and position
-                    self.cash -= total_cost
-                    
-                    # Update position
-                    if symbol not in self.positions:
-                        self.positions[symbol] = 0
-                    self.positions[symbol] += quantity
-                    
-                    # Record trade
-                    trade = {
-                        'timestamp': timestamp,
-                        'symbol': symbol,
-                        'action': 'buy',
-                        'quantity': quantity,
-                        'price': execution_price,
-                        'commission': commission,
-                        'cost': total_cost,
-                        'cash_after': self.cash
-                    }
-                    trades.append(trade)
-            
-            elif action == 'sell':
-                # Check if we have the position
-                current_position = self.positions.get(symbol, 0)
-                
-                if current_position > 0:
-                    # Limit quantity to current position
-                    quantity = min(quantity, current_position)
-                    
-                    # Calculate value
-                    value = quantity * execution_price
-                    commission = value * self.commission_rate
-                    net_value = value - commission
-                    
-                    # Update cash and position
-                    self.cash += net_value
-                    self.positions[symbol] -= quantity
-                    
-                    # Remove position if zero
-                    if self.positions[symbol] <= 0:
-                        del self.positions[symbol]
-                    
-                    # Record trade
-                    trade = {
-                        'timestamp': timestamp,
-                        'symbol': symbol,
-                        'action': 'sell',
-                        'quantity': quantity,
-                        'price': execution_price,
-                        'commission': commission,
-                        'value': net_value,
-                        'cash_after': self.cash
-                    }
-                    trades.append(trade)
+            # Construct window from queue
+            self.data_buffers[symbol] = pd.concat(list(self.data_queues[symbol]))
+        else:
+            # No windowing, just use the current data point
+            self.data_buffers[symbol] = data_point
         
-        return trades
+        # Now we have sufficient history
+        self.has_sufficient_history[symbol] = True
+        
+        # Process with strategy
+        if self.strategy:
+            signals = await self.strategy.process_data(self.data_buffers[symbol], symbol)
+            
+            # Ensure signals have timestamp and symbol
+            if not signals.empty:
+                # Get the timestamp from this data point
+                if 'timestamp' in data_point.columns:
+                    timestamp = data_point['timestamp'].iloc[0]
+                elif 'datetime' in data_point.columns:
+                    timestamp = data_point['datetime'].iloc[0]
+                else:
+                    timestamp = pd.Timestamp.now()
+                
+                # Add timestamp if missing
+                if 'timestamp' not in signals.columns:
+                    signals['timestamp'] = timestamp
+                
+                # Add symbol if missing
+                if 'symbol' not in signals.columns:
+                    signals['symbol'] = symbol
+                
+                self.logger.debug(f"Generated {len(signals)} signals for {symbol} at {timestamp}")
+            
+            return signals
+        
+        # No strategy, no signals
+        return pd.DataFrame()
     
-    def _calculate_portfolio_value(self, current_data: Dict[str, pd.DataFrame]) -> float:
+    def get_metrics(self) -> Dict[str, Any]:
         """
-        Calculate current portfolio value
+        Get performance metrics for the market replay backtest
         
-        Args:
-            current_data: Current market data for all symbols
-            
         Returns:
-            float: Current portfolio value
+            Dict[str, Any]: Performance metrics dictionary
         """
-        portfolio_value = self.cash
+        metrics = super().get_metrics()
         
-        # Add position values
-        for symbol, quantity in self.positions.items():
-            if symbol in current_data and not current_data[symbol].empty:
-                price = current_data[symbol]['close'].iloc[0]
-                position_value = quantity * price
-                portfolio_value += position_value
+        # Get the latest portfolio value
+        if self.portfolio:
+            current_value = self.portfolio.get_total_value()
+            
+            # Calculate additional metrics
+            metrics.update({
+                'current_value': current_value,
+                'return_pct': ((current_value / self.initial_capital) - 1) * 100,
+                'trade_count': len(self.trades)
+            })
+            
+            # Calculate drawdown if we have portfolio history
+            if self.portfolio_history:
+                equity_values = [point['portfolio_value'] for point in self.portfolio_history]
+                peak_equity = max(equity_values)
+                drawdown = (peak_equity - current_value) / peak_equity if peak_equity > 0 else 0
+                metrics['max_drawdown_pct'] = drawdown * 100
+                
+                # Win rate if we have trades
+                if self.trades:
+                    profitable_trades = sum(1 for trade in self.trades if trade.get('realized_pnl', 0) > 0)
+                    total_trades = len(self.trades)
+                    win_rate = (profitable_trades / total_trades) * 100 if total_trades > 0 else 0
+                    metrics['win_rate_pct'] = win_rate
         
-        return portfolio_value
+        return metrics
     
     async def shutdown(self) -> None:
         """Clean up resources"""
-        # Reset portfolio state
-        self.cash = self.initial_capital
-        self.positions = {}
+        # Reset state
         self.trades = []
         self.portfolio_history = []
+        self.baseline_history = []
+        self.symbol_timestamps = {}
         
         # Call parent shutdown
         await super().shutdown()

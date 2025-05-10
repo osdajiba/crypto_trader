@@ -6,6 +6,8 @@ import asyncio
 import os
 import json
 import csv
+import time
+import logging
 import functools
 import pandas as pd
 import aiofiles
@@ -243,7 +245,138 @@ class TimeUtils:
         else:
             raise ValueError(f"Unsupported timeframe unit: {unit}")
         
+# Global registry for tracking execution times
+performance_registry = {}
 
+def time_func(name: Optional[str] = None):
+    """
+    Decorator to track function execution time
+    
+    Args:
+        name: Optional custom name for the function in logs
+    
+    Returns:
+        Decorator function
+    """
+    def decorator(func):
+        func_name = name or func.__qualname__
+        
+        # Handle both async and sync functions
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = await func(*args, **kwargs)
+                    return result
+                finally:
+                    execution_time = time.time() - start_time
+                    
+                    # Get logger from first argument if it's a class method
+                    logger = None
+                    if args and hasattr(args[0], 'logger'):
+                        logger = args[0].logger
+                    else:
+                        logger = logging.getLogger(func.__module__)
+                    
+                    # Log execution time
+                    logger.debug(f"PERF: {func_name} executed in {execution_time:.4f}s")
+                    
+                    # Store in registry
+                    if func_name not in performance_registry:
+                        performance_registry[func_name] = []
+                    performance_registry[func_name].append(execution_time)
+            
+            return async_wrapper
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                finally:
+                    execution_time = time.time() - start_time
+                    
+                    # Get logger from first argument if it's a class method
+                    logger = None
+                    if args and hasattr(args[0], 'logger'):
+                        logger = args[0].logger
+                    else:
+                        logger = logging.getLogger(func.__module__)
+                    
+                    # Log execution time
+                    logger.debug(f"PERF: {func_name} executed in {execution_time:.4f}s")
+                    
+                    # Store in registry
+                    if func_name not in performance_registry:
+                        performance_registry[func_name] = []
+                    performance_registry[func_name].append(execution_time)
+            
+            return sync_wrapper
+        
+    return decorator
+
+
+def get_performance_metrics() -> Dict[str, Dict[str, float]]:
+    """
+    Get performance metrics for all tracked functions
+    
+    Returns:
+        Dict with function names as keys and metrics as values
+    """
+    metrics = {}
+    
+    for func_name, times in performance_registry.items():
+        if not times:
+            continue
+            
+        # Calculate statistics
+        avg_time = sum(times) / len(times)
+        max_time = max(times)
+        min_time = min(times)
+        total_time = sum(times)
+        call_count = len(times)
+        
+        metrics[func_name] = {
+            'avg_time': avg_time,
+            'max_time': max_time,
+            'min_time': min_time,
+            'total_time': total_time,
+            'call_count': call_count
+        }
+    
+    return metrics
+
+
+def reset_performance_metrics() -> None:
+    """Reset all tracked performance metrics"""
+    performance_registry.clear()
+    
+def format_timestamp(timestamp) -> str:
+    """
+    Safely format a timestamp, handling NaT values
+    
+    Args:
+        timestamp: Timestamp to format
+        
+    Returns:
+        str: Formatted timestamp or 'N/A' if NaT
+    """
+    if timestamp is None or pd.isna(timestamp):
+        return 'N/A'
+        
+    if isinstance(timestamp, (str, int, float)):
+        try:
+            timestamp = pd.Timestamp(timestamp)
+        except:
+            return str(timestamp)
+            
+    try:
+        return timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return str(timestamp)
+    
 class FileUtils:
     """File operation utility class with optimized async operations"""
     

@@ -30,9 +30,10 @@ class BasePerformanceAnalyzer(ABC):
         self.storage_path = self.config.get("performance", "storage_path", default="./data/performance")
         os.makedirs(self.storage_path, exist_ok=True)
         
-        # Initial capital (can be overridden in params)
         self.initial_capital = self.params.get("initial_balance", 
                                 self.config.get("trading", "capital", "initial", default=10000.0))
+        
+        self.strategy_id = self.config.get("strategy", "id", default="dual_ma")
         
         # Risk-free rate for performance calculations
         self.risk_free_rate = self.config.get("performance", "risk_free_rate", default=0.0)
@@ -51,9 +52,9 @@ class BasePerformanceAnalyzer(ABC):
         """Initialize the performance analyzer"""
         self.logger.info("Initializing performance analyzer")
         # Create system portfolio tracking
-        self.equity_history['system'] = pd.Series(dtype=float)
-        self.trade_history['system'] = pd.DataFrame()
-        self.drawdown_history['system'] = pd.Series(dtype=float)
+        self.equity_history[self.strategy_id] = pd.Series(dtype=float)
+        self.trade_history[self.strategy_id] = pd.DataFrame()
+        self.drawdown_history[self.strategy_id] = pd.Series(dtype=float)
         
         # Perform any additional initialization
         await self._initialize_analyzer()
@@ -72,93 +73,144 @@ class BasePerformanceAnalyzer(ABC):
             strategy_id: Strategy identifier
         """
         if strategy_id not in self.equity_history:
+            # Initialize with empty series with float dtype to avoid type issues
             self.equity_history[strategy_id] = pd.Series(dtype=float)
             self.trade_history[strategy_id] = pd.DataFrame()
             self.drawdown_history[strategy_id] = pd.Series(dtype=float)
             self.strategy_metrics[strategy_id] = {}
             self.logger.info(f"Registered strategy {strategy_id} for performance tracking")
-    
-    def update_equity(self, strategy_id: str, timestamp: Union[str, datetime], value: float) -> None:
+        
+        # Also ensure 'system' is registered for aggregation
+        if 'system' not in self.equity_history:
+            self.equity_history['system'] = pd.Series(dtype=float)
+            self.trade_history['system'] = pd.DataFrame()
+            self.drawdown_history['system'] = pd.Series(dtype=float)
+            self.strategy_metrics['system'] = {}
+            
+    def update_equity(self, timestamp: Union[str, datetime], value: float) -> None:
         """Update equity point for a strategy
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             timestamp: Timestamp for the equity point
             value: Equity value
         """
         # Ensure strategy is registered
-        if strategy_id not in self.equity_history:
-            self.register_strategy(strategy_id)
+        if self.strategy_id not in self.equity_history:
+            self.register_strategy(self.strategy_id)
             
         # Convert timestamp to pandas Timestamp if needed
         if isinstance(timestamp, str):
             timestamp = pd.Timestamp(timestamp)
             
         # Update equity history
-        self.equity_history[strategy_id].loc[timestamp] = value
+        self.equity_history[self.strategy_id].loc[timestamp] = value
         
         # Sort by timestamp
-        self.equity_history[strategy_id] = self.equity_history[strategy_id].sort_index()
+        self.equity_history[self.strategy_id] = self.equity_history[self.strategy_id].sort_index()
         
         # Update drawdown
-        self._update_drawdown(strategy_id)
+        self._update_drawdown(self.strategy_id)
         
-        # Keep system equity updated
-        if strategy_id != 'system':
-            # Merge all strategies for system equity
-            all_equity = pd.concat([df for strat_id, df in self.equity_history.items() 
-                                if strat_id != 'system'], axis=1)
-            if not all_equity.empty:
-                # Sum across all strategies
-                system_equity = all_equity.sum(axis=1)
-                self.equity_history['system'] = system_equity
-                
-                # Update system drawdown
-                self._update_drawdown('system')
+        # Keep system equity updated - THIS IS WHERE THE ERROR OCCURS
+        if self.strategy_id != 'system':
+            # Check if we have any equity data before attempting to concatenate
+            valid_dfs = [df for strat_id, df in self.equity_history.items() 
+                        if strat_id != 'system' and not df.empty]
+            
+            if valid_dfs:  # Only concatenate if we have valid DataFrames
+                # Merge all strategies for system equity
+                system_equity = pd.concat(valid_dfs, axis=1)
+                if not system_equity.empty:
+                    # Sum across all strategies
+                    system_equity = system_equity.sum(axis=1)
+                    self.equity_history['system'] = system_equity
+                    
+                    # Update system drawdown
+                    self._update_drawdown('system')
     
-    def record_trade(self, strategy_id: str, trade_data: Dict[str, Any]) -> None:
+    def record_trade(self, trade_data: Dict[str, Any]) -> None:
         """Record a trade for performance analysis
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             trade_data: Trade information
         """
         # Ensure strategy is registered
-        if strategy_id not in self.trade_history:
-            self.register_strategy(strategy_id)
+        if self.strategy_id not in self.trade_history:
+            self.register_strategy(self.strategy_id)
             
         # Create DataFrame from trade data
         trade_df = pd.DataFrame([trade_data])
         
         # Append to trade history
-        self.trade_history[strategy_id] = pd.concat([self.trade_history[strategy_id], trade_df])
+        self.trade_history[self.strategy_id] = pd.concat([self.trade_history[self.strategy_id], trade_df])
         
         # Sort by timestamp if present
-        if 'timestamp' in self.trade_history[strategy_id].columns:
-            self.trade_history[strategy_id] = self.trade_history[strategy_id].sort_values('timestamp')
+        if 'timestamp' in self.trade_history[self.strategy_id].columns:
+            self.trade_history[self.strategy_id] = self.trade_history[self.strategy_id].sort_values('timestamp')
             
         # Add to system trade history
-        if strategy_id != 'system':
+        if self.strategy_id is not None:
             # Add strategy ID column
-            trade_df['strategy_id'] = strategy_id
+            trade_df['self.strategy_id'] = self.strategy_id
             
             # Append to system trade history
-            self.trade_history['system'] = pd.concat([self.trade_history['system'], trade_df])
+            self.trade_history[self.strategy_id] = pd.concat([self.trade_history[self.strategy_id], trade_df])
             
             # Sort by timestamp if present
-            if 'timestamp' in self.trade_history['system'].columns:
-                self.trade_history['system'] = self.trade_history['system'].sort_values('timestamp')
+            if 'timestamp' in self.trade_history[self.strategy_id].columns:
+                self.trade_history[self.strategy_id] = self.trade_history[self.strategy_id].sort_values('timestamp')
     
-    def _update_drawdown(self, strategy_id: str) -> None:
+    def _safe_timestamp(self, timestamp) -> Optional[pd.Timestamp]:
+        """
+        Convert various formats to pandas Timestamp, handling None and NaT values
+        
+        Args:
+            timestamp: Input timestamp in various formats
+            
+        Returns:
+            Optional[pd.Timestamp]: Converted timestamp or None if invalid
+        """
+        if timestamp is None or pd.isna(timestamp):
+            return None
+            
+        try:
+            return pd.Timestamp(timestamp)
+        except:
+            self.logger.warning(f"Could not convert {timestamp} to Timestamp")
+            return None
+
+    def _safe_value(self, value, default=0.0) -> float:
+        """
+        Safely convert a value to float, handling None and NaN values
+        
+        Args:
+            value: Input value
+            default: Default value if conversion fails
+            
+        Returns:
+            float: Converted value or default
+        """
+        if value is None or pd.isna(value):
+            return default
+            
+        try:
+            return float(value)
+        except:
+            self.logger.warning(f"Could not convert {value} to float")
+            return default
+        
+    def _update_drawdown(self) -> None:
         """Update drawdown for a strategy
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
         """
-        if strategy_id not in self.equity_history:
+        if self.strategy_id not in self.equity_history:
             return
             
-        equity = self.equity_history[strategy_id]
+        equity = self.equity_history[self.strategy_id]
         if equity.empty:
             return
             
@@ -169,7 +221,7 @@ class BasePerformanceAnalyzer(ABC):
         drawdown = (equity - running_max) / running_max
         
         # Update drawdown history
-        self.drawdown_history[strategy_id] = drawdown
+        self.drawdown_history[self.strategy_id] = drawdown
     
     def _load_benchmark_data(self) -> None:
         """Load benchmark data if configured"""
@@ -185,43 +237,42 @@ class BasePerformanceAnalyzer(ABC):
             except Exception as e:
                 self.logger.error(f"Error loading benchmark data: {e}")
     
-    def calculate_returns(self, strategy_id: str, period: str = 'daily') -> pd.Series:
+    def calculate_returns(self, period: str = 'daily') -> pd.Series:
         """Calculate returns for a strategy
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             period: Return period ('daily', 'weekly', 'monthly')
             
         Returns:
             pd.Series: Returns series
         """
-        if strategy_id not in self.equity_history:
+        if self.strategy_id not in self.equity_history:
             return pd.Series()
             
-        equity = self.equity_history[strategy_id]
+        equity = self.equity_history[self.strategy_id]
         if equity.empty:
             return pd.Series()
-            
         # Resample to desired frequency if needed
         if period == 'daily':
             equity_resampled = equity.resample('D').last().dropna()
         elif period == 'weekly':
             equity_resampled = equity.resample('W').last().dropna()
         elif period == 'monthly':
-            equity_resampled = equity.resample('M').last().dropna()
+            # Change 'M' to 'ME' for month-end resampling (fix for the deprecation warning)
+            equity_resampled = equity.resample('ME').last().dropna()
         else:
-            equity_resampled = equity
-            
+            equity_resampled = equity            
         # Calculate period returns
         returns = equity_resampled.pct_change().dropna()
         return returns
-    
+
     @abstractmethod
-    def calculate_metrics(self, strategy_id: str) -> Dict[str, Any]:
+    def calculate_metrics(self) -> Dict[str, Any]:
         """Calculate performance metrics for a strategy
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             
         Returns:
             Dict[str, Any]: Performance metrics
@@ -229,11 +280,11 @@ class BasePerformanceAnalyzer(ABC):
         pass
     
     @abstractmethod
-    def save_to_file(self, strategy_id: str, filepath: Optional[str] = None) -> str:
+    def save_to_file(self, filepath: Optional[str] = None) -> str:
         """Save performance data to file
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             filepath: Optional file path
             
         Returns:
@@ -254,11 +305,11 @@ class BasePerformanceAnalyzer(ABC):
         pass
     
     @abstractmethod
-    def generate_performance_report(self, strategy_id: str) -> Dict[str, Any]:
+    def generate_performance_report(self) -> Dict[str, Any]:
         """Generate a comprehensive performance report
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             
         Returns:
             Dict[str, Any]: Performance report
@@ -271,9 +322,9 @@ class BasePerformanceAnalyzer(ABC):
         
         # Save system performance data if configured
         auto_save = self.config.get("performance", "auto_save_on_shutdown", default=True)
-        if auto_save and 'system' in self.equity_history and not self.equity_history['system'].empty:
+        if auto_save and self.strategy_id in self.equity_history:
             try:
-                filepath = self.save_to_file('system')
+                filepath = self.save_to_file(self.strategy_id)
                 self.logger.info(f"System performance data auto-saved to {filepath}")
             except Exception as e:
                 self.logger.error(f"Error auto-saving system performance data: {e}")

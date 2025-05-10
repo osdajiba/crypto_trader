@@ -7,6 +7,8 @@ import importlib
 import inspect
 from typing import Dict, Optional, Any, Type, Set
 
+import pandas as pd
+
 from src.common.abstract_factory import AbstractFactory
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
@@ -170,9 +172,9 @@ class ExecutionFactory(AbstractFactory):
         # Get class path and load class
         return await self._load_class_from_path(name, BaseExecutionEngine)
     
-    async def create(self, name: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> BaseExecutionEngine:
+    async def create_execution_engine(self, name: Optional[str] = None, params: Optional[Dict[str, Any]] = None) -> BaseExecutionEngine:
         """
-        Create execution engine
+        Create or get existing execution engine
         
         Args:
             name: Execution engine name or None to use default
@@ -185,6 +187,11 @@ class ExecutionFactory(AbstractFactory):
         
         # Resolve execution engine name
         resolved_name = await self._resolve_name(name)
+        
+        # Check if engine already exists, return it
+        if resolved_name in self._created_engines:
+            self.logger.info(f"Returning existing {resolved_name} execution engine")
+            return self._created_engines[resolved_name]
         
         # Apply creation hooks
         params = await self._run_creation_hooks(resolved_name, params)
@@ -200,19 +207,12 @@ class ExecutionFactory(AbstractFactory):
         
         # Create instance
         mode = combined_params.get("mode", resolved_name)
-        historical_data = combined_params.get("historical_data")
-        
         self.logger.info(f"Creating {resolved_name} execution engine with mode: {mode}")
-        
         try:
             # Create engine instance
-            engine = concrete_class(self.config, mode, historical_data)
-            
-            # Initialize engine
+            engine = concrete_class(self.config, mode)
             await engine.initialize()
-                
-            # Store in created engines
-            self._created_engines[resolved_name] = engine
+            self._created_engines[resolved_name] = engine    # Store in created engines
                 
             self.logger.info(f"Created execution engine: {resolved_name}")
             return engine

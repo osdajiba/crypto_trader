@@ -104,17 +104,28 @@ class PerformanceMetrics:
         drawdown = (equity_curve - running_max) / running_max
         
         # Find maximum drawdown
+        # Check if all values are NaN before calling min/idxmin
+        if drawdown.isna().all():
+            return 0.0, None, None
+            
         max_drawdown = drawdown.min()
         
         # Find drawdown start and end dates
+        # Explicitly check for NaN values before finding idxmin
+        if pd.isna(max_drawdown):
+            return 0.0, None, None
+            
         end_date = drawdown.idxmin()
         
         # Find the last peak before the maximum drawdown
         drawdown_start = drawdown[:end_date]
+        if drawdown_start.empty:
+            return float(max_drawdown), None, end_date
+            
         start_date = running_max[:end_date].idxmax()
         
         return float(max_drawdown), start_date, end_date
-    
+
     @staticmethod
     def calculate_win_rate(trades: pd.DataFrame, pnl_column: str = 'profit_pct') -> float:
         """

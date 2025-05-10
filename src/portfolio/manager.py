@@ -9,8 +9,9 @@ import pandas as pd
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.exchange.factory import get_exchange_factory
 from src.portfolio.assets.base import Asset
+from src.exchange.base import Exchange
+from src.exchange.factory import get_exchange_factory
 from src.portfolio.assets.factory import get_asset_factory
 from src.portfolio.risk.factory import get_risk_factory
 from src.portfolio.execution.factory import get_execution_factory
@@ -25,7 +26,7 @@ class PortfolioManager:
     execute trades, track positions, and handle risk management.
     """
     
-    def __init__(self, config: Optional[ConfigManager] = None, exchange=None):
+    def __init__(self, config: Optional[ConfigManager] = None, exchange: Exchange = None):
         """
         Initialize portfolio manager
         
@@ -39,7 +40,7 @@ class PortfolioManager:
         
         # Initialize plugins
         self.exchange = exchange
-        self._exchange_factory = None
+        self.exchange_factory = None
         self._all_orders: Dict[str, Dict[str, Any]] = {}    # Order tracking
         self.risk_manager = None
         self._risk_callbacks = {}
@@ -70,21 +71,19 @@ class PortfolioManager:
                 self.exchange = await self.exchange_factory.create_exchange('binance')
                 self.logger.info(f"Exchange initialized: {self.exchange.__class__.__name__}")
             
+            # Initialize execution engine
+            self.execution_engine = await self.execution_factory.create_execution_engine()
+            self.logger.info(f"Execution engine initialized: {self.execution_engine.__class__.__name__}")
+        
+            # Initialize risk manager and register for risk events
+            await self._initialize_risk_manager()            
+            self._register_risk_events()
+            
             # Initialize assets from configuration
             self.asset_factory.discover_assets()
             self.logger.info("Asset types discovered")
-            await self._initialize_configured_assets()
-            
-            # Initialize risk manager
-            await self._initialize_risk_manager()
-            
-            # Initialize execution engine
-            self.execution_engine = await self.execution_factory.create()
-            self.logger.info(f"Execution engine initialized: {self.execution_engine.__class__.__name__}")
-            
-            # Register for risk events
-            self._register_risk_events()
-            
+            await self._initialize_configured_assets()      
+                  
             self.logger.info("Portfolio manager initialization complete")
 
         except Exception as e:
@@ -93,31 +92,35 @@ class PortfolioManager:
 
     async def _initialize_configured_assets(self) -> None:
         """Initialize assets defined in configuration"""
-        assets_config = self.config.get("portfolio", "assets", default={})
         
-        for asset_name, asset_config in assets_config.items():
-            try:
-                asset_type = asset_config.get("type", "spot")
-                
-                # Add exchange to params
-                params = asset_config.get("params", {})
-                if self.exchange and 'exchange' not in params:
-                    params['exchange'] = self.exchange
-                
-                # Create and add the asset
-                asset = await self.create_asset(asset_type, {
-                    "name": asset_name,
-                    **params
-                })
-                self.logger.info(f"Initialized pre-configured asset: {asset_name} ({self.exchange.__class__.__name__} : {asset_type})")
-            except Exception as e:
-                self.logger.error(f"Failed to initialize asset {asset_name}: {str(e)}")
-
+        assets_config = self.config.get("trading", "assets", default={})
+        if not assets_config:
+            self.logger.info("No assets defined in configuration")
+            return
+            
+        self.logger.info(f"Initializing {len(assets_config)} assets from configuration...")
+        
+        try:
+            assets = await self.asset_factory.create_multi_assets(assets_config, self.exchange, self.execution_engine)
+            self.logger.info(f"Successfully initialized {len(assets)} assets")
+            
+            # Add assets to portfolio manager
+            for asset_name, asset in assets.items():
+                try:
+                    self.assets[asset_name] = asset
+                    self.logger.info(f"Added {asset_name} to portfolio")
+                except Exception as e:
+                    self.logger.error(f"Failed to add asset {asset_name} to portfolio: {str(e)}")
+                    
+        except Exception as e:
+            self.logger.error(f"Failed to initialize assets from configuration: {str(e)}")
+            
     async def _initialize_risk_manager(self) -> None:
         """Initialize risk manager component"""
         try:
             # Create risk manager instance
-            risk_management_type = {"backtest": "backtest", "standard": "paper", "conservative": "live"}.get(self.mode_name, "backtest")
+            self.mode_name = self.config.get("system", "operational_mode", default=None)
+            risk_management_type = {"backtest": "backtest", "paper": "standard", "live": "conservative"}.get(self.mode_name)
             self.risk_manager = await self.risk_management_factory.create_risk_mamager(self, risk_management_type)
             
             # Perform initial risk assessment
@@ -297,8 +300,12 @@ class PortfolioManager:
         Raises:
             ValueError: If asset with the same name already exists
         """
+        # Check for existing asset with same name
         if asset.name in self.assets:
-            raise ValueError(f"Asset '{asset.name}' already exists")
+            self.logger.warning(f"Asset '{asset.name}' already exists, replacing")
+            # Close existing asset if needed
+            if hasattr(self.assets[asset.name], 'close') and callable(self.assets[asset.name].close):
+                await self.assets[asset.name].close()
         
         # Set the exchange if asset doesn't have one
         if not asset.exchange and self.exchange:
@@ -306,9 +313,18 @@ class PortfolioManager:
             
         # Initialize the asset if needed
         if hasattr(asset, 'initialize') and callable(asset.initialize):
-            await asset.initialize()
+            try:
+                await asset.initialize()
+            except Exception as e:
+                self.logger.error(f"Failed to initialize asset {asset.name}: {e}")
+                raise
             
+        # Register asset with its canonical name
         self.assets[asset.name] = asset
+        
+        # Also register asset with alternate names for better lookups
+        self._register_asset_aliases(asset)
+        
         self.logger.info(f"Added asset {asset.name} to portfolio")
         
         # Notify risk manager of new asset
@@ -316,35 +332,32 @@ class PortfolioManager:
             'asset_name': asset.name,
             'asset_type': asset.__class__.__name__
         })
-
-    async def create_asset(self, asset_type: str, params: dict) -> Asset:
+    
+    def _register_asset_aliases(self, asset: Asset) -> None:
         """
-        Create and add a new asset to the portfolio
+        Register asset with alternate names/formats for more robust lookups
         
         Args:
-            asset_type: Type of asset to create
-            params: Parameters for asset creation
-            
-        Returns:
-            Asset: The created asset
-            
-        Raises:
-            ValueError: If asset creation fails
+            asset: Asset to register
         """
-        # Add exchange to parameters if available
-        if self.exchange and 'exchange' not in params:
-            params['exchange'] = self.exchange
+        # Skip for non-standard asset names
+        if '/' not in asset.name:
+            return
             
-        # Add configuration
-        if 'config' not in params:
-            params['config'] = self.config
-            
-        # Create the asset
-        asset = await self.asset_factory.create(asset_type, params)
+        # Create common variants
+        base, quote = asset.name.split('/')
+        variants = [
+            asset.name.replace('/', ''),  # No separator
+            f"{base}_{quote}",            # Underscore separator
+            f"{base}-{quote}"             # Dash separator
+        ]
         
-        # Add to portfolio
-        await self.add_asset(asset)
-        return asset
+        # Register variants if they don't conflict with existing assets
+        for variant in variants:
+            if variant not in self.assets:
+                # Store reference to the original asset
+                self.logger.debug(f"Registered alias {variant} for asset {asset.name}")
+                self.assets[variant] = asset
 
     async def remove_asset(self, asset_name: str) -> None:
         """
@@ -1136,6 +1149,138 @@ class PortfolioManager:
         
         return executed_trades
     
+    async def record_batch_trades(self, trades: List[Dict[str, Any]]) -> None:
+        """
+        Record a batch of trades for portfolio tracking.
+        
+        Args:
+            trades: List of trade dictionaries
+        """
+        if not trades:
+            return
+            
+        self.logger.info(f"Recording batch of {len(trades)} trades")
+        
+        # Process each trade individually
+        for trade in trades:
+            # Extract trade details
+            symbol = trade.get('symbol')
+            direction = trade.get('direction', 'unknown').lower()
+            quantity = trade.get('quantity', 0)
+            price = trade.get('price', 0)
+            timestamp = trade.get('timestamp')
+            
+            # Skip invalid trades
+            if not symbol or not quantity or not price:
+                self.logger.warning(f"Skipping invalid trade: {trade}")
+                continue
+                
+            # Find the corresponding asset with flexible symbol matching
+            asset = self._find_asset_by_symbol(symbol)
+            
+            if not asset:
+                self.logger.warning(f"Asset {symbol} not found, skipping trade")
+                continue
+                
+            # Update asset position
+            if hasattr(asset, '_update_position_from_trade'):
+                asset._update_position_from_trade(trade)
+            elif hasattr(asset, '_update_position_from_filled_order'):
+                # Create a synthetic order for the asset to process
+                from src.portfolio.execution.order import Order, Direction, OrderStatus, OrderType
+                
+                # Create synthetic order - adding OrderType.MARKET
+                synth_order = Order(
+                    symbol=symbol,
+                    order_type=OrderType.MARKET,  # Add this missing parameter
+                    direction=Direction.BUY if direction == 'buy' else Direction.SELL,
+                    quantity=quantity
+                )
+                
+                # Set order as filled
+                synth_order.status = OrderStatus.FILLED
+                synth_order.filled_quantity = quantity
+                synth_order.avg_filled_price = price
+                
+                asset._update_position_from_filled_order(synth_order)
+            else:
+                # Basic update for any asset type
+                if direction == 'buy':
+                    asset._position_size += Decimal(str(quantity))
+                elif direction == 'sell':
+                    asset._position_size -= Decimal(str(quantity))
+                    
+                asset._last_price = Decimal(str(price))
+                asset._value = asset._position_size * asset._last_price
+                
+            # Notify risk manager
+            await self.notify_risk_manager('trade_recorded', {
+                'asset_name': symbol,
+                'direction': direction,
+                'quantity': quantity,
+                'price': price,
+                'timestamp': timestamp
+            })
+                
+        # Update portfolio value after processing all trades
+        await self.update_all_values()
+        
+        self.logger.info(f"Batch of {len(trades)} trades recorded successfully")
+
+    def _find_asset_by_symbol(self, symbol: str) -> Optional[Asset]:
+        """
+        Find an asset by symbol with flexible matching to handle different symbol formats.
+        
+        Args:
+            symbol: Symbol to look for (e.g., 'BTC/USDT', 'BTCUSDT', etc.)
+            
+        Returns:
+            Optional[Asset]: Asset instance if found, None otherwise
+        """
+        # Direct match
+        if symbol in self.assets:
+            return self.assets[symbol]
+        
+        # Try with different separators and formats
+        symbol_variants = [
+            symbol,                           # Original (e.g., "BTC/USDT")
+            symbol.replace("/", ""),          # No separator (e.g., "BTCUSDT")
+            symbol.replace("/", "_"),         # Underscore separator (e.g., "BTC_USDT")
+            symbol.replace("/", "-"),         # Dash separator (e.g., "BTC-USDT")
+            symbol.upper(),                   # Uppercase (e.g., "BTC/USDT")
+            symbol.lower()                    # Lowercase (e.g., "btc/usdt")
+        ]
+        
+        # Try with different base/quote arrangements
+        if "/" in symbol:
+            base, quote = symbol.split("/")
+            symbol_variants.extend([
+                f"{quote}/{base}",            # Reversed (e.g., "USDT/BTC")
+                f"{base.upper()}/{quote.upper()}",  # All uppercase
+                f"{base.lower()}/{quote.lower()}"   # All lowercase
+            ])
+        
+        # Check all variants
+        for variant in symbol_variants:
+            if variant in self.assets:
+                self.logger.debug(f"Found asset for {symbol} using variant {variant}")
+                return self.assets[variant]
+        
+        # Try partial matching for assets that might be registered with additional info
+        symbol_base = symbol.split("/")[0] if "/" in symbol else symbol
+        for asset_name, asset in self.assets.items():
+            # Check if asset name starts with the base symbol
+            if asset_name.startswith(symbol_base):
+                self.logger.debug(f"Found partial match for {symbol}: {asset_name}")
+                return asset
+            # Check if the base symbol is in the asset name
+            elif symbol_base in asset_name:
+                self.logger.debug(f"Found partial match for {symbol} in {asset_name}")
+                return asset
+        
+        # No match found
+        return None
+        
     def get_portfolio_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the portfolio state

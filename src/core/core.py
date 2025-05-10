@@ -33,7 +33,7 @@ class TradingCore:
         # Create trading mode factory
         self.mode_factory = get_trading_mode_factory(config=self.config)
         
-        # Get available pattern
+        # Get available modes
         available_modes = self.mode_factory.get_available_modes()
         
         self.logger.info(
@@ -45,7 +45,7 @@ class TradingCore:
         # Log backtest engine type if in backtest mode
         if self.mode == "backtest":
             self.logger.info(f"Backtest engine: {self.backtest_engine}")
-
+            
     async def run_pipeline(self) -> Optional[Dict[str, Any]]:
         """
         Run the complete trading pipeline.
@@ -78,13 +78,13 @@ class TradingCore:
                 self.logger.info(f"Using backtest engine: {self.backtest_engine}")
                 self.trading_mode.set_engine_type(self.backtest_engine)
             
-            # Progress callback setup (moved after mode initialization)
+            # Set up default progress callback
             def default_progress_callback(percent: float, message: str) -> None:
                 """Default progress callback if no specific one is set"""
                 self.logger.info(f"Progress: {percent}% - {message}")
             
-            # Set a default progress callback if method exists
-            if hasattr(self.trading_mode, 'set_progress_callback'):
+            # Set a default progress callback if method exists and no callback is already set
+            if hasattr(self.trading_mode, 'set_progress_callback') and not self._progress_callback:
                 try:
                     self.trading_mode.set_progress_callback(default_progress_callback)
                     self.logger.debug("Default progress callback registered")

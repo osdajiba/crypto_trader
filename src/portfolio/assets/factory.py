@@ -151,65 +151,6 @@ class AssetFactory(AbstractFactory):
                 
         return params
     
-    async def create(self, asset_type: str, params: Optional[Dict[str, Any]] = None) -> Asset:
-        """
-        Create an asset instance asynchronously
-        
-        Args:
-            asset_type: Type of asset to create
-            params: Asset creation parameters (optional)
-            
-        Returns:
-            Asset: Created and initialized asset instance
-        """
-        params = params or {}
-        
-        # Resolve asset type name
-        resolved_name = await self._resolve_name(asset_type)
-        
-        # Run creation hooks
-        params = await self._run_creation_hooks(resolved_name, params)
-        
-        # Get concrete asset class
-        concrete_class = await self._get_concrete_class(resolved_name)
-        
-        # Get metadata for asset type
-        asset_metadata = self._metadata.get(resolved_name, {})
-        
-        # Create combined parameters
-        combined_params = dict(asset_metadata)
-        if params:
-            combined_params.update(params)
-            
-        # Set up config if needed
-        if 'config' not in combined_params:
-            combined_params['config'] = self.config
-        
-        # Get asset name for tracking
-        asset_name = combined_params.get('name')
-        if not asset_name:
-            raise ValueError("Asset name must be specified")
-        
-        # Create asset instance
-        try:
-            asset = concrete_class(**combined_params)
-            
-            # Initialize asset if it has an async initialize method
-            if hasattr(asset, 'initialize') and callable(asset.initialize):
-                await asset.initialize()
-                
-            # Track created asset
-            self._created_assets[asset_name] = {
-                'type': resolved_name,
-                'instance': asset
-            }
-                
-            logger.info(f"Created {resolved_name} asset: {asset.name}")
-            return asset
-        except Exception as e:
-            logger.error(f"Error creating {resolved_name} asset {asset_name}: {e}")
-            raise
-    
     def get_asset_instance(self, asset_name: str) -> Optional[Asset]:
         """
         Get a previously created asset instance by name
@@ -237,50 +178,81 @@ class AssetFactory(AbstractFactory):
             logger.error(f"Error during asset discovery: {str(e)}")
             logger.info("Registering default assets only")
     
-    async def create_multi_assets(self, asset_configs: Dict[str, Dict[str, Any]], 
-                                 exchange=None) -> Dict[str, Asset]:
-        """
-        Create multiple assets from configuration asynchronously
-        
-        Args:
-            asset_configs: Dictionary mapping asset names to their configurations
-            exchange: Exchange interface to use for all assets (optional)
+    async def create(self, params: Optional[Dict[str, Any]] = None) -> Asset:
+        """Create an asset instance asynchronously"""
+        try:
+            params = params or {}
+            asset_type = await self._resolve_name(params.pop('type', 'spot'))
+            asset_class = await self._get_concrete_class(asset_type)
             
-        Returns:
-            Dict[str, Asset]: Dictionary of created assets
-        """
-        assets = {}
-        create_tasks = []
-        
-        for asset_name, config in asset_configs.items():
-            # Make sure the asset has a name
-            if 'name' not in config:
-                config['name'] = asset_name
-                
-            # Add exchange if provided
-            if exchange and 'exchange' not in config:
-                config['exchange'] = exchange
+            # Apply creation hooks and create instance
+            modified_params = await self._run_creation_hooks(asset_type, params)
+            asset_name = modified_params.get('name', '')
             
-            # Get asset type, default to spot
-            asset_type = config.pop('type', 'spot')
-            
-            # Create task for asset creation
-            task = asyncio.create_task(
-                self.create(asset_type, config),
-                name=f"create_{asset_name}"
+            asset = asset_class(
+                name=asset_name,
+                exchange=modified_params.get('exchange'),
+                execution_engine=modified_params.get('execution_engine'),
+                config=self.config,
+                params=modified_params
             )
-            create_tasks.append((asset_name, task))
+            
+            # Initialize if needed
+            if hasattr(asset, 'initialize') and callable(asset.initialize):
+                await asset.initialize()
+            
+            # Track asset
+            self._created_assets[asset_name] = {
+                'instance': asset,
+                'type': asset_type,
+                'params': modified_params
+            }
+            
+            self.logger.info(f"Created asset {asset_name} of type {asset_type}")
+            return asset
+            
+        except Exception as e:
+            self.logger.error(f"Error creating asset: {str(e)}")
+            raise
+
+    async def create_multi_assets(self, assets_config: List[Dict[str, Any]], 
+                                exchange=None, execution_engine=None) -> Dict[str, Asset]:
+        """Create multiple assets from configuration asynchronously"""
+        assets = {}
         
-        # Wait for all assets to be created
+        # Prepare asset configurations
+        valid_configs = []
+        for config in assets_config:
+            asset_name = config.get('symbol') or config.get('name')
+            if not asset_name:
+                self.logger.warning(f"Skipping asset with no symbol or name: {config}")
+                continue
+                
+            # Merge configurations
+            asset_config = {
+                'name': asset_name,
+                'symbol': asset_name,
+                'tradable': True,
+                'exchange': exchange,
+                'execution_engine': execution_engine,
+                **config  # Original config takes precedence
+            }
+            valid_configs.append((asset_name, asset_config))
+        
+        # Create all assets concurrently
+        create_tasks = [(name, asyncio.create_task(self.create(config))) 
+                    for name, config in valid_configs]
+        
+        # Collect results
         for asset_name, task in create_tasks:
             try:
-                asset = await task
-                assets[asset_name] = asset
+                assets[asset_name] = await task
+                self.logger.info(f"Successfully created asset {asset_name}")
             except Exception as e:
-                logger.error(f"Error creating asset {asset_name}: {e}")
+                self.logger.error(f"Error creating asset {asset_name}: {e}")
         
         return assets
-        
+
     def get_supported_asset_types(self) -> Dict[str, Dict[str, Any]]:
         """
         Get information about all supported asset types

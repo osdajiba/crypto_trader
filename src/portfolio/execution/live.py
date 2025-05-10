@@ -9,7 +9,8 @@ from typing import Dict, Optional, List, Tuple, Any, Union
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.exchange.base import Exchange, ExchangeAPIError
+from src.exchange.factory import get_exchange_factory
+from src.exchange.base import ExchangeAPIError
 from src.portfolio.execution.base import BaseExecutionEngine
 from src.portfolio.execution.order import Order, OrderStatus, Direction, MarketOrder, LimitOrder
 
@@ -22,8 +23,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
     managing order creation, submission, and status tracking.
     """
     
-    def __init__(self, config: ConfigManager, mode: str = "live", 
-                 historical_data: Optional[Dict[str, pd.DataFrame]] = None):
+    def __init__(self, config: ConfigManager, mode: str = "live"):
         """
         Initialize the live execution engine.
 
@@ -32,7 +32,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
             mode (str): Should be "live".
             historical_data (Optional[Dict[str, pd.DataFrame]]): Not used in live mode.
         """
-        super().__init__(config, mode, historical_data)
+        super().__init__(config, mode)
         
         # Live-specific configuration
         self.max_retry_attempts = config.get("trading", "execution", "max_retry_attempts", default=3)
@@ -47,19 +47,21 @@ class LiveExecutionEngine(BaseExecutionEngine):
 
     async def initialize(self) -> None:
         """
-        Initialize the live execution engine and establish exchange connection.
+        Initialize components specific to this execution engine.
+        Subclasses should implement this method.
         """
         await super().initialize()
         
         try:
             # Create exchange instance
-            self._exchange = await self._exchange_factory.create()
+            if self.exchange is None:
+                self.exchange_factory = get_exchange_factory(self.config)
+            self.exchange = await self.exchange_factory.create()
             
             # Check connection
-            if not self._exchange.is_initialized() or not self._exchange.is_connected():
+            if not self.exchange.is_initialized() or not self.exchange.is_connected():
                 raise ConnectionError("Exchange is not properly initialized or connected")
-                
-            self.logger.info(f"Live execution engine connected to exchange {self._exchange.__class__.__name__}")
+            self.logger.info(f"Live execution engine connected to exchange {self.exchange.__class__.__name__}")
             
             # Load exchange-specific configurations
             await self._load_exchange_config()
@@ -71,17 +73,19 @@ class LiveExecutionEngine(BaseExecutionEngine):
         """
         Load exchange-specific configurations and limits.
         """
-        if not self._exchange:
+        if not self.exchange:
             return
             
         try:
             # Some exchanges provide market information like precision, limits, etc.
-            if hasattr(self._exchange, 'fetch_markets') and callable(self._exchange.fetch_markets):
-                markets = await self._exchange.fetch_markets()
+            if hasattr(self.exchange, 'fetch_markets') and callable(self.exchange.fetch_markets):
+                markets = await self.exchange.fetch_markets()
                 self.logger.info(f"Loaded configuration for {len(markets)} markets from exchange")
                 
-                # Parse market data to extract useful information
-                # This is exchange-specific and depends on what data is available
+                """
+                    Parse market data to extract useful information
+                    This is exchange-specific and depends on what data is available
+                """
                 
         except Exception as e:
             self.logger.warning(f"Could not load exchange configuration: {str(e)}")
@@ -124,7 +128,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
             DataFrame of executed order results
         """
         # Ensure exchange is available
-        if not self._exchange:
+        if not self.exchange:
             self.logger.error("No exchange available for live execution")
             return self._create_failed_execution_results(orders, "No exchange available")
             
@@ -150,7 +154,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
                 for attempt in range(1, self.max_retry_attempts + 1):
                     try:
                         # Create order on exchange
-                        response = await self._exchange.create_order(
+                        response = await self.exchange.create_order(
                             symbol=order.symbol,
                             order_type=order.order_type.value,
                             side=order.direction.value,
@@ -207,12 +211,12 @@ class LiveExecutionEngine(BaseExecutionEngine):
             Dictionary mapping symbols to prices
         """
         prices = {}
-        if not self._exchange:
+        if not self.exchange:
             return prices
             
         for symbol in symbols:
             try:
-                ticker = await self._exchange.fetch_ticker(symbol)
+                ticker = await self.exchange.fetch_ticker(symbol)
                 prices[symbol] = ticker['last']
             except Exception as e:
                 self.logger.error(f"Failed to fetch price for {symbol}: {str(e)}")
@@ -383,7 +387,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
         Returns:
             Cancellation result dictionary
         """
-        if not self._exchange:
+        if not self.exchange:
             return {'success': False, 'error': 'No exchange available'}
             
         try:
@@ -403,7 +407,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
                     }
             
             # Try to cancel on the exchange
-            response = await self._exchange.cancel_order(
+            response = await self.exchange.cancel_order(
                 exchange_order_id or order_id,  # Use exchange ID if available
                 symbol
             )
@@ -450,7 +454,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
                 return cache_result
                 
         # Try to fetch from exchange
-        if not self._exchange:
+        if not self.exchange:
             return {'success': False, 'error': 'No exchange available'}
             
         try:
@@ -460,7 +464,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
                 exchange_order_id = self._order_cache[order_id].exchange_order_id
                 
             # Fetch from exchange
-            response = await self._exchange.fetch_order(
+            response = await self.exchange.fetch_order(
                 exchange_order_id or order_id,  # Use exchange ID if available
                 symbol
             )
@@ -499,3 +503,4 @@ class LiveExecutionEngine(BaseExecutionEngine):
                 'symbol': symbol,
                 'error': str(e)
             }
+    

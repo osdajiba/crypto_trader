@@ -24,8 +24,7 @@ class BaseExecutionEngine(ABC):
     different trading modes (live, paper, backtest).
     """
     
-    def __init__(self, config: ConfigManager, mode: str = "backtest", 
-                 historical_data: Optional[Dict[str, pd.DataFrame]] = None):
+    def __init__(self, config: ConfigManager, mode: str = None):
         """
         Initialize the base execution engine.
 
@@ -35,11 +34,10 @@ class BaseExecutionEngine(ABC):
             historical_data: Historical data for backtesting.
         """
         self.config = config
-        self.mode = mode.lower()
+        self.mode = mode
         self.logger = LogManager.get_logger(f"execution.{self.mode}")
         self._running = True
         self._initialized = False
-        self.historical_data = historical_data or {}
         
         # Load settings from configuration
         self.commission_taker = config.get("trading", "fees", "commission_taker", default=0.001)
@@ -47,7 +45,7 @@ class BaseExecutionEngine(ABC):
         self.slippage = config.get("trading", "execution", "slippage", default=0.0001)
         
         # Exchange interface (initialized lazily)
-        self._exchange = None
+        self.exchange = None
         
         # Order tracking
         self._order_cache = {}
@@ -411,15 +409,14 @@ class BaseExecutionEngine(ABC):
             await self._close_specific()
             
             # Clear data
-            self.historical_data.clear()
             self._order_cache.clear()
             self._order_execution_time.clear()
             self._event_handlers.clear()
             
             # Close exchange connection if applicable
-            if self._exchange and hasattr(self._exchange, 'close'):
+            if self.exchange and hasattr(self.exchange, 'shutdown'):
                 try:
-                    await self._exchange.close()
+                    await self.exchange.shutdown()
                 except Exception as e:
                     self.logger.error(f"Error closing exchange connection: {e}")
             
@@ -434,16 +431,6 @@ class BaseExecutionEngine(ABC):
         """
         pass
 
-    def set_historical_data(self, data: Dict[str, pd.DataFrame]) -> None:
-        """
-        Set historical data for backtesting.
-        
-        Args:
-            data: Dictionary of symbol -> DataFrames
-        """
-        self.historical_data = data
-        self.logger.debug(f"Set historical data for {len(data)} symbols")
-    
     def get_stats(self) -> Dict[str, Any]:
         """
         Get execution statistics

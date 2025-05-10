@@ -33,7 +33,6 @@ class BaseStrategy(ABC):
         self.config = config
         self.params = params or {}
         self.logger = LogManager.get_logger(f"strategy.{self.__class__.__name__.lower()}")
-        self.id = self.__class__.__name__.lower()
         
         # Internal state tracking
         self._is_initialized = False
@@ -71,9 +70,6 @@ class BaseStrategy(ABC):
         to register their required factors.
         """
         pass
-    
-    def get_strategy_id(self):
-        return self.id
         
     def register_factor(self, name: str, window_size: int, func: Callable = None, 
                        depends_on: List[str] = None, is_differential: bool = False) -> None:
@@ -96,7 +92,7 @@ class BaseStrategy(ABC):
         
         # Update required data points based on new factor
         self._update_required_data_points()
-    
+
     def _update_required_data_points(self) -> None:
         """
         Calculate required data points based on registered factors.
@@ -339,6 +335,46 @@ class BaseStrategy(ABC):
             pd.DataFrame: Signals with columns like timestamp, symbol, action
         """
         pass
+        
+    async def generate_signals_vectorized(self, data: pd.DataFrame, symbol: str, factor_values: Dict[str, pd.Series] = None) -> pd.DataFrame:
+        """
+        Generate trading signals for an entire dataset at once.
+        
+        Default implementation that processes the data sequentially.
+        Strategy subclasses should override this with a true vectorized implementation
+        for better performance with vectorized backtest engines.
+        
+        Args:
+            data: Market data DataFrame for the entire period
+            symbol: Trading symbol
+            factor_values: Pre-calculated factor values (optional)
+            
+        Returns:
+            pd.DataFrame: DataFrame with trading signals
+        """
+        self.logger.warning("Using sequential fallback for vectorized signal generation. Consider implementing generate_signals_vectorized for better performance")
+        
+        # Process data sequentially and collect all signals
+        all_signals = []
+        
+        # Process data in batches to simulate sequential processing
+        for i in range(len(data)):
+            if i < self._required_data_points - 1:
+                continue  # Skip until we have enough data points
+                
+            # Get window of data
+            window_data = data.iloc[max(0, i-self._required_data_points+1):i+1]
+            
+            # Process with regular signal generator
+            signals = await self._generate_signals(window_data)
+            if not signals.empty:
+                all_signals.append(signals)
+        
+        # Combine all signals
+        if all_signals:
+            return pd.concat(all_signals, ignore_index=True)
+        
+        return pd.DataFrame()
     
     async def initialize(self) -> None:
         """Initialize strategy resources."""

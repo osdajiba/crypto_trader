@@ -12,7 +12,8 @@ import pandas as pd
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.portfolio.execution.factory import get_execution_factory
+from src.exchange.base import Exchange
+from src.portfolio.execution.base import BaseExecutionEngine
 from src.portfolio.execution.order import (
     Order, OrderType, Direction, OrderStatus, Validity,
     MarketOrder, LimitOrder, StopLossOrder, TakeProfitOrder, 
@@ -28,8 +29,11 @@ class Asset(ABC):
     with optional trading functionality that leverages the execution system.
     """
     
-    def __init__(self, name: str, exchange=None, config: Optional[ConfigManager] = None, 
-                params: Optional[Dict[str, Any]] = None):
+    def __init__(self, name: str, 
+                 exchange: Exchange = None, 
+                 execution_engine: BaseExecutionEngine = None, 
+                 config: Optional[ConfigManager] = None, 
+                 params: Optional[Dict[str, Any]] = None):
         """
         Initialize an asset.
 
@@ -41,6 +45,7 @@ class Asset(ABC):
         """
         self.name = name
         self.exchange = exchange
+        self.execution_engine = execution_engine
         self.config = config if config else ConfigManager()
         self.params = params or {}
         self.logger = LogManager.get_logger(f"asset.{name}")
@@ -70,9 +75,6 @@ class Asset(ABC):
         
     def _setup_trading(self):
         """Initialize trading capabilities if asset is tradable"""
-        # Get execution engine factory
-        execution_factory = get_execution_factory(self.config)
-        
         # Determine execution mode
         system_mode = self.config.get("system", "operational_mode", default="backtest")
         self.execution_mode = self.params.get('execution_mode', system_mode)
@@ -105,9 +107,6 @@ class Asset(ABC):
             return self
             
         try:
-            if self.is_tradable:
-                await self._initialize_execution_engine()
-                
             # Additional asset-specific initialization
             await self._initialize_asset()
             
@@ -129,39 +128,6 @@ class Asset(ABC):
         Override in subclasses to provide custom initialization logic.
         """
         pass
-    
-    async def _initialize_execution_engine(self):
-        """Initialize the execution engine"""
-        try:
-            # Get execution factory
-            execution_factory = get_execution_factory(self.config)
-            
-            # Create appropriate engine based on mode
-            historical_data = self.params.get('historical_data', {})
-            if self.name in historical_data:
-                # Single asset data
-                data = {self.name: historical_data[self.name]}
-            elif isinstance(historical_data, dict) and historical_data:
-                # Multi-asset data
-                data = historical_data
-            else:
-                # No data
-                data = None
-            
-            # Create the execution engine
-            self.execution_engine = await execution_factory.create(
-                name=self.execution_mode,
-                params={
-                    "historical_data": data,
-                    "exchange": self.exchange
-                }
-            )
-            
-            self.logger.info(f"Execution engine initialized for {self.name}")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize execution engine: {str(e)}")
-            raise
     
     def _on_order_fill(self, order):
         """

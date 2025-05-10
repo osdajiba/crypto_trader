@@ -3,12 +3,14 @@
 
 from decimal import Decimal
 import time
-from typing import Dict, Any
-
+from typing import Dict, Any, Optional
 import pandas as pd
 
-from src.common.abstract_factory import register_factory_class
+from common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
+from src.common.abstract_factory import register_factory_class
+from exchange.base import Exchange
+from portfolio.execution.base import BaseExecutionEngine
 from src.portfolio.assets.base import Asset
 from src.portfolio.execution.order import Direction, OrderStatus
 
@@ -18,11 +20,15 @@ logger = LogManager.get_logger("portfolio.assets.spot")
 class Spot(Asset):
     """Spot asset implementation for cryptocurrency trading"""
     
-    def __init__(self, name: str, exchange=None, config=None, params=None):
+    def __init__(self, name: str, 
+                 exchange: Exchange = None, 
+                 execution_engine: BaseExecutionEngine = None, 
+                 config: Optional[ConfigManager] = None, 
+                 params: Optional[Dict[str, Any]] = None):
         params = params or {}
         # Ensure spot assets are tradable
         params['tradable'] = True
-        super().__init__(name, exchange, config, params)
+        super().__init__(name, exchange, execution_engine, config, params)
         
         # Spot specific properties
         self.quantity = Decimal(str(params.get('quantity', 0.0)))
@@ -113,29 +119,29 @@ class Spot(Asset):
             self.logger.error(f"Error updating {self.symbol} with market data: {str(e)}")
             
     async def update_value(self) -> float:
-        """Update asset value by fetching latest price"""
-        if not self.exchange:
-            return float(self._value)
-        
+        """Update the asset's value by fetching current market data"""
         try:
-            # Make sure async exchange is initialized
-            if hasattr(self.exchange, '_init_async_exchange'):
-                await self.exchange._init_async_exchange()
-                
-            # Fetch ticker for latest price
-            ticker = await self.exchange.async_exchange.fetch_ticker(self.symbol)
+            if self.exchange:
+                ticker = await self.exchange.fetch_ticker(self.symbol)
+                if ticker and 'last' in ticker:
+                    self._last_price = Decimal(str(ticker['last']))
+                    self._value = self._position_size * self._last_price
+                    return float(self._value)
             
-            if ticker and 'last' in ticker and ticker['last']:
-                self.price = Decimal(str(ticker['last']))
-                self._value = self.quantity * self.price
-                
-                logger.debug(f"Updated {self.symbol} price: ${float(self.price):.2f}, value: ${float(self._value):.2f}")
-                
+            # If no exchange or failed to get ticker, try to use provided last price
             return float(self._value)
         except Exception as e:
-            logger.error(f"Error updating {self.symbol} value: {str(e)}")
-            return float(self._value)
-    
+            # More informative error message
+            error_msg = str(e)
+            if "does not have market symbol" in error_msg:
+                self.logger.warning(f"Symbol {self.symbol} not available on exchange, using last known price")
+                # Still return the current value based on last known price
+                return float(self._value)
+            else:
+                self.logger.error(f"Error updating {self.symbol} value: {e}")
+                # Return current value even on error
+                return float(self._value)
+            
     async def buy(self, amount: float, **kwargs) -> Dict[str, Any]:
         """Buy spot asset with validation"""
         amount_dec = Decimal(str(amount))

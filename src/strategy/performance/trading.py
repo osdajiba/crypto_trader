@@ -209,15 +209,15 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
         except Exception as e:
             self.logger.error(f"Error checking performance alerts: {e}")
     
-    def record_trade(self, strategy_id: str, trade_data: Dict[str, Any]) -> None:
+    def record_trade(self, trade_data: Dict[str, Any]) -> None:
         """Record a trade for performance analysis, with additional tracking for live trading
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             trade_data: Trade information
         """
         # Call base method
-        super().record_trade(strategy_id, trade_data)
+        super().record_trade(self.strategy_id, trade_data)
         
         # Track consecutive losing trades
         is_profitable = trade_data.get('profit_pct', 0) > 0
@@ -265,19 +265,19 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
             trade_metrics[symbol]['losing_trades'] += 1
             trade_metrics[symbol]['total_loss'] += abs(profit)
     
-    def update_equity(self, strategy_id: str, timestamp: Union[str, datetime], value: float) -> None:
+    def update_equity(self, timestamp: Union[str, datetime], value: float) -> None:
         """Update equity with additional tracking for trading
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             timestamp: Timestamp for the equity point
             value: Equity value
         """
         # Call base method
-        super().update_equity(strategy_id, timestamp, value)
+        super().update_equity(self.strategy_id, timestamp, value)
         
         # Track equity updates for intraday metrics
-        if strategy_id == 'system':
+        if self.strategy_id == 'system':
             timestamp_obj = pd.Timestamp(timestamp) if isinstance(timestamp, str) else timestamp
             
             self.intraday_metrics['equity_updates'].append({
@@ -290,30 +290,30 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
             if len(self.intraday_metrics['equity_updates']) > max_updates:
                 self.intraday_metrics['equity_updates'] = self.intraday_metrics['equity_updates'][-max_updates:]
     
-    def calculate_metrics(self, strategy_id: str) -> Dict[str, Any]:
+    def calculate_metrics(self) -> Dict[str, Any]:
         """Calculate performance metrics for a strategy
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             
         Returns:
             Dict[str, Any]: Performance metrics
         """
-        if strategy_id not in self.equity_history:
+        if self.strategy_id not in self.equity_history:
             return {}
             
         # Get equity and returns
-        equity = self.equity_history[strategy_id]
+        equity = self.equity_history[self.strategy_id]
         if equity.empty:
             return {}
             
-        daily_returns = self.calculate_returns(strategy_id, 'daily')
+        daily_returns = self.calculate_returns('daily')
         
         # Calculate drawdown
         max_drawdown, drawdown_start, drawdown_end = PerformanceMetrics.calculate_max_drawdown(equity)
         
         # Calculate trade metrics
-        trades = self.trade_history[strategy_id]
+        trades = self.trade_history[self.strategy_id]
         trade_metrics = {}
         
         if not trades.empty and 'profit_pct' in trades.columns:
@@ -333,7 +333,7 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
             'initial_equity': equity.iloc[0],
             'total_return': (equity.iloc[-1] / equity.iloc[0] - 1) if len(equity) >= 2 else 0.0,
             'max_drawdown': max_drawdown,
-            'current_drawdown': self.drawdown_history[strategy_id].iloc[-1] if not self.drawdown_history[strategy_id].empty else 0.0,
+            'current_drawdown': self.drawdown_history[self.strategy_id].iloc[-1] if not self.drawdown_history[self.strategy_id].empty else 0.0,
             'sharpe_ratio': PerformanceMetrics.calculate_sharpe_ratio(daily_returns, self.risk_free_rate / 252) if not daily_returns.empty else 0.0,
             'volatility': PerformanceMetrics.calculate_volatility(daily_returns) if not daily_returns.empty else 0.0,
             'intraday_volatility': intraday_volatility,
@@ -356,38 +356,38 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
         }
         
         # Save metrics
-        self.strategy_metrics[strategy_id] = metrics
+        self.strategy_metrics[self.strategy_id] = metrics
         
         return metrics
     
-    def save_to_file(self, strategy_id: str, filepath: Optional[str] = None) -> str:
+    def save_to_file(self, filepath: Optional[str] = None) -> str:
         """Save performance data to file
         
         Args:
-            strategy_id: Strategy identifier
+            self.strategy_id: Strategy identifier
             filepath: Optional file path
             
         Returns:
             str: Path to saved file
         """
-        if strategy_id not in self.equity_history:
-            raise ValueError(f"Strategy {strategy_id} not found")
+        if self.strategy_id not in self.equity_history:
+            raise ValueError(f"Strategy {self.strategy_id} not found")
             
         # Generate default filepath if not provided
         if filepath is None:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filepath = os.path.join(self.storage_path, f"{strategy_id}_trading_performance_{timestamp}.json")
+            filepath = os.path.join(self.storage_path, f"{self.strategy_id}_trading_performance_{timestamp}.json")
             
         # Calculate metrics
-        metrics = self.calculate_metrics(strategy_id)
+        metrics = self.calculate_metrics()
         
         # Prepare data for serialization
         data = {
-            'strategy_id': strategy_id,
+            'self.strategy_id': self.strategy_id,
             'metrics': metrics,
-            'equity': self.equity_history[strategy_id].reset_index().to_dict(orient='records') if not self.equity_history[strategy_id].empty else [],
-            'trades': self.trade_history[strategy_id].to_dict(orient='records') if not self.trade_history[strategy_id].empty else [],
-            'drawdown': self.drawdown_history[strategy_id].reset_index().to_dict(orient='records') if not self.drawdown_history[strategy_id].empty else [],
+            'equity': self.equity_history[self.strategy_id].reset_index().to_dict(orient='records') if not self.equity_history[self.strategy_id].empty else [],
+            'trades': self.trade_history[self.strategy_id].to_dict(orient='records') if not self.trade_history[self.strategy_id].empty else [],
+            'drawdown': self.drawdown_history[self.strategy_id].reset_index().to_dict(orient='records') if not self.drawdown_history[self.strategy_id].empty else [],
             'intraday_metrics': self.intraday_metrics,
             'daily_tracking': self.daily_tracking,
             'alert_thresholds': self.alert_thresholds,
@@ -398,7 +398,7 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=2, default=str)
             
-        self.logger.info(f"Trading performance data for {strategy_id} saved to {filepath}")
+        self.logger.info(f"Trading performance data for {self.strategy_id} saved to {filepath}")
         return filepath
     
     def load_from_file(self, filepath: str) -> str:
@@ -413,13 +413,13 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
         with open(filepath, 'r') as f:
             data = json.load(f)
             
-        strategy_id = data.get('strategy_id')
-        if not strategy_id:
-            raise ValueError("Invalid performance data file: missing strategy_id")
+        self.strategy_id = data.get('self.strategy_id')
+        if not self.strategy_id:
+            raise ValueError("Invalid performance data file: missing self.strategy_id")
             
         # Register strategy if needed
-        if strategy_id not in self.equity_history:
-            self.register_strategy(strategy_id)
+        if self.strategy_id not in self.equity_history:
+            self.register_strategy(self.strategy_id)
             
         # Load equity data
         if 'equity' in data and data['equity']:
@@ -436,7 +436,7 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
                 equity_df[timestamp_col] = pd.to_datetime(equity_df[timestamp_col])
                 value_col = [col for col in equity_df.columns if col != timestamp_col][0]
                 equity_series = pd.Series(equity_df[value_col].values, index=equity_df[timestamp_col])
-                self.equity_history[strategy_id] = equity_series
+                self.equity_history[self.strategy_id] = equity_series
             
         # Load trade data
         if 'trades' in data and data['trades']:
@@ -447,7 +447,7 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
                 if col in trade_df.columns:
                     trade_df[col] = pd.to_datetime(trade_df[col])
                     
-            self.trade_history[strategy_id] = trade_df
+            self.trade_history[self.strategy_id] = trade_df
             
         # Load drawdown data
         if 'drawdown' in data and data['drawdown']:
@@ -463,11 +463,11 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
                 drawdown_df[timestamp_col] = pd.to_datetime(drawdown_df[timestamp_col])
                 value_col = [col for col in drawdown_df.columns if col != timestamp_col][0]
                 drawdown_series = pd.Series(drawdown_df[value_col].values, index=drawdown_df[timestamp_col])
-                self.drawdown_history[strategy_id] = drawdown_series
+                self.drawdown_history[self.strategy_id] = drawdown_series
             
         # Load metrics
         if 'metrics' in data:
-            self.strategy_metrics[strategy_id] = data['metrics']
+            self.strategy_metrics[self.strategy_id] = data['metrics']
             
         # Load intraday metrics
         if 'intraday_metrics' in data:
@@ -492,24 +492,21 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
         if 'alert_thresholds' in data:
             self.alert_thresholds = data['alert_thresholds']
             
-        self.logger.info(f"Trading performance data for {strategy_id} loaded from {filepath}")
-        return strategy_id
+        self.logger.info(f"Trading performance data for {self.strategy_id} loaded from {filepath}")
+        return self.strategy_id
     
-    def generate_performance_report(self, strategy_id: str) -> Dict[str, Any]:
+    def generate_performance_report(self) -> Dict[str, Any]:
         """Generate a comprehensive trading performance report
         
-        Args:
-            strategy_id: Strategy identifier
-            
         Returns:
             Dict[str, Any]: Performance report
         """
         # Calculate or retrieve metrics
-        metrics = self.calculate_metrics(strategy_id)
+        metrics = self.calculate_metrics()
         
         # Generate summary statistics
         summary = {
-            'strategy_id': strategy_id,
+            'strategy_id': self.strategy_id,
             'performance_summary': {
                 'current_equity': f"${metrics.get('current_equity', 0.0):,.2f}",
                 'total_return': f"{metrics.get('total_return', 0.0) * 100:.2f}%",
@@ -568,8 +565,8 @@ class TradingPerformanceAnalyzer(BasePerformanceAnalyzer):
         return {
             'summary': summary,
             'metrics': metrics,
-            'trade_count': len(self.trade_history[strategy_id]),
-            'equity_points': len(self.equity_history[strategy_id]),
+            'trade_count': len(self.trade_history[self.strategy_id]),
+            'equity_points': len(self.equity_history[self.strategy_id]),
             'generation_time': datetime.now().isoformat()
         }
     

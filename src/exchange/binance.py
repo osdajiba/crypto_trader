@@ -15,6 +15,9 @@ import os
 import random
 from typing import Dict, List, Union, Optional, Any, Tuple, Callable
 from functools import wraps
+from datetime import datetime
+
+import pandas as pd
 
 from src.common.config_manager import ConfigManager
 from src.common.abstract_factory import register_factory_class
@@ -317,30 +320,6 @@ class BinanceExchange(Exchange):
             self.logger.error(f"Failed to initialize async Binance exchange: {str(e)}")
             self.async_exchange = None
             raise ExchangeConnectionError(f"Failed to initialize async exchange: {str(e)}")
-    
-    async def _shutdown_exchange(self) -> None:
-        """Clean up exchange resources"""
-        # Close all WebSocket subscriptions
-        for sub_key, sub_info in list(self.ws_subscriptions.items()):
-            try:
-                sub_info['active'] = False
-                exchange = sub_info.get('exchange')
-                if exchange and hasattr(exchange, 'close'):
-                    await exchange.close()
-            except Exception as e:
-                self.logger.error(f"Error closing WebSocket subscription {sub_key}: {str(e)}")
-        
-        # Close async exchange
-        try:
-            if self.async_exchange:
-                await self.async_exchange.close()
-                # Close underlying session
-                if hasattr(self.async_exchange, 'session') and hasattr(self.async_exchange.session, 'close'):
-                    await self.async_exchange.session.close()
-                self.async_exchange = None
-                self.logger.info("Async exchange connection closed")
-        except Exception as e:
-            self.logger.error(f"Error closing async exchange: {str(e)}")
     
     @retry_exchange_operation(max_attempts=3, base_delay=2.0, max_delay=30.0)
     async def create_order(self, 
@@ -894,7 +873,208 @@ class BinanceExchange(Exchange):
         except Exception as e:
             self.logger.error(f"Failed to fetch trades for {symbol}: {str(e)}")
             raise ExchangeError(f"Fetch trades failed: {str(e)}")
-    
+
+    async def fetch_historical_ohlcv(self, symbol: str, timeframe: str = '1m',
+                                     start_date: Optional[Union[str, datetime]] = None,
+                                     end_date: Optional[Union[str, datetime]] = None) -> pd.DataFrame:
+        """
+        Fetch historical OHLCV data from Binance.
+
+        Args:
+            symbol (str): Trading pair symbol (e.g., 'BTC/USDT').
+            timeframe (str): Time period (e.g., '1m', '1h', '1d'). Defaults to '1m'.
+            start_date (Optional[Union[str, datetime]]): Start date for data.
+            end_date (Optional[Union[str, datetime]]): End date for data.
+
+        Returns:
+            pd.DataFrame: OHLCV data with columns ['timestamp', 'open', 'high', 'low', 'close', 'volume'].
+
+        Raises:
+            ExchangeAPIError: If the API call fails.
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        # Handle backtest/offline mode
+        if self._trading_mode == 'backtest' or not self._connected:
+            self.logger.warning("Historical data fetch in backtest/offline mode is not fully implemented.")
+            raise ExchangeAPIError("Historical data fetching not supported in backtest/offline mode without local data source.")
+
+        try:
+            if not self.async_exchange:
+                await self._init_async_exchange()
+
+            # Convert timeframe to Binance format (assuming it matches CCXT's standard)
+            binance_timeframe = timeframe
+
+            # Convert dates to milliseconds timestamps
+            since = TimeUtils.datetime_to_timestamp(start_date) if start_date else None
+            until = TimeUtils.datetime_to_timestamp(end_date) if end_date else None
+
+            await self._handle_rate_limit()
+            ohlcv = await self.async_exchange.fetch_ohlcv(symbol, binance_timeframe, since=since, limit=1000)
+
+            # Handle pagination for large date ranges
+            all_ohlcv = ohlcv
+            while len(ohlcv) == 1000:
+                last_timestamp = ohlcv[-1][0]
+                if until and last_timestamp >= until:
+                    break
+                ohlcv = await self.async_exchange.fetch_ohlcv(symbol, binance_timeframe, since=last_timestamp, limit=1000)
+                if not ohlcv:
+                    break
+                all_ohlcv.extend(ohlcv)
+
+            # Convert to DataFrame
+            df = pd.DataFrame(all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+
+            # Filter by end_date if provided
+            if until:
+                df = df[df.index <= pd.to_datetime(until, unit='ms')]
+
+            return df
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch historical OHLCV for {symbol}: {str(e)}")
+            raise ExchangeAPIError(f"Failed to fetch historical OHLCV: {str(e)}")
+
+    async def fetch_latest_ohlcv(self, symbol: str, timeframe: str = '1m', limit: int = 100) -> pd.DataFrame:
+        """
+        Fetch the latest OHLCV data from Binance.
+
+        Args:
+            symbol (str): Trading pair symbol (e.g., 'BTC/USDT').
+            timeframe (str): Time period (e.g., '1m', '1h', '1d'). Defaults to '1m'.
+            limit (int): Number of candles to fetch. Defaults to 100.
+
+        Returns:
+            pd.DataFrame: OHLCV data with columns ['timestamp', 'open', 'high', 'low', 'close', 'volume'].
+
+        Raises:
+            ExchangeAPIError: If the API call fails.
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        # Handle backtest/offline mode
+        if self._trading_mode == 'backtest' or not self._connected:
+            self.logger.warning("Latest OHLCV fetch in backtest/offline mode is not fully implemented.")
+            raise ExchangeAPIError("Latest OHLCV fetching not supported in backtest/offline mode without local data source.")
+
+        try:
+            if not self.async_exchange:
+                await self._init_async_exchange()
+
+            binance_timeframe = timeframe
+
+            await self._handle_rate_limit()
+            ohlcv = await self.async_exchange.fetch_ohlcv(symbol, binance_timeframe, limit=limit)
+
+            df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+
+            return df
+
+        except Exception as e:
+            self.logger.error(f"Failed to fetch latest OHLCV for {symbol}: {str(e)}")
+            raise ExchangeAPIError(f"Failed to fetch latest OHLCV: {str(e)}")
+
+    async def watch_ohlcv(self, symbol: str, timeframe: str, callback: Optional[Callable] = None) -> bool:
+        """
+        Subscribe to real-time OHLCV data updates via WebSocket.
+
+        Args:
+            symbol (str): Trading pair symbol (e.g., 'BTC/USDT').
+            timeframe (str): Time period (e.g., '1m', '1h', '1d').
+            callback (Optional[Callable]): Function to handle incoming data.
+
+        Returns:
+            bool: True if subscription succeeds, False otherwise.
+
+        Raises:
+            ExchangeAPIError: If subscription fails.
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        # In backtest mode, real-time watching is not applicable
+        if self._trading_mode == 'backtest' or not self._connected:
+            self.logger.info("Skipping WebSocket subscription in backtest/offline mode.")
+            return False
+
+        try:
+            # Initialize WebSocket exchange if not already done
+            if not hasattr(self, 'ws_exchange'):
+                self.ws_exchange = ccxtpro.binance(self._build_params())
+
+            subscription_key = f"{symbol}_{timeframe}"
+            if subscription_key in self.ws_subscriptions:
+                self.logger.warning(f"Already subscribed to {symbol} {timeframe}")
+                return True
+
+            # Start WebSocket task
+            asyncio.create_task(self._watch_kline(self.ws_exchange, symbol, timeframe, callback))
+
+            self.ws_subscriptions[subscription_key] = {
+                'exchange': self.ws_exchange,
+                'active': True
+            }
+
+            self.logger.info(f"Subscribed to real-time OHLCV for {symbol} {timeframe}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to subscribe to OHLCV for {symbol} {timeframe}: {str(e)}")
+            raise ExchangeAPIError(f"WebSocket subscription failed: {str(e)}")
+
+    async def _watch_kline(self, exchange, symbol: str, timeframe: str, callback: Optional[Callable]):
+        """
+        Internal method to manage WebSocket kline subscription.
+
+        Args:
+            exchange: CCXT Pro exchange instance.
+            symbol (str): Trading pair symbol.
+            timeframe (str): Time period.
+            callback (Optional[Callable]): Function to process updates.
+        """
+        while True:
+            try:
+                kline = await exchange.watch_ohlcv(symbol, timeframe)
+                if callback:
+                    # Convert to a format similar to fetch_ohlcv for consistency
+                    df = pd.DataFrame([kline], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    callback(df)
+            except Exception as e:
+                self.logger.error(f"Error in OHLCV WebSocket for {symbol} {timeframe}: {str(e)}")
+                await asyncio.sleep(5)  # Reconnect after delay
+
+    async def stop_watching(self, symbol: str, timeframe: str) -> bool:
+        """
+        Stop watching real-time OHLCV data for a symbol and timeframe.
+
+        Args:
+            symbol (str): Trading pair symbol (e.g., 'BTC/USDT').
+            timeframe (str): Time period (e.g., '1m', '1h', '1d').
+
+        Returns:
+            bool: True if stopped successfully, False if no subscription existed.
+        """
+        subscription_key = f"{symbol}_{timeframe}"
+        if subscription_key in self.ws_subscriptions:
+            sub_info = self.ws_subscriptions[subscription_key]
+            sub_info['active'] = False
+            # CCXT Pro handles WebSocket closure when tasks are cancelled or exchange is closed
+            del self.ws_subscriptions[subscription_key]
+            self.logger.info(f"Stopped watching OHLCV for {symbol} {timeframe}")
+            return True
+        self.logger.warning(f"No active subscription found for {symbol} {timeframe}")
+        return False
+
+        
     async def fetch_order_book(self, symbol: str, limit: int = 20) -> Dict[str, Any]:
         """
         Fetch order book for a symbol
@@ -1308,3 +1488,28 @@ class BinanceExchange(Exchange):
                 actual_delay = retry_delay * jitter
                 self.logger.info(f"Waiting {actual_delay:.2f} seconds before retrying WebSocket connection")
                 await asyncio.sleep(actual_delay)
+                
+    async def _shutdown_exchange(self) -> None:
+        """Clean up exchange resources"""
+        # Close all WebSocket subscriptions
+        for sub_key, sub_info in list(self.ws_subscriptions.items()):
+            try:
+                sub_info['active'] = False
+                exchange = sub_info.get('exchange')
+                if exchange and hasattr(exchange, 'close'):
+                    await exchange.close()
+            except Exception as e:
+                self.logger.error(f"Error closing WebSocket subscription {sub_key}: {str(e)}")
+        
+        # Close async exchange
+        try:
+            if self.async_exchange:
+                await self.async_exchange.close()
+                # Close underlying session
+                if hasattr(self.async_exchange, 'session') and hasattr(self.async_exchange.session, 'close'):
+                    await self.async_exchange.session.close()
+                self.async_exchange = None
+                self.logger.info("Async exchange connection closed")
+        except Exception as e:
+            self.logger.error(f"Error closing async exchange: {str(e)}")
+    

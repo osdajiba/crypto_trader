@@ -73,7 +73,7 @@ class FactorFactory(AbstractFactory):
         """Discover additional factors from modules"""
         try:
             factor_dir = "src.strategy.factors"
-            self.discover_registrable_classes(BaseFactor, factor_dir, "factors_factory")
+            self.discover_registrable_classes(BaseFactor, factor_dir, "factor_factory")
         except Exception as e:
             self.logger.error(f"Error auto-discovering strategies: {e}")
 

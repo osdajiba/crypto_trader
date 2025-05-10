@@ -54,7 +54,7 @@ class BacktestEngineFactory(AbstractFactory):
         # Register OHLCV backtest engine
         self.register(
             BacktestEngine.OHLCV.value,
-            "src.backtest.engine.ohlcv.OHLCVEngine", 
+            "src.backtest.ohlcv.OHLCVEngine", 
             {
                 "description": "OHLCV Backtest Engine for vectorized backtesting",
                 "category": "backtest",
@@ -65,7 +65,7 @@ class BacktestEngineFactory(AbstractFactory):
         # Register Market Replay engine
         self.register(
             BacktestEngine.MARKETREPLAY.value,
-            "src.backtest.engine.market_replay.MarketReplayEngine", 
+            "src.backtest.market_replay.MarketReplayEngine", 
             {
                 "description": "Market Replay Engine for sequential data processing",
                 "category": "backtest",
@@ -76,7 +76,7 @@ class BacktestEngineFactory(AbstractFactory):
         # Optional: Register any other built-in engines
         self.register(
             "event_driven",  # Consider adding to BacktestEngine enum if widely used
-            "src.backtest.engine.event_driven.EventDrivenEngine", 
+            "src.backtest.event_driven.EventDrivenEngine", 
             {
                 "description": "Event-Driven Backtest Engine for complex event processing",
                 "category": "backtest",

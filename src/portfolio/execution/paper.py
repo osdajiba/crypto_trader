@@ -10,7 +10,7 @@ from typing import Dict, Optional, List, Tuple, Any, Union
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
-from src.exchange.base import Exchange
+from exchange.factory import get_exchange_factory
 from src.portfolio.execution.base import BaseExecutionEngine
 from src.portfolio.execution.order import Order, OrderStatus, Direction, MarketOrder, LimitOrder
 
@@ -24,8 +24,7 @@ class PaperExecutionEngine(BaseExecutionEngine):
     of trading with features like slippage, fees, and partial fills.
     """
     
-    def __init__(self, config: ConfigManager, mode: str = "paper", 
-                 historical_data: Optional[Dict[str, pd.DataFrame]] = None):
+    def __init__(self, config: ConfigManager, mode: str = "paper"):
         """
         Initialize the paper execution engine.
 
@@ -34,7 +33,7 @@ class PaperExecutionEngine(BaseExecutionEngine):
             mode (str): Should be "paper".
             historical_data (Optional[Dict[str, pd.DataFrame]]): Not used in paper mode.
         """
-        super().__init__(config, mode, historical_data)
+        super().__init__(config, mode)
         
         # Paper-specific configuration
         self.simulate_latency = config.get("trading", "paper", "simulate_latency", default=True)
@@ -62,9 +61,15 @@ class PaperExecutionEngine(BaseExecutionEngine):
         await super().initialize()
         
         try:
-            # Create exchange instance for price data only
-            self._exchange = await self._exchange_factory.create()
-            self.logger.info(f"Paper execution engine connected to exchange {self._exchange.__class__.__name__} for price data")
+            # Create exchange instance
+            if self.exchange is None:
+                self.exchange_factory = get_exchange_factory(self.config)
+            self.exchange = await self.exchange_factory.create()
+            
+            # Check connection
+            if not self.exchange.is_initialized() or not self.exchange.is_connected():
+                raise ConnectionError("Exchange is not properly initialized or connected")
+            self.logger.info(f"Paper execution engine connected to exchange {self.exchange.__class__.__name__}")
             
             # Start background task for processing pending orders
             self._fill_task = asyncio.create_task(self._process_pending_orders_loop())
@@ -359,12 +364,12 @@ class PaperExecutionEngine(BaseExecutionEngine):
             Dictionary mapping symbols to prices
         """
         prices = {}
-        if not self._exchange:
+        if not self.exchange:
             return prices
             
         for symbol in symbols:
             try:
-                ticker = await self._exchange.fetch_ticker(symbol)
+                ticker = await self.exchange.fetch_ticker(symbol)
                 prices[symbol] = ticker['last']
             except Exception as e:
                 self.logger.error(f"Failed to fetch price for {symbol}: {str(e)}")
