@@ -1,0 +1,531 @@
+# Trading System Configuration - Optimized for Performance Tracking
+# Last updated: 2025-05-10
+
+# System-wide configurations
+system:
+  operational_mode: backtest  # Options: backtest, paper, live
+  backtest_mode: ohlcv       # Default backtest engine: ohlcv or market_replay
+  timezone: UTC
+  offline_mode: false
+  config:
+    autosave_enabled: true
+    autosave_interval: 300   # Save config every 5 minutes if changed
+    autosave_path: conf/autosave
+  performance:
+    enable_tracking: true    # Enable performance tracking
+    log_interval: 10         # Log performance metrics every 10 iterations
+    detailed_tracking: true  # Enable detailed performance metrics
+    max_memory: 1073741824   # 1GB memory limit
+    max_threads: 4
+    task_timeout: 300        # 5 minute timeout for long-running tasks
+    high_latency_threshold: 1.0  # Log warning if latency exceeds 1 second
+    latency_alert_threshold: 5.0  # Alert if latency exceeds 5 seconds
+
+# Trading configurations
+trading:
+  initial_capital: 100000.0
+  min_order: 1.0
+  execution:
+    leverage: 1
+    slippage: 0.001
+    commission_taker: 0.001
+    commission_maker: 0.001
+  # Asset configuration
+  assets:
+    - symbol: BTC/USDT
+      type: spot
+      params:
+        position_size: 0.1
+        max_leverage: 5
+    - symbol: ETH/USDT
+      type: spot
+      params:
+        position_size: 0.05
+        max_leverage: 3
+  # Trading limits
+  limits:
+    daily_trades: 50
+    max_leverage: 10
+    min_volume: 1
+    position: 1.0
+
+# Backtest settings
+backtest:  
+  # Performance tracking
+  detailed_performance_tracking: true
+  show_progress: true
+  
+  # Engine-specific configurations
+  engines: 
+    ohlcv:
+      use_vectorized: true
+      commission_rate: 0.001
+      slippage: 0.0005
+      initial_capital: 100000
+      position_size: 0.1  # 10% of available capital per trade
+      # Performance optimization settings
+      optimize_factor_caching: true
+      batch_signal_generation: true
+      parallel_processing: true
+    
+    market_replay:
+      replay_speed: 0  # 0 means as fast as possible, otherwise milliseconds between updates
+      commission_rate: 0.001
+      slippage: 0.001
+      initial_capital: 100000
+      risk_per_trade: 0.02  # 2% risk per trade
+      # Performance settings
+      show_progress: true
+      log_execution_detail: true
+  
+  # Backtest period
+  period:
+    start: "2025-01-01"
+    end: "2025-01-02"
+  
+  # Default strategy
+  strategy: dual_ma
+  strategy_params:
+    short_window: 20
+    long_window: 50
+    risk_factor: 0.02
+  
+  # Execution settings
+  execution:
+    engine: backtest
+    allow_partial_fills: true
+    max_slippage: 0.01
+
+# Live trading configuration
+live_trading:
+  status_interval: 3600      # Check account status every hour
+  min_required_balance: 100  # Minimum required balance to start trading
+  cancel_orders_on_shutdown: true
+  
+  # Performance monitoring
+  monitor_exchange_latency: true
+  high_latency_threshold: 1.0  # Alert when API calls exceed 1 second
+  latency_log_interval: 10     # Log latency metrics every 10 iterations
+  
+  # Exchange verification
+  test_symbol: BTC/USDT      # Symbol to use for connectivity tests
+  
+  # Emergency procedures
+  emergency_procedures:
+    stop_on_high_latency: true
+    max_allowed_latency: 5.0  # Stop trading if latency consistently exceeds 5 seconds
+    latency_sample_size: 5    # Number of samples to average for latency decisions
+
+# Paper trading configuration
+paper_trading:
+  data_source: hybrid         # Options: hybrid, exchange, local
+  
+  # Performance tracking
+  perf_log_interval: 10       # Log performance metrics every 10 iterations
+  
+  # Latency simulation for realistic paper trading
+  simulate_latency: false     # Enable exchange latency simulation
+  simulated_latency: 0.1      # 100ms simulated exchange latency
+  
+  # Test configuration
+  test_symbol: BTC/USDT       # Symbol to use for data source tests
+
+# Strategy configurations
+strategy:
+  default: dual_ma
+  
+  # Strategy-specific configurations
+  dual_ma:
+    short_window: 20
+    long_window: 50
+    filter_strength: 0.5
+    
+    # Performance optimization
+    optimize_calculations: true
+    use_vectorized: true
+  
+  neural_network:
+    epochs: 100
+    batch_size: 32
+    layers: [64, 32, 16]
+    dropout: 0.2
+    
+    # Performance settings
+    use_gpu: false
+    inference_optimization: true
+  
+  multi_factors:
+    factors: ["rsi", "macd", "bollinger"]
+    weights: [0.4, 0.3, 0.3]
+    
+    # Performance settings
+    parallel_factor_calc: true
+    cache_intermediate_results: true
+
+# Data configurations
+data:
+  polling_interval: 60  # Seconds between data updates
+  
+  cache:
+    dir: ./cache
+    enabled: true
+    max_size: 104857600  # 100MB
+    retention_days: 30
+    ttl_seconds: 3600    # Cache time-to-live
+  
+  chunk_days:  # Optimized chunking by timeframe
+    1m: 1     # 1 day chunks for minute data
+    5m: 1     # 1 day chunks for 5-minute data
+    15m: 2    # 2 day chunks for 15-minute data
+    30m: 3    # 3 day chunks for 30-minute data
+    1h: 7     # 7 day chunks for hourly data
+    4h: 14    # 14 day chunks for 4-hour data
+    1d: 30    # 30 day chunks for daily data
+  
+  database:
+    host: localhost
+    name: trading
+    password: ''
+    port: 3306
+    table_prefix: market_
+    type: mysql
+    user: root
+    connection_pool: 10  # Connection pooling
+    keepalive: true      # Keep database connections alive
+  
+  source:
+    backup_source: exchange
+    live: false
+    primary_source: hybrid
+    type: local
+  
+  storage:
+    historical: data/historical/
+    orders: data/order_history.csv
+    trades: data/trade_records.json
+  
+  validation:
+    auto_fix: true
+    enabled: true
+    fix_on_load: true
+    log_issues: true
+    batch_size: 10000    # Process large datasets in batches
+
+# Risk management configurations
+risk:
+  managers:
+    standard:
+      drawdown:
+        max_portfolio: 0.2
+        max_single_trade: 0.1
+      exposure:
+        risk_per_trade: 1.0
+      limits:
+        max_leverage: 10
+      stop_loss:
+        enabled: true
+        max_daily: 0.05
+        percentage: 0.02
+      take_profit:
+        enabled: true
+        percentage: 0.05
+    
+    backtest:
+      drawdown:
+        max_portfolio: 0.2
+        max_single_trade: 0.1
+      exposure:
+        risk_per_trade: 1.0
+      limits:
+        max_leverage: 10
+      stop_loss:
+        enabled: true
+        max_daily: 0.05
+        percentage: 0.02
+      take_profit:
+        enabled: true
+        percentage: 0.05
+
+    conservative:
+      drawdown:
+        max_portfolio: 0.2
+        max_single_trade: 0.1
+      exposure:
+        risk_per_trade: 1.0
+      limits:
+        max_leverage: 10
+      stop_loss:
+        enabled: true
+        max_daily: 0.05
+        percentage: 0.02
+      take_profit:
+        enabled: true
+        percentage: 0.05
+
+# Logging and other configurations
+logging:
+  base_path: ./logs
+  level: INFO
+  format: "%(asctime)s | %(levelname)s | [%(filename)s:%(lineno)d] | %(message)s"
+  detailed_format: "%(asctime)s | %(levelname)s | %(module)-18s | [%(filename)s:%(lineno)d] | %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S%z"
+  
+  # Performance logging settings
+  performance_log:
+    enabled: true
+    separate_file: true
+    path: "performance.log"
+    level: DEBUG
+    format: "%(asctime)s | PERF | %(message)s"
+  
+  categories:
+    system:
+      level: INFO
+      modules:
+        - main
+        - core
+        - core.core        
+        - common
+        - common.cli
+        - common.config_manager
+        - common.log_manager
+        - common.helpers
+        - common.abstract_factory
+        - common.async_executor
+        - common.time_tracking  # Added time tracking module
+    strategy:
+      level: INFO
+      modules:
+        - strategy
+        - strategy.base
+        - strategy.factory
+        - strategy.factors
+        - strategy.factors.base
+        - strategy.factors.custom
+        - strategy.factors.factor_lib
+        - strategy.factors.factory
+        - strategy.factors.momentum
+        - strategy.factors.trend
+        - strategy.factors.volatility
+        - strategy.factors.volume
+        - strategy.implementations
+        - strategy.implementations.dual_ma
+        - strategy.implementations.multi_factors
+        - strategy.implementations.neural_network
+        - strategy.performance
+        - strategy.performance.base
+        - strategy.performance.factoty
+        - strategy.performance.backtest   
+        - strategy.performance.trading       
+        - strategy.performance.metrics
+    backtest:
+      level: INFO
+      modules:
+        - backtest
+        - backtest.backtest
+        - backtest.utils
+        - backtest.engine
+        - backtest.engine.base
+        - backtest.engine.factory
+        - backtest.engine.market_replay
+        - backtest.engine.ohlcv
+    data:
+      level: INFO
+      modules:
+        - datasource
+        - datasource.engine
+        - datasource.integrity
+        - datasource.manager
+        - datasource.processor
+        - datasource.sources    
+        - datasource.sources.base 
+        - datasource.sources.exchange
+        - datasource.sources.factory
+        - datasource.sources.hybrid
+        - datasource.sources.local
+    exchange:
+      level: WARNING
+      modules:
+        - exchange
+        - exchange.base
+        - exchange.factory
+        - exchange.binance
+    portfolio:
+      level: INFO
+      modules:
+        - portfolio
+        - portfolio.manager
+        - portfolio.assets
+        - portfolio.assets.base
+        - portfolio.assets.factory
+        - portfolio.assets.spot
+        - portfolio.assets.future
+        - portfolio.assets.option
+        - portfolio.assets.bond
+        - portfolio.assets.fund
+        - portfolio.execution.
+        - portfolio.execution.engine
+        - portfolio.execution.factory
+        - portfolio.execution.order
+        - portfolio.risk
+        - portfolio.risk.base
+        - portfolio.risk.factory
+        - portfolio.risk.backtest
+        - portfolio.risk.standard
+    trading:
+      level: INFO
+      modules:
+        - trading
+        - trading.base
+        - trading.factory
+        - trading.live
+        - trading.paper
+  
+  files:
+    system:
+      path: "system.log"
+      level: INFO
+    errors:
+      path: "errors.log"
+      level: ERROR
+    strategy:
+      path: "strategy.log"
+      level: INFO
+    data:
+      path: "data.log"
+      level: INFO
+    exchange:
+      path: "exchange.log"
+      level: INFO
+    portfolio:
+      path: "portfolio.log"
+      level: INFO
+    trading:
+      path: "trading.log"
+      level: INFO
+    performance:  # New dedicated performance log
+      path: "performance.log"
+      level: DEBUG
+  
+  handlers:
+    console:
+      enabled: true
+      level: INFO
+      colors: true
+    file:
+      enabled: true
+      compression: gz
+      encoding: utf-8
+      buffer:
+        enabled: true
+        capacity: 1000
+        flush_interval: 5
+  
+  rotation:
+    strategy: size
+    max_file_size: 10485760  # 10MB
+    backup_count: 5
+    time_interval: D  # Daily rotation when using time strategy
+  
+  async_write: true
+  combined_log: true
+  summary:
+    enabled: true
+    format: json
+    level: WARNING
+
+# API configuration for exchanges
+api:
+  base_url: https://api.example.com
+  binance:
+    api_key: 
+    options:
+      adjust_time_diff: true
+      default_type: future
+      keepalive: true
+      recv_window: 60000
+    secret: 
+    workaround_enabled: true
+  download_chunk_size: 5000  # Reduced from 1000 to improve reliability
+  enable_rate_limit: true
+  headers:
+    connection: keep-alive  # Keep connections open
+    keep-alive: 60  # 60 second timeout
+  rate_limits:
+    max_concurrent: 5
+    requests: 20
+    smooth_distribution: true  # Evenly distribute requests
+  retry_attempts: 5  # Increased retries for reliability
+  retry_delay: 2.0
+  retry_backoff: true  # Enable exponential backoff
+  retry_jitter: true  # Add random jitter to retries
+  timeout: 60000  # 60 second timeout
+  
+  # Performance monitoring for API calls
+  performance:
+    track_api_calls: true
+    high_latency_threshold: 1.0  # seconds
+    log_all_api_times: false
+    alert_on_slow_apis: true
+  
+  websocket:
+    enabled: true
+    heartbeat: true
+    max_reconnects: 100
+    ping_interval: 30000
+    reconnect_rate: 5000
+    use_ccxt_pro: true  # Enable CCXT Pro WebSocket if available
+
+# Database configuration
+database:
+  echo_sql: false
+  pool_size: 10  # Increased connection pool
+  timeout: 60    # Increased timeout
+  url: sqlite:///database/trading.sqlite
+  
+  # Performance settings
+  performance:
+    track_query_times: true
+    log_slow_queries: true
+    slow_query_threshold: 0.5  # seconds
+
+# Network configuration
+network:
+  connection:
+    retry_attempts: 5  # Increased from 3
+    retry_delay: 2
+    retry_backoff_factor: 2  # Exponential backoff factor
+    retry_backoff_jitter: true  # Add randomization
+    test_url: https://api.binance.com/api/v3/ping
+    timeout: 60  # Increased from 30 to 60 seconds
+  connection_pool:
+    size: 20  # Connection pool size
+    keepalive: 60  # Keepalive timeout in seconds
+    ttl_dns_cache: 300  # DNS cache time in seconds
+    limit_per_host: 10  # Concurrent connections per host
+  proxy:
+    detection:
+      check_common_ports: true
+      check_env: true
+      check_system: true
+      test_connection: true
+    enabled: true  # Changed from 'auto' to true for explicit control
+    timeout: 60  # Proxy timeout
+
+# Proxy configuration
+proxies:
+  http: 127.0.0.1:7890
+  https: 127.0.0.1:7890
+
+# Security configuration
+security:
+  credentials:
+    encryption: aes-256-cbc
+  use_env_vars: true
+
+# Validation requirements
+validation:
+  required:
+    - database.url
+    - system.performance.max_threads
+    - trading.initial_capital
