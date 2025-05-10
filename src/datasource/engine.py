@@ -9,6 +9,7 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Union, Any
+import gc
 
 from src.common.log_manager import LogManager
 
@@ -42,30 +43,18 @@ class DataEngine:
         self.request_interval = 1.0 / rate_limit
         self.last_request_time = 0
         self.chunk_size = min(chunk_size, 1000)  # Binance max is 1000
-        
-        # Storage settings
         self.storage_path = storage_path
         os.makedirs(storage_path, exist_ok=True)
         
-        # Set up logger using LogManager instead of standard logging
-        self._setup_logger(log_level)
+        self.logger = LogManager.get_logger("datasource.downloader")
+        if log_level != "INFO":
+            LogManager.set_level(log_level, "datasource.downloader")
         
         # HTTP session settings
         self.session = None
         self.request_semaphore = asyncio.Semaphore(2)
         
         self.logger.info(f"Data downloader initialized: chunk_size={self.chunk_size}, rate_limit={self.rate_limit}/s")
-    
-    def _setup_logger(self, log_level: str):
-        """Configure logger using LogManager"""
-        # Get a logger instance from LogManager instead of standard logging
-        # Use the module path as the logger name for proper categorization
-        self.logger = LogManager.get_logger("datasource.downloader")
-        
-        # LogManager automatically handles the log level based on categories, 
-        # but we can also set it explicitly if needed
-        if log_level != "INFO":  # Only change if it's different from default
-            LogManager.set_level(log_level, "datasource.downloader")
     
     async def initialize(self):
         """Initialize HTTP session"""
@@ -118,7 +107,6 @@ class DataEngine:
     
     def _timeframe_to_interval(self, timeframe: str) -> str:
         """Convert timeframe to Binance format"""
-        # Already in Binance format
         if timeframe in ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']:
             return timeframe
             
@@ -228,17 +216,13 @@ class DataEngine:
             'taker_buy_quote_volume', 'ignored'
         ])
         
-        # Convert types
         numeric_cols = ['open', 'high', 'low', 'close', 'volume', 'quote_volume']
         for col in numeric_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-        # Convert timestamps
         df['timestamp'] = pd.to_numeric(df['timestamp'])
         df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
         
-        # Keep essential columns
-        keep_cols = ['datetime', 'timestamp', 'open', 'high', 'low', 'close', 'volume']
+        keep_cols = ['datetime', 'timestamp', 'open', 'high', 'low', 'close', 'volume']    # Keep essential columns
         return df[keep_cols]
     
     async def download_data(self, 
@@ -247,22 +231,15 @@ class DataEngine:
                            start_date: Union[str, datetime, int] = None,
                            end_date: Union[str, datetime, int] = None) -> pd.DataFrame:
         """Download historical OHLCV data"""
-        # Ensure session is initialized
         if self.session is None:
             await self.initialize()
             
-        # Handle dates
         if start_date is None:
             start_date = datetime.now() - timedelta(days=7)
-            
         if end_date is None:
             end_date = datetime.now()
-            
-        # Convert to millisecond timestamps
         start_ms = self._to_timestamp_ms(start_date)
         end_ms = self._to_timestamp_ms(end_date)
-        
-        # Normalize timeframe
         interval = self._timeframe_to_interval(timeframe)
         
         self.logger.info(f"Downloading {symbol} {interval} data: {datetime.fromtimestamp(start_ms/1000)} to {datetime.fromtimestamp(end_ms/1000)}")
@@ -278,19 +255,14 @@ class DataEngine:
             
             # Prevent resource leaks
             if i > 0 and i % 10 == 0:
-                # Force GC every 10 chunks
-                import gc
-                gc.collect()
+                gc.collect()    # Force GC every 10 chunks
         
-        # Parse data
         df = self._parse_ohlcv(all_data)
-        
         if df.empty:
             self.logger.warning(f"No data retrieved: {symbol} {interval}")
             return df
             
-        # Sort and deduplicate
-        df = df.sort_values('datetime').drop_duplicates(subset=['datetime'])
+        df = df.sort_values('datetime').drop_duplicates(subset=['datetime'])    # Sort and deduplicate
         
         self.logger.info(f"Successfully downloaded {symbol} {interval} data: {len(df)} records, {df['datetime'].min()} to {df['datetime'].max()}")
         return df
@@ -318,18 +290,15 @@ class DataEngine:
     
     def _generate_storage_path(self, symbol: str, timeframe: str, 
                                start_date: datetime, end_date: datetime) -> str:
-        """Generate standardized storage path"""
+        """
+        Generate standardized storage path
+        Format: data_source/symbol/timeframe/year/month/start_to_end.parquet
+        """
         symbol_safe = symbol.replace('/', '_')
-        
-        # Convert to ISO format
-        start_iso = start_date.astimezone(timezone.utc).isoformat()
-        end_iso = end_date.astimezone(timezone.utc).isoformat()
-        
-        # Format: data_source/symbol/timeframe/year/month/start_to_end.parquet
         year = start_date.year
         month = f"{start_date.month:02d}"
-        
-        # Create filename with date range
+        start_iso = start_date.astimezone(timezone.utc).isoformat()
+        end_iso = end_date.astimezone(timezone.utc).isoformat()        
         filename = f"{start_iso}to{end_iso}.parquet"
         
         path = os.path.join(
@@ -354,10 +323,7 @@ class DataEngine:
         file_path = self._generate_storage_path(symbol, timeframe, start_date, end_date)
         
         try:
-            # Create directory
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
-            # Save as parquet
             df.to_parquet(file_path, index=False)
             self.logger.info(f"Saved data to: {file_path} ({len(df)} records)")
             
@@ -371,16 +337,13 @@ class DataEngine:
                              end_date: Union[str, datetime, int] = None) -> bool:
         """Download and save data in one operation"""
         try:
-            # Ensure datetime objects for start/end
+            # Ensure datetime objects for start/end, default start is: start '7d' / end 'now' 
             if start_date is not None and not isinstance(start_date, datetime):
                 start_date = pd.to_datetime(start_date)
-            
             if end_date is not None and not isinstance(end_date, datetime):
                 end_date = pd.to_datetime(end_date)
-                
             if start_date is None:
-                start_date = datetime.now() - timedelta(days=7)
-                
+                start_date = datetime.now() - timedelta(days=7)  
             if end_date is None:
                 end_date = datetime.now()
             
@@ -449,7 +412,7 @@ class DataEngine:
                                   start_date: Union[str, datetime, int] = None,
                                   end_date: Union[str, datetime, int] = None) -> str:
         """Ensure data is available locally, downloading if needed"""
-        # Convert dates to datetime if needed
+        # Convert dates to datetime
         if not isinstance(start_date, datetime) and start_date is not None:
             start_date = pd.to_datetime(start_date)
         

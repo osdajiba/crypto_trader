@@ -1,89 +1,224 @@
 #!/usr/bin/env python3
 # src/backtest/factory.py
 
-from typing import Dict, Any, Optional, Type
-import importlib
+"""
+Backtest engine factory module.
+Provides factory methods for creating backtest engine instances according to the factory pattern standard.
+"""
+
+from enum import Enum
+from typing import Dict, Optional, Any, Type, List
 
 from src.common.abstract_factory import AbstractFactory
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
+from src.backtest.base import BaseBacktestEngine
 
 
-class BacktestFactory(AbstractFactory):
-    """Factory for creating backtest engines"""
+class BacktestEngine(Enum):
+    """Centralize the definition of backtest engine types"""
+    MARKETREPLAY = "market_replay"
+    OHLCV = "ohlcv"
+    
+    
+class BacktestEngineFactory(AbstractFactory):
+    """
+    Factory for creating backtest engines following the standard factory pattern.
+    
+    This factory creates and manages instances of backtest engines, providing
+    consistent interface for engine creation, discovery, and metadata access.
+    """
+    
+    _instances = {}
     
     def __init__(self, config: ConfigManager):
-        """Initialize backtest factory"""
+        """
+        Initialize backtest engine factory
+        
+        Args:
+            config: Configuration manager instance
+        """
         super().__init__(config)
-        self.logger = LogManager.get_logger("backtest.factory")
-        self.default_engine = config.get("backtest", "engine", default="standard")
         
-        # Register default backtest engines
+        # Initialize logger with proper category
+        self.logger = LogManager.get_logger(f"factory.{self.__class__.__name__.lower()}")
+        
+        # Register built-in engines
         self._register_default_engines()
-    
-    def _register_default_engines(self):
-        """Register default backtest engines"""
-        # Register standard backtest engine
-        self.register("standard", "src.backtest.engine.base.BaseBacktestEngine", {
-            "description": "Standard Backtest Engine with factor-based data management"
-        })
         
-        # Register additional engines
-        self.register("ohlcv", "src.backtest.engine.ohlcv.OHLCVEngine", {
-            "description": "OHLCV Backtest Engine for vectorized backtesting"
-        })
-        self.register("market_replay", "src.backtest.engine.market_replay.MarketReplayEngine", {
-            "description": "Market Replay Engine for sequential data processing"
-        })
+        # Auto-discover additional engines
+        self._discover_backtest_engines()
     
-    async def _get_concrete_class(self, name: str):
-        """Get concrete backtest engine class"""
+    def _register_default_engines(self) -> None:
+        """Register default backtest engines with consistent metadata"""
+        # Register OHLCV backtest engine
+        self.register(
+            BacktestEngine.OHLCV.value,
+            "src.backtest.ohlcv.OHLCVEngine", 
+            {
+                "description": "OHLCV Backtest Engine for vectorized backtesting",
+                "category": "backtest",
+                "features": ["vectorized", "ohlcv", "performance_optimized"]
+            }
+        )
+        
+        # Register Market Replay engine
+        self.register(
+            BacktestEngine.MARKETREPLAY.value,
+            "src.backtest.market_replay.MarketReplayEngine", 
+            {
+                "description": "Market Replay Engine for sequential data processing",
+                "category": "backtest",
+                "features": ["sequential", "realistic_execution", "detailed_simulation"]
+            }
+        )
+        
+        # Optional: Register any other built-in engines
+        self.register(
+            "event_driven",  # Consider adding to BacktestEngine enum if widely used
+            "src.backtest.event_driven.EventDrivenEngine", 
+            {
+                "description": "Event-Driven Backtest Engine for complex event processing",
+                "category": "backtest",
+                "features": ["event_based", "advanced_simulation", "multi_asset"]
+            }
+        )
+        
+        self.logger.info("Registered default backtest engines")
+    
+    def _discover_backtest_engines(self) -> None:
+        """Auto-discover additional backtest engine modules"""
         try:
-            # Try loading by name
-            if name in self._registry:
-                class_path = self._registry[name]
-                
-                if isinstance(class_path, str):
-                    # Load from path
-                    module_path, class_name = class_path.rsplit('.', 1)
-                    module = importlib.import_module(module_path)
-                    return getattr(module, class_name)
-                else:
-                    # Return already loaded class
-                    return class_path
-            
-            self.logger.error(f"Unknown backtest engine: {name}")
-            raise ValueError(f"Unknown backtest engine: {name}")
-            
-        except (ImportError, AttributeError) as e:
-            self.logger.error(f"Error loading backtest engine '{name}': {e}")
-            raise
+            # Discover implementations from the engines directory
+            module_path = "src.backtest"
+            self.discover_registrable_classes(
+                BaseBacktestEngine, 
+                module_path, 
+                "backtest_engine_factory"
+            )
+            self.logger.debug(f"Discovered additional backtest engines from {module_path}")
+        except Exception as e:
+            self.logger.error(f"Error during backtest engine discovery: {str(e)}")
     
     async def _resolve_name(self, name: Optional[str]) -> str:
-        """Resolve engine name with default fallback"""
-        name = name or self.default_engine
-        if not name:
-            raise ValueError("No engine name provided and no default in config")
-        return name.lower()
+        """
+        Resolve engine name, falling back to default from config if none provided
+        
+        Args:
+            name: Engine name or None
+            
+        Returns:
+            str: Resolved engine name
+            
+        Raises:
+            ValueError: If no valid engine name could be resolved
+        """
+        # If name is provided, normalize it
+        if name:
+            return name.lower()
+            
+        # Get default from config with hierarchical path
+        default_engine = self.config.get("backtest", "engine", "default", default=BacktestEngine.OHLCV.value)
+        
+        if not default_engine:
+            raise ValueError("No engine name provided and no default engine configured")
+            
+        self.logger.debug(f"Using default backtest engine: {default_engine}")
+        return default_engine.lower()
     
-    async def create_engine(self, engine_name: str, params: Optional[Dict[str, Any]] = None):
-        """Create and initialize backtest engine"""
-        engine = await self.create(engine_name, params)
-        await engine.initialize()
-        return engine
+    async def _get_concrete_class(self, name: str) -> Type[BaseBacktestEngine]:
+        """
+        Get concrete backtest engine class by name
+        
+        Args:
+            name: Engine name
+            
+        Returns:
+            Type[BaseBacktestEngine]: Engine class
+            
+        Raises:
+            ComponentLoadError: If the component could not be loaded
+        """
+        return await self._load_class_from_path(name, BaseBacktestEngine)
     
     def get_available_engines(self) -> Dict[str, Dict[str, Any]]:
-        """Get all available backtest engines with metadata"""
-        engines = {}
-        for name, info in self._registry.items():
-            if name in self._metadata:
-                engines[name] = self._metadata[name]
-            else:
-                engines[name] = {"description": "Backtest engine"}
-        return engines
+        """
+        Get list of all available backtest engines with metadata
+        
+        Returns:
+            Dict[str, Dict[str, Any]]: Engine names mapped to their metadata
+        """
+        result = {}
+        for name, info in self.get_registered_items().items():
+            metadata = info.get('metadata', {})
+            result[name] = metadata
+            
+        # Ensure all enum values are included
+        for engine in BacktestEngine:
+            if engine.value not in result:
+                result[engine.value] = {
+                    "description": self._get_default_description(engine),
+                    "features": [],
+                    "category": "backtest"
+                }
+                
+        return result
+    
+    def _get_default_description(self, engine: BacktestEngine) -> str:
+        """
+        Get default description for backtest engine when not available
+        
+        Args:
+            engine: Backtest engine enum
+            
+        Returns:
+            str: Default description
+        """
+        descriptions = {
+            BacktestEngine.OHLCV: "OHLCV Backtest Engine for vectorized backtesting",
+            BacktestEngine.MARKETREPLAY: "Market Replay Engine for sequential data processing"
+        }
+        return descriptions.get(engine, "Unknown backtest engine")
+    
+    def get_engine_features(self, engine_name: str) -> List[str]:
+        """
+        Get features of a specific backtest engine
+        
+        Args:
+            engine_name: Name of the engine
+            
+        Returns:
+            List[str]: List of features
+        """
+        metadata = self._metadata.get(engine_name.lower(), {})
+        return metadata.get('features', [])
+    
+    async def create_backtest_engine(self, name: Optional[str] = None) -> BaseBacktestEngine:
+        """
+        Create a backtest engine with parameters from configuration
+        
+        Args:
+            name: Optional engine name
+            
+        Returns:
+            BaseBacktestEngine: Backtest engine instance
+        """
+        resolved_name = await self._resolve_name(name)
+        
+        # Get engine-specific configuration
+        engine_config = self.config.get("backtest", "engines", resolved_name, default={})
+        
+        return await self.create(resolved_name, params=engine_config)
 
 
-# Singleton instance getter
-def get_backtest_factory(config: ConfigManager) -> BacktestFactory:
-    """Get or create singleton instance of BacktestFactory"""
-    return BacktestFactory.get_instance(config)
+def get_backtest_engine_factory(config: ConfigManager) -> BacktestEngineFactory:
+    """
+    Get or create singleton instance of BacktestEngineFactory
+    
+    Args:
+        config: Configuration manager
+    
+    Returns:
+        BacktestEngineFactory: Singleton instance
+    """
+    return BacktestEngineFactory.get_instance(config)

@@ -240,7 +240,7 @@ class LogManager:
     def _setup_logging(self, config):
         """Configure logging from a config object"""
         try:
-            from src.common.config import ConfigManager
+            from src.common.config_manager import ConfigManager
             if not isinstance(config, ConfigManager):
                 raise ValueError("Config must be a ConfigManager instance")
                 

@@ -9,10 +9,10 @@ from datetime import datetime, timedelta
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from src.common.config import ConfigManager
+from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
 from src.common.helpers import TimeUtils
-from src.datasource.sources import DataSource, DataSourceFactory
+from src.datasource.sources.factory import DataSource, get_datasource_factory
 from src.datasource.integrity import DataIntegrityChecker
 from src.datasource.engine import DataEngine
 from src.datasource.processor import DataProcessor
@@ -37,7 +37,6 @@ class DataManager:
         self.logger = LogManager.get_logger("data.manager")
         
         self.mode = self.config.get("system", "operational_mode", default="backtest").upper()
-        self._init_data_sources()    # Create appropriate data sources
         
         # Data cache settings
         self.use_cache = config.get("data", "cache", "enabled", default=True)
@@ -64,39 +63,39 @@ class DataManager:
         
         self.logger.info(f"DataManager initialized: source={self.source_type}, mode={self.mode}, cache={'enabled' if self.use_cache else 'disabled'}")
     
-    def _init_data_sources(self) -> None:
+    async def initialize(self) -> None:
         """Initialize appropriate data sources based on mode and source_type"""
         try:
-            factory = DataSourceFactory()
+            datasource_factory = get_datasource_factory(self.config)
             
             # For backtest mode
             if self.mode == "BACKTEST":
                 if self.source_type == "hybrid":
-                    self.primary_source = factory.create_source("local", self.config)
-                    self.backup_source = factory.create_source("exchange", self.config)
+                    self.primary_source = await datasource_factory.create_datasource("local")
+                    self.backup_source = await datasource_factory.create_datasource("exchange")
                 else:
-                    self.primary_source = factory.create_source(self.source_type, self.config)
+                    self.primary_source = await datasource_factory.create_datasource(self.source_type)
                     self.backup_source = None
             
             # For live and paper trading
             elif self.mode in ["LIVE", "PAPER"]:
                 if self.source_type == "local":
                     self.logger.warning(f"Local source not ideal for {self.mode} mode, using hybrid source")
-                    self.primary_source = factory.create_source("hybrid", self.config)
+                    self.primary_source = await datasource_factory.create_datasource("hybrid")
                 else:
-                    self.primary_source = factory.create_source(self.source_type, self.config)
+                    self.primary_source = await datasource_factory.create_datasource(self.source_type)
                 
                 # Always have a local backup
                 if not isinstance(self.primary_source, DataSource):
-                    self.backup_source = factory.create_source("local", self.config)
+                    self.backup_source = await datasource_factory.create_datasource("local")
                 else:
                     self.backup_source = None
             
             # Unknown mode
             else:
                 self.logger.warning(f"Unknown trading mode: {self.mode}, defaulting to local source")
-                self.primary_source = factory.create_source("local", self.config)
-                self.backup_source = None
+                self.primary_source = await datasource_factory.create_datasource("local")
+                self.backup_source = await datasource_factory.create_datasource("exchange")
                 
         except Exception as e:
             self.logger.error(f"Error initializing data sources: {str(e)}")
@@ -264,12 +263,12 @@ class DataManager:
             await self.downloader.close()
             
     async def _fetch_and_validate_data(self,
-                                      source: Any,
-                                      symbol: str,
-                                      timeframe: str,
-                                      start: Optional[Union[str, datetime]],
-                                      end: Optional[Union[str, datetime]],
-                                      source_name: str = "unknown") -> pd.DataFrame:
+                                    source: Any,
+                                    symbol: str,
+                                    timeframe: str,
+                                    start: Optional[Union[str, datetime]],
+                                    end: Optional[Union[str, datetime]],
+                                    source_name: str = "unknown") -> pd.DataFrame:
         """
         Fetch data from a source and validate/fix it if needed
         
@@ -285,6 +284,12 @@ class DataManager:
             pd.DataFrame: Validated data
         """
         try:
+            # Check if source has fetch_historical method
+            if not hasattr(source, 'fetch_historical') or not callable(getattr(source, 'fetch_historical')):
+                self.logger.error(f"{source_name} source does not have a fetch_historical method")
+                return pd.DataFrame()
+            
+            # Fetch data
             data = await source.fetch_historical(
                 symbol=symbol,
                 timeframe=timeframe,
@@ -534,7 +539,39 @@ class DataManager:
             end = datetime.now()
             start = end - timedelta(hours=1)  # Get last hour
             return await self.get_historical_data(symbol, timeframe, start, end)
+    
+    async def get_latest_data_for_symbols(self, symbols: List[str], timeframe: str) -> Dict[str, pd.DataFrame]:
+        """
+        Get the latest data for multiple symbols
+        
+        Args:
+            symbols: List of symbols to fetch data for
+            timeframe: Data timeframe
             
+        Returns:
+            Dict[str, pd.DataFrame]: Symbol -> DataFrame mapping
+        """
+        result = {}
+        
+        # Create tasks to load data for each symbol concurrently
+        tasks = []
+        for symbol in symbols:
+            tasks.append(self.get_real_time_data(symbol, timeframe))
+        
+        # Run all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results
+        for i, data in enumerate(results):
+            symbol = symbols[i]
+            
+            if isinstance(data, Exception):
+                self.logger.error(f"Error loading real-time data for {symbol}: {data}")
+            elif data is not None and not data.empty:
+                result[symbol] = data
+        
+        return result
+
     async def get_orderbook(self, symbol: str, limit: int = 10) -> Dict[str, Any]:
         """
         Get latest orderbook data (for live trading modes)
@@ -704,14 +741,14 @@ class DataManager:
         # Close data sources
         if hasattr(self, 'primary_source') and self.primary_source:
             try:
-                await self.primary_source.close()
+                await self.primary_source.shutdown()
                 self.logger.debug("Closed primary data source")
             except Exception as e:
                 self.logger.error(f"Error closing primary data source: {e}")
                 
         if hasattr(self, 'backup_source') and self.backup_source:
             try:
-                await self.backup_source.close()
+                await self.backup_source.shutdown()
                 self.logger.debug("Closed backup data source")
             except Exception as e:
                 self.logger.error(f"Error closing backup data source: {e}")

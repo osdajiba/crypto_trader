@@ -6,26 +6,21 @@ import asyncio
 import os
 import json
 import csv
+import time
+import logging
 import functools
 import pandas as pd
 import aiofiles
 import pyarrow as pa
 import pyarrow.parquet as pq
-from enum import Enum
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Callable, Tuple, Union
 
-
 from src.common.log_manager import LogManager
+
+
 logger = LogManager.get_logger("helpers")
 
-
-class TradingMode(Enum):
-    """Centralize the definition of transaction mode types"""
-    BACKTEST = "backtest"
-    PAPER = "paper"
-    LIVE = "live"
-    
     
 class TimeUtils:
     """Enhanced time processing utility class"""
@@ -250,7 +245,138 @@ class TimeUtils:
         else:
             raise ValueError(f"Unsupported timeframe unit: {unit}")
         
+# Global registry for tracking execution times
+performance_registry = {}
 
+def time_func(name: Optional[str] = None):
+    """
+    Decorator to track function execution time
+    
+    Args:
+        name: Optional custom name for the function in logs
+    
+    Returns:
+        Decorator function
+    """
+    def decorator(func):
+        func_name = name or func.__qualname__
+        
+        # Handle both async and sync functions
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = await func(*args, **kwargs)
+                    return result
+                finally:
+                    execution_time = time.time() - start_time
+                    
+                    # Get logger from first argument if it's a class method
+                    logger = None
+                    if args and hasattr(args[0], 'logger'):
+                        logger = args[0].logger
+                    else:
+                        logger = logging.getLogger(func.__module__)
+                    
+                    # Log execution time
+                    logger.debug(f"PERF: {func_name} executed in {execution_time:.4f}s")
+                    
+                    # Store in registry
+                    if func_name not in performance_registry:
+                        performance_registry[func_name] = []
+                    performance_registry[func_name].append(execution_time)
+            
+            return async_wrapper
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                finally:
+                    execution_time = time.time() - start_time
+                    
+                    # Get logger from first argument if it's a class method
+                    logger = None
+                    if args and hasattr(args[0], 'logger'):
+                        logger = args[0].logger
+                    else:
+                        logger = logging.getLogger(func.__module__)
+                    
+                    # Log execution time
+                    logger.debug(f"PERF: {func_name} executed in {execution_time:.4f}s")
+                    
+                    # Store in registry
+                    if func_name not in performance_registry:
+                        performance_registry[func_name] = []
+                    performance_registry[func_name].append(execution_time)
+            
+            return sync_wrapper
+        
+    return decorator
+
+
+def get_performance_metrics() -> Dict[str, Dict[str, float]]:
+    """
+    Get performance metrics for all tracked functions
+    
+    Returns:
+        Dict with function names as keys and metrics as values
+    """
+    metrics = {}
+    
+    for func_name, times in performance_registry.items():
+        if not times:
+            continue
+            
+        # Calculate statistics
+        avg_time = sum(times) / len(times)
+        max_time = max(times)
+        min_time = min(times)
+        total_time = sum(times)
+        call_count = len(times)
+        
+        metrics[func_name] = {
+            'avg_time': avg_time,
+            'max_time': max_time,
+            'min_time': min_time,
+            'total_time': total_time,
+            'call_count': call_count
+        }
+    
+    return metrics
+
+
+def reset_performance_metrics() -> None:
+    """Reset all tracked performance metrics"""
+    performance_registry.clear()
+    
+def format_timestamp(timestamp) -> str:
+    """
+    Safely format a timestamp, handling NaT values
+    
+    Args:
+        timestamp: Timestamp to format
+        
+    Returns:
+        str: Formatted timestamp or 'N/A' if NaT
+    """
+    if timestamp is None or pd.isna(timestamp):
+        return 'N/A'
+        
+    if isinstance(timestamp, (str, int, float)):
+        try:
+            timestamp = pd.Timestamp(timestamp)
+        except:
+            return str(timestamp)
+            
+    try:
+        return timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        return str(timestamp)
+    
 class FileUtils:
     """File operation utility class with optimized async operations"""
     
@@ -778,3 +904,99 @@ class ParquetFileManager:
         except Exception as e:
             logger.error(f"Error saving dataframe: {e}")
             return False
+        
+    
+
+class DataCache:
+    """轻量级内存数据缓存"""
+    
+    def __init__(self, max_size=1000, ttl=3600):
+        self.max_size = max_size
+        self.ttl = ttl  # 条目生存时间(秒)
+        self._cache = {}
+        self._access_times = {}
+        self._insert_times = {}
+    
+    def get(self, key, default=None):
+        """获取缓存内容，考虑TTL"""
+        if key not in self._cache:
+            return default
+            
+        # 检查是否过期
+        if time.time() - self._insert_times[key] > self.ttl:
+            self.remove(key)
+            return default
+            
+        # 更新访问时间
+        self._access_times[key] = time.time()
+        return self._cache[key]
+    
+    def set(self, key, value):
+        """设置缓存内容"""
+        # 检查容量
+        if len(self._cache) >= self.max_size and key not in self._cache:
+            self._evict()
+            
+        now = time.time()
+        self._cache[key] = value
+        self._access_times[key] = now
+        self._insert_times[key] = now
+    
+    def _evict(self):
+        """逐出最少使用的条目"""
+        if not self._cache:
+            return
+            
+        # 找到最少访问的键
+        oldest_key = min(self._access_times.items(), key=lambda x: x[1])[0]
+        self.remove(oldest_key)
+    
+    def remove(self, key):
+        """移除缓存条目"""
+        if key in self._cache:
+            del self._cache[key]
+            del self._access_times[key]
+            del self._insert_times[key]
+            
+    def clear(self):
+        """清空缓存"""
+        self._cache.clear()
+        self._access_times.clear()
+        self._insert_times.clear()
+    
+    def size(self):
+        """当前缓存大小"""
+        return len(self._cache)
+    
+    
+class Singleton(type):
+    """
+    Singleton metaclass for ensuring only one instance of a class is created.
+    
+    Usage:
+        class MyClass(metaclass=Singleton):
+            pass
+    """
+    
+    _instances = {}
+    
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+    
+    @classmethod
+    def clear_instance(cls, target_cls):
+        """
+        Clear a specific class instance from the registry
+        
+        Args:
+            target_cls: The class whose instance should be cleared
+        """
+        if target_cls in cls._instances:
+            del cls._instances[target_cls]
+    
+    @classmethod
+    def clear_all(cls):
+        """Clear all singleton instances"""
+        cls._instances = {}

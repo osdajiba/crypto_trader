@@ -1,338 +1,406 @@
 #!/usr/bin/env python3
-# src/strategy/multi_factors.py
+# src/strategy/implementations/multi_factors.py
 
 import pandas as pd
-from typing import Dict, Optional, Any, List
-from src.strategy.base import BaseStrategy
-from src.common.config import ConfigManager
+import numpy as np
+from typing import Dict, List, Optional, Any, Union, Tuple
+import asyncio
+import logging
+
 from src.common.abstract_factory import register_factory_class
-from src.common.async_executor import AsyncExecutor
-from src.strategy.factor_lib import IndicatorBase, RsiIndicator, MacdIndicator, BollingerBand, VolumeOscillator
-
-
-class FactorFactory:
-    """Factory for creating technical indicators based on configuration"""
-    
-    @staticmethod
-    def create_factor(factor_type: str, params: Dict[str, Any]) -> IndicatorBase:
-        """
-        Create a factor indicator based on type and parameters
-        
-        Args:
-            factor_type: Type of indicator to create
-            params: Parameters for the indicator
-            
-        Returns:
-            IndicatorBase: Instantiated indicator
-        """
-        if factor_type == 'rsi':
-            period = params.get('period', 14)
-            return RsiIndicator(period=period)
-            
-        elif factor_type == 'macd':
-            fast_period = params.get('fast_period', 12)
-            slow_period = params.get('slow_period', 26)
-            signal_period = params.get('signal_period', 9)
-            return MacdIndicator(fast_period=fast_period, slow_period=slow_period, signal_period=signal_period)
-            
-        elif factor_type == 'bollinger':
-            period = params.get('period', 20)
-            std_dev = params.get('std_dev', 2.0)
-            return BollingerBand(period=period, std_dev=std_dev)
-            
-        elif factor_type == 'volume_osc':
-            fast_period = params.get('fast_period', 5)
-            slow_period = params.get('slow_period', 14)
-            return VolumeOscillator(fast_period=fast_period, slow_period=slow_period)
-            
-        else:
-            raise ValueError(f"Unknown factor type: {factor_type}")
+from src.common.config_manager import ConfigManager
+from src.strategy.base import BaseStrategy
+from src.strategy.factors.factory import get_factor_factory
+from src.strategy.factors.base import SignalType
 
 
 @register_factory_class('strategy_factory', 'multi_factors', 
-                       description="Multi-Factor Trading Strategy",
-                       category="adaptive",
-                       parameters=["factor_config"])
+                      description="Multi-Factor Strategy combining various technical indicators",
+                      category="custom",
+                      features=["multi_factor", "customizable", "technical_indicators"],
+                      parameters=[
+                          {"name": "factors", "type": "list", "default": ["rsi", "macd", "bollinger"], "description": "List of factors to use"},
+                          {"name": "weights", "type": "list", "default": [0.4, 0.3, 0.3], "description": "Weights for each factor"},
+                          {"name": "signal_threshold", "type": "float", "default": 0.6, "description": "Signal strength threshold (0-1)"}
+                      ])
 class MultiFactorsStrategy(BaseStrategy):
     """
-    Implementation of a Multi-Factor strategy that generates trading signals
-    based on a combination of configurable technical indicators.
+    Multi-Factor Strategy that combines multiple technical indicators
     
-    Enhanced with factor registration and efficient data management.
+    This strategy allows flexible combination of technical factors with
+    customizable weights and signal generation methods. It integrates
+    with the factor library for advanced technical analysis.
     """
-
+    
     def __init__(self, config: ConfigManager, params: Optional[Dict[str, Any]] = None):
         """
-        Initialize Multi-Factor Strategy
+        Initialize Multi-Factor strategy with configuration and parameters
         
         Args:
-            config (ConfigManager): Configuration manager instance
-            params (Optional[Dict[str, Any]]): Strategy-specific parameters
-                Expected parameters: factor_config, threshold, symbol, lookback_period
+            config: System configuration manager
+            params: Strategy-specific parameters (optional)
         """
+        # Set default parameters if not provided
+        params = params or {}
+        
+        # Load factors and weights from config if not provided in params
+        params.setdefault("factors", config.get("strategy", "multi_factors", "factors", 
+                                             default=["rsi", "macd", "bollinger"]))
+        params.setdefault("weights", config.get("strategy", "multi_factors", "weights", 
+                                             default=[0.4, 0.3, 0.3]))
+        params.setdefault("signal_threshold", config.get("strategy", "multi_factors", "signal_threshold", 
+                                                     default=0.6))
+        params.setdefault("symbol", config.get("trading", "instruments", 0, default="BTC/USDT"))
+        
+        # Initialize base class
         super().__init__(config, params)
         
-        # Initialize parameters
-        self.threshold = self.params.get("threshold", 0.5)
-        self.primary_symbol = self.params.get("symbol", "unknown")
+        # Store parameters as instance variables
+        self.factors = self.params["factors"]
+        self.weights = self.params["weights"]
+        self.signal_threshold = self.params["signal_threshold"]
+        self.primary_symbol = self.params["symbol"]
         
-        # Get factor configuration
-        self.factor_config = self.params.get("factor_config", {})
-        if not self.factor_config:
-            # Use default config from config file if not specified in params
-            self.factor_config = self.config.get("strategy", "factors", default={})
+        # Factor signal configuration
+        self.factor_signals = self._get_factor_signal_config()
         
-        # Async executor
-        self.executor = AsyncExecutor()
-        self._running_tasks: List[str] = []
+        # Factor instances
+        self._factor_instances = {}
         
-        # Create indicators
-        self.indicators = self._create_indicators()
-        
-        # Register factors during initialization
-        self._register_default_factors()
-
-    def _create_indicators(self) -> Dict[str, IndicatorBase]:
+        # Signal cache
+        self._signal_cache = {}
+    
+    def _determine_required_history(self) -> int:
         """
-        Create indicator instances based on configuration
+        Determine required historical data points for strategy
         
         Returns:
-            Dict[str, IndicatorBase]: Mapping of indicator names to instances
+            int: Number of required data points
         """
-        indicators = {}
+        # Different factors require different amounts of history
+        # Use conservative estimate based on common factor requirements
+        return 100
+    
+    def _get_factor_signal_config(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get factor signal configuration with optimal settings for each factor
         
-        for factor_name, factor_config in self.factor_config.items():
-            factor_type = factor_config.get('type')
-            factor_params = factor_config.get('params', {})
+        Returns:
+            Dict[str, Dict[str, Any]]: Factor signal configuration
+        """
+        # Default configuration - optimized settings for each factor
+        return {
+            # Momentum factors
+            "rsi": {
+                "signal_type": SignalType.THRESHOLD,
+                "params": {"upper_threshold": 70, "lower_threshold": 30}
+            },
+            "macd": {
+                "signal_type": SignalType.CROSSOVER,
+                "params": {"column": "histogram"}
+            },
+            "stochastic": {
+                "signal_type": SignalType.THRESHOLD,
+                "params": {"upper_threshold": 80, "lower_threshold": 20, "column": "k"}
+            },
             
-            try:
-                indicator = FactorFactory.create_factor(factor_type, factor_params)
-                indicators[factor_name] = indicator
-                self.logger.debug(f"Created indicator {factor_name} of type {factor_type}")
-            except Exception as e:
-                self.logger.error(f"Failed to create indicator {factor_name}: {e}")
+            # Trend factors
+            "sma": {
+                "signal_type": SignalType.STANDARD,
+                "params": {}
+            },
+            "ema": {
+                "signal_type": SignalType.STANDARD,
+                "params": {}
+            },
+            "ichimoku": {
+                "signal_type": SignalType.STANDARD,
+                "params": {"column": "tenkan_sen"}
+            },
+            
+            # Volatility factors
+            "bollinger": {
+                "signal_type": SignalType.THRESHOLD,
+                "params": {"upper_threshold": 1.0, "lower_threshold": 0.0, "column": "percent_b"}
+            },
+            "atr": {
+                "signal_type": SignalType.STANDARD,
+                "params": {}
+            },
+            "adx": {
+                "signal_type": SignalType.THRESHOLD,
+                "params": {"upper_threshold": 25, "lower_threshold": 20, "column": "adx"}
+            },
+            
+            # Volume factors
+            "obv": {
+                "signal_type": SignalType.MOMENTUM,
+                "params": {}
+            },
+            "mfi": {
+                "signal_type": SignalType.THRESHOLD,
+                "params": {"upper_threshold": 80, "lower_threshold": 20}
+            },
+            "volume_osc": {
+                "signal_type": SignalType.CROSSOVER,
+                "params": {}
+            }
+        }
+    
+    async def _initialize_strategy(self) -> None:
+        """Perform strategy-specific initialization"""
+        # Create factor factory
+        self.factor_factory = get_factor_factory(self.config)
         
-        return indicators
-
-    def _register_default_factors(self) -> None:
-        """
-        Register technical factors based on configuration
-        """
-        # Register all configured factors
-        for factor_name, indicator in self.indicators.items():
-            factor_config = self.factor_config.get(factor_name, {})
-            window_size = factor_config.get('window_size', 0)
-            is_differential = factor_config.get('is_differential', False)
-            
-            # Get dependencies
-            depends_on = factor_config.get('depends_on', [])
-            
-            # Generate factor calculation function
-            def create_calc_func(indicator, factor_name):
-                def calc_func(data, **kwargs):
-                    result = indicator.calculate(data)
-                    
-                    # Handle different return types (Series or DataFrame)
-                    if isinstance(result, pd.DataFrame):
-                        if factor_name in result.columns:
-                            return result[factor_name]
-                        else:
-                            # For indicators that return multiple columns (like MACD)
-                            # Use the first column by default
-                            return result.iloc[:, 0]
-                    return result
-                return calc_func
-            
-            # Register the factor
-            self.register_factor(
-                factor_name, 
-                window_size, 
-                create_calc_func(indicator, factor_name),
-                depends_on=depends_on,
-                is_differential=is_differential
+        # Validate factors list
+        available_factors = self.factor_factory.get_available_factors()
+        for factor in self.factors:
+            if factor not in available_factors:
+                self.logger.warning(
+                    f"Unknown factor '{factor}'. Available factors: {list(available_factors.keys())}"
+                )
+        
+        # Validate weights
+        if len(self.weights) != len(self.factors):
+            self.logger.warning(
+                f"Number of weights ({len(self.weights)}) does not match "
+                f"number of factors ({len(self.factors)}). Using equal weights."
             )
-            
-            self.logger.debug(f"Registered factor: {factor_name}")
+            self.weights = [1.0 / len(self.factors)] * len(self.factors)
         
-        # Register composite factor that combines all other factors
-        factor_names = list(self.indicators.keys())
-        self.register_composite_factor(factor_names)
+        # Normalize weights to sum to 1
+        weight_sum = sum(self.weights)
+        if weight_sum != 1.0:
+            self.weights = [w / weight_sum for w in self.weights]
         
-        self.logger.info(f"Registered {len(self.indicators)} factors and a composite signal")
-
-    def register_composite_factor(self, factor_names: List[str]) -> None:
-        """
-        Register a composite factor that combines individual factors
+        # Initialize factor instances
+        for factor_name in self.factors:
+            try:
+                factor_instance = await self.factor_factory.create(factor_name)
+                if factor_instance:
+                    self._factor_instances[factor_name] = factor_instance
+                    self.logger.debug(f"Initialized factor: {factor_name}")
+                else:
+                    self.logger.warning(f"Failed to create factor: {factor_name}")
+            except Exception as e:
+                self.logger.error(f"Error creating factor {factor_name}: {e}")
         
-        Args:
-            factor_names: List of factor names to combine
-        """
-        def calculate_composite(data: pd.DataFrame, **kwargs) -> pd.Series:
-            # Get factor weights from config
-            weights = {}
-            scores = pd.Series(0, index=data.index)
-            
-            for factor_name in factor_names:
-                if factor_name not in kwargs:
-                    continue
-                    
-                factor_config = self.factor_config.get(factor_name, {})
-                weight = factor_config.get('weight', 1.0)
-                weights[factor_name] = weight
-                
-                factor_value = kwargs[factor_name]
-                
-                # Apply normalization if configured
-                normalize = factor_config.get('normalize', True)
-                if normalize:
-                    # Simple min-max normalization
-                    min_val = factor_value.min()
-                    max_val = factor_value.max()
-                    if max_val > min_val:
-                        factor_value = (factor_value - min_val) / (max_val - min_val)
-                
-                # Apply signals based on factor type
-                signal_type = factor_config.get('signal_type', 'standard')
-                
-                if signal_type == 'crossover':
-                    # Zero crossover
-                    signal = ((factor_value > 0) & (factor_value.shift(1) <= 0)).astype(float)
-                    signal -= ((factor_value < 0) & (factor_value.shift(1) >= 0)).astype(float)
-                
-                elif signal_type == 'threshold':
-                    upper = factor_config.get('upper_threshold', 0.7)
-                    lower = factor_config.get('lower_threshold', 0.3)
-                    signal = ((factor_value < lower)).astype(float)  # Bullish when below lower
-                    signal -= ((factor_value > upper)).astype(float)  # Bearish when above upper
-                
-                elif signal_type == 'momentum':
-                    signal = factor_value.diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
-                
-                else:  # standard
-                    signal = factor_value
-                
-                scores += signal * weight
-            
-            # Normalize final score if we have weights
-            if weights:
-                total_weight = sum(weights.values())
-                if total_weight > 0:
-                    scores = scores / total_weight
-            
-            return scores
+        self.logger.info(
+            f"Initialized MultiFactorsStrategy with factors: {self.factors}, "
+            f"weights: {self.weights}, threshold: {self.signal_threshold}"
+        )
+    
+    async def shutdown(self) -> None:
+        """Clean up strategy resources"""
+        # Clear factor instances and caches
+        self._factor_instances.clear()
+        self._signal_cache.clear()
         
-        # Register composite factor with dependencies on all individual factors
-        self.register_factor('composite_signal', 1, calculate_composite, depends_on=factor_names)
-
-    async def initialize(self) -> None:
-        """Initialize resources and validate parameters"""
-        # Start executor
-        await self.executor.start()
-        
-        # Parent class initialization
-        await super().initialize()
-        
-        # Check that we have at least one factor
-        if not self.indicators:
-            self.logger.error("No valid factors configured")
-            raise ValueError("At least one valid factor must be configured")
-        
-        # Calculate required lookback from factors
-        required_lookback = max(
-            [config.get('window_size', 30) for config in self.factor_config.values()],
-            default=30
-        ) * 2
-        
-        # Adjust lookback period if needed
-        if self.lookback_period < required_lookback:
-            self.logger.warning(f"lookback_period ({self.lookback_period}) is less than recommended ({required_lookback}), adjusting")
-            self.lookback_period = required_lookback
-            
-        self.logger.info(f"Initialized MultiFactorsStrategy with {len(self.indicators)} factors")
-
+        # Call base class shutdown
+        await super().shutdown()
+    
     async def _generate_signals(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Generate trading signals based on market data
+        Generate trading signals based on multiple factors
         
         Args:
-            data (pd.DataFrame): Market data for signal generation (e.g. OHLCV)
-
-        Returns:
-            pd.DataFrame: Signals containing 'timestamp', 'symbol', 'action' (buy/sell) columns
-        """
-        self.logger.info("Generating signals for MultiFactorsStrategy")
-        
-        if data.empty:
-            self.logger.warning("Empty data, cannot generate signals")
-            return pd.DataFrame()
-        
-        # Get the symbol
-        symbol = self.primary_symbol
-        if '_symbol' in data.columns:
-            if not data.empty:
-                symbol = data['_symbol'].iloc[0]
-        
-        # Calculate composite signal
-        composite = self.calculate_factor(data, 'composite_signal', symbol)
-        
-        # Create signal DataFrame
-        signals = pd.DataFrame(index=data.index)
-        signals['timestamp'] = data.index
-        signals['symbol'] = symbol
-        signals['action'] = None  # Initialize with None
-        
-        # Generate buy/sell signals based on composite score
-        buy_threshold = self.threshold
-        sell_threshold = -self.threshold
-        
-        # Buy signal when composite score crosses above threshold
-        buy_signal = (composite > buy_threshold) & (composite.shift(1) <= buy_threshold)
-        signals.loc[buy_signal, 'action'] = 'buy'
-        
-        # Sell signal when composite score crosses below negative threshold
-        sell_signal = (composite < sell_threshold) & (composite.shift(1) >= sell_threshold)
-        signals.loc[sell_signal, 'action'] = 'sell'
-        
-        # Drop rows with no action
-        signals = signals.dropna(subset=['action'])
-        
-        # Add price information if needed for order sizing
-        if 'close' in data.columns:
-            signals['price'] = data.loc[signals.index, 'close']
-        
-        # Calculate position size based on available capital
-        if 'price' in signals.columns:
-            for idx, row in signals.iterrows():
-                if row['action'] == 'buy':
-                    signals.at[idx, 'quantity'] = self.calculate_position_size(row['price'], 
-                                                                          self.config.get("trading", "capital", "initial", default=100000))
-        
-        self.logger.info(f"Generated {len(signals)} signals for {symbol}")
-        return signals
-    
-    def calculate_position_size(self, price: float, capital: float) -> float:
-        """
-        Calculate position size based on price and available capital
-        
-        Args:
-            price (float): Current asset price
-            capital (float): Available capital
+            data: Market data with sufficient history
             
         Returns:
-            float: Position size
+            pd.DataFrame: Trading signals
         """
-        # Get risk settings from params or config
-        risk_per_trade = self.params.get("risk_per_trade", 0.01)  # Default 1% risk
-        max_position = self.config.get("trading", "limits", "position", default=0.1)  # Default max 10%
+        if data.empty:
+            return pd.DataFrame()
         
-        # Calculate position size
-        risk_amount = capital * risk_per_trade
-        max_amount = capital * max_position
+        # Get symbol from data
+        symbol = data['symbol'].iloc[0] if 'symbol' in data.columns else self.primary_symbol
         
-        # Use smaller of the two values
-        position_value = min(risk_amount, max_amount)
+        # Calculate factor signals and weights
+        factor_signals = self._calculate_factor_signals(data)
         
-        # Convert to quantity
-        quantity = position_value / price if price > 0 else 0
+        # Calculate combined signal strength for most recent data point
+        signal_strength = 0.0
+        buy_factors = []
+        sell_factors = []
         
-        return quantity
+        for i, factor_name in enumerate(self.factors):
+            if factor_name in factor_signals and not factor_signals[factor_name].empty:
+                factor_value = factor_signals[factor_name].iloc[-1]
+                factor_weight = self.weights[i]
+                
+                # Accumulate signal strength
+                signal_strength += factor_value * factor_weight
+                
+                # Track contributing factors
+                if factor_value > 0:
+                    buy_factors.append(factor_name)
+                elif factor_value < 0:
+                    sell_factors.append(factor_name)
+        
+        # Generate signal if strength exceeds threshold
+        current_price = data['close'].iloc[-1]
+        signals = []
+        
+        if signal_strength >= self.signal_threshold:
+            # Buy signal
+            quantity = self.calculate_position_size(float(current_price), symbol)
+            
+            signal_data = {
+                'timestamp': data.index[-1] if isinstance(data.index, pd.DatetimeIndex) else (
+                    data['datetime'].iloc[-1] if 'datetime' in data.columns else 
+                    data['timestamp'].iloc[-1] if 'timestamp' in data.columns else 
+                    pd.Timestamp.now()
+                ),
+                'symbol': symbol,
+                'action': 'buy',
+                'price': float(current_price),
+                'quantity': quantity,
+                'signal_strength': float(signal_strength),
+                'reason': f"Multi-factor buy signal: {', '.join(buy_factors)}",
+                'factors': buy_factors
+            }
+            
+            signals.append(signal_data)
+            
+            self.logger.info(
+                f"Generated BUY signal for {symbol} @ ${float(current_price):.2f}, "
+                f"quantity: {quantity:.6f}, strength: {float(signal_strength):.2f}"
+            )
+            
+        elif signal_strength <= -self.signal_threshold:
+            # Sell signal
+            quantity = self.calculate_position_size(float(current_price), symbol)
+            
+            signal_data = {
+                'timestamp': data.index[-1] if isinstance(data.index, pd.DatetimeIndex) else (
+                    data['datetime'].iloc[-1] if 'datetime' in data.columns else 
+                    data['timestamp'].iloc[-1] if 'timestamp' in data.columns else 
+                    pd.Timestamp.now()
+                ),
+                'symbol': symbol,
+                'action': 'sell',
+                'price': float(current_price),
+                'quantity': quantity,
+                'signal_strength': float(signal_strength),
+                'reason': f"Multi-factor sell signal: {', '.join(sell_factors)}",
+                'factors': sell_factors
+            }
+            
+            signals.append(signal_data)
+            
+            self.logger.info(
+                f"Generated SELL signal for {symbol} @ ${float(current_price):.2f}, "
+                f"quantity: {quantity:.6f}, strength: {float(signal_strength):.2f}"
+            )
+        
+        return pd.DataFrame(signals)
+    
+    def _calculate_factor_signals(self, data: pd.DataFrame) -> Dict[str, pd.Series]:
+        """
+        Calculate signals for all factors
+        
+        Args:
+            data: Market data
+            
+        Returns:
+            Dict[str, pd.Series]: Factor signals
+        """
+        factor_signals = {}
+        
+        # Calculate signals for each factor
+        for factor_name in self.factors:
+            if factor_name in self._factor_instances:
+                try:
+                    factor = self._factor_instances[factor_name]
+                    
+                    # Get signal configuration for this factor
+                    signal_config = self.factor_signals.get(factor_name, {
+                        "signal_type": SignalType.STANDARD,
+                        "params": {}
+                    })
+                    
+                    # Generate signal
+                    signal = factor.generate_signal(
+                        data, 
+                        signal_type=signal_config["signal_type"],
+                        params=signal_config["params"]
+                    )
+                    
+                    factor_signals[factor_name] = signal
+                    
+                except Exception as e:
+                    self.logger.error(f"Error calculating signal for {factor_name}: {e}")
+        
+        # Update signal cache with most recent values
+        self._update_signal_cache(data, factor_signals)
+        
+        return factor_signals
+    
+    def _update_signal_cache(self, data: pd.DataFrame, factor_signals: Dict[str, pd.Series]) -> None:
+        """
+        Update signal cache with most recent values
+        
+        Args:
+            data: Market data
+            factor_signals: Factor signals
+        """
+        # Get symbol
+        symbol = data['symbol'].iloc[0] if 'symbol' in data.columns else self.primary_symbol
+        
+        # Initialize cache entry if needed
+        if symbol not in self._signal_cache:
+            self._signal_cache[symbol] = {
+                'last_update': pd.Timestamp.now(),
+                'signals': {},
+                'combined_strength': 0.0
+            }
+        
+        # Update cache with latest signal values
+        signals = {}
+        combined_strength = 0.0
+        
+        for i, factor_name in enumerate(self.factors):
+            if factor_name in factor_signals and not factor_signals[factor_name].empty:
+                signal_value = factor_signals[factor_name].iloc[-1]
+                signals[factor_name] = float(signal_value)
+                combined_strength += signal_value * self.weights[i]
+        
+        self._signal_cache[symbol]['last_update'] = pd.Timestamp.now()
+        self._signal_cache[symbol]['signals'] = signals
+        self._signal_cache[symbol]['combined_strength'] = float(combined_strength)
+    
+    def get_factor_signals(self, symbol: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """
+        Get current factor signals
+        
+        Args:
+            symbol: Trading symbol (optional, returns all symbols if None)
+            
+        Returns:
+            Dict with factor signals
+        """
+        if symbol:
+            return {symbol: self._signal_cache.get(symbol, {})}
+        return self._signal_cache
+    
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get strategy status and configuration
+        
+        Returns:
+            Dict with strategy status
+        """
+        return {
+            'name': 'multi_factors',
+            'description': 'Multi-Factor Strategy combining various technical indicators',
+            'parameters': {
+                'factors': self.factors,
+                'weights': self.weights,
+                'signal_threshold': self.signal_threshold
+            },
+            'performance': self.get_performance_stats(),
+            'factor_signals': self.get_factor_signals(),
+            'data_buffers': {
+                symbol: len(df) for symbol, df in self._data_buffer.items()
+            }
+        }
