@@ -11,16 +11,6 @@ import logging
 import ast
 import importlib.util
 
-"""
-=============================================================================
-Trading System Utilities
-
-This file contains utilities for:
-1. Configuration file generation and validation
-2. Requirements.txt generation through project import scanning
-3. Environment checking for the trading system
-=============================================================================
-"""
 
 # Setup logging
 logging.basicConfig(
