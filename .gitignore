@@ -60,4 +60,4 @@ src/strategy/Multi_Factors.py
 # 忽略 Git 相关临时文件
 *.gitignore.un~
 *.gitignore~
-
+venv/
