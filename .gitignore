@@ -37,6 +37,8 @@ __pycache__/
 *.sln.docstates
 
 # 忽略日志和数据库目录
+saved_configs/
+doc/
 logs/
 tmp/
 database/
