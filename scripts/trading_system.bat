@@ -10,7 +10,7 @@ for %%i in ("%SCRIPT_DIR%..") do set "PROJECT_ROOT=%%~fi"
 REM Check environment directly (not as a function to avoid infinite loop)
 echo.
 echo [*] Checking environment and required files...
-python "%PROJECT_ROOT%\src\utils\check_env.py"
+python "%PROJECT_ROOT%\src\common\check_env.py"
 if %ERRORLEVEL% NEQ 0 (
     echo [!] Environment check reported issues that need to be resolved.
     echo Press any key to continue or Ctrl+C to abort...

@@ -19,7 +19,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Check the environment and set the working directory to project root
 echo -e "${BRIGHT}${BLUE}[*] Checking environment and required files...${RESET}"
-python3 "$PROJECT_ROOT/src/utils/check_env.py"
+python3 "$PROJECT_ROOT/src/common/check_env.py"
 if [ $? -ne 0 ]; then
     echo -e "${BRIGHT}${RED}[*] Environment check reported issues that need to be resolved.${RESET}"
     read -p "Press any key to continue or Ctrl+C to abort... " -n1 -s
