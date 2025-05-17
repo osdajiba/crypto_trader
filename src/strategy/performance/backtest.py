@@ -49,7 +49,7 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
                 self.logger.info(f"Loaded backtest benchmark data from {benchmark_file}")
             except Exception as e:
                 self.logger.error(f"Error loading backtest benchmark data: {e}")
-                
+
     def calculate_metrics(self) -> Dict[str, Any]:
         """Calculate comprehensive performance metrics for a strategy
         
@@ -64,9 +64,14 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
             
         # Get equity and returns
         equity = self.equity_history[self.strategy_id]
-        if equity.empty:
+        if len(equity) == 0:  # Use len() instead of empty property
             return {}
             
+        # Convert to datetime index if needed
+        if not isinstance(equity.index, pd.DatetimeIndex):
+            equity.index = pd.to_datetime(equity.index, unit='ms')
+        
+        # Calculate returns
         daily_returns = self.calculate_returns('daily')
         monthly_returns = self.calculate_returns('monthly')
         
@@ -74,11 +79,11 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
         max_drawdown, drawdown_start, drawdown_end = PerformanceMetrics.calculate_max_drawdown(equity)
         
         # Calculate trade metrics
-        trades = self.trade_history[self.strategy_id]
         trade_metrics = {}
-        
-        if not trades.empty and 'profit_pct' in trades.columns:
-            trade_metrics = PerformanceMetrics.calculate_trade_metrics(trades)
+        if self.strategy_id in self.trade_history:
+            trades = self.trade_history[self.strategy_id]
+            if len(trades) > 0 and 'profit_pct' in trades.columns:
+                trade_metrics = PerformanceMetrics.calculate_trade_metrics(trades)
         
         # Calculate CAGR if sufficient history
         cagr = 0.0
@@ -86,15 +91,22 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
             start_date = equity.index[0]
             end_date = equity.index[-1]
             years = (end_date - start_date).days / 365.25
-            start_value = equity.iloc[0]
-            end_value = equity.iloc[-1]
+            start_value = float(equity.iloc[0])  # Convert to float to handle potential Series
+            end_value = float(equity.iloc[-1])   # Convert to float to handle potential Series
             
             if years > 0 and start_value > 0:
                 cagr = PerformanceMetrics.calculate_cagr(start_value, end_value, years)
         
-        # Calculate other metrics
+        # Calculate other metrics - handle potential divide by zero issues
+        total_return = 0.0
+        if len(equity) >= 2:
+            start_value = float(equity.iloc[0])
+            end_value = float(equity.iloc[-1])
+            if start_value > 0:
+                total_return = (end_value / start_value) - 1
+        
         metrics = {
-            'total_return': (equity.iloc[-1] / equity.iloc[0] - 1) if len(equity) >= 2 else 0.0,
+            'total_return': total_return,
             'cagr': cagr,
             'max_drawdown': max_drawdown,
             'drawdown_start': drawdown_start.strftime('%Y-%m-%d') if drawdown_start else None,
@@ -104,15 +116,15 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
             'calmar_ratio': PerformanceMetrics.calculate_calmar_ratio(daily_returns, max_drawdown),
             'volatility': PerformanceMetrics.calculate_volatility(daily_returns),
             'monthly_volatility': PerformanceMetrics.calculate_volatility(monthly_returns, 'monthly'),
-            'last_value': equity.iloc[-1] if not equity.empty else 0.0,
-            'first_date': equity.index[0].strftime('%Y-%m-%d') if not equity.empty else None,
-            'last_date': equity.index[-1].strftime('%Y-%m-%d') if not equity.empty else None,
+            'last_value': float(equity.iloc[-1]) if len(equity) > 0 else 0.0,
+            'first_date': equity.index[0].strftime('%Y-%m-%d') if len(equity) > 0 else None,
+            'last_date': equity.index[-1].strftime('%Y-%m-%d') if len(equity) > 0 else None,
             **trade_metrics
         }
         
         # Add underwater periods analysis
         underwater_periods = PerformanceMetrics.calculate_underwater_periods(equity)
-        if not underwater_periods.empty:
+        if isinstance(underwater_periods, pd.DataFrame) and len(underwater_periods) > 0:
             metrics['underwater_periods_count'] = len(underwater_periods)
             metrics['avg_underwater_duration'] = underwater_periods['duration_days'].mean()
             metrics['max_underwater_duration'] = underwater_periods['duration_days'].max()
@@ -129,16 +141,21 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
                 
                 if len(aligned_dates) >= 2:
                     # Calculate benchmark returns
-                    bench_equity = benchmark_prices[aligned_dates]
+                    bench_equity = benchmark_prices.loc[aligned_dates]
                     bench_returns = bench_equity.pct_change().dropna()
                     
                     # Calculate comparison metrics
-                    strat_returns = equity[aligned_dates].pct_change().dropna()
+                    strat_returns = equity.loc[aligned_dates].pct_change().dropna()
+                    
+                    # Safe calculation of benchmark return
+                    bench_start = float(bench_equity.iloc[0])
+                    bench_end = float(bench_equity.iloc[-1])
+                    bench_return = (bench_end / bench_start - 1) if bench_start > 0 else 0.0
                     
                     metrics.update({
                         'beta': PerformanceMetrics.calculate_beta(strat_returns, bench_returns),
                         'alpha': PerformanceMetrics.calculate_alpha(strat_returns, bench_returns, self.risk_free_rate / 252),
-                        'benchmark_return': (bench_equity.iloc[-1] / bench_equity.iloc[0] - 1),
+                        'benchmark_return': bench_return,
                         'benchmark_sharpe': PerformanceMetrics.calculate_sharpe_ratio(bench_returns, self.risk_free_rate / 252),
                         'benchmark_volatility': PerformanceMetrics.calculate_volatility(bench_returns),
                         'correlation': strat_returns.corr(bench_returns)
@@ -153,7 +170,6 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
         """Save performance data to file
         
         Args:
-            self.strategy_id: Strategy identifier
             filepath: Optional file path
             
         Returns:
@@ -165,38 +181,65 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
         # Generate default filepath if not provided
         if filepath is None:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filepath = os.path.join(self.storage_path, f"{self.strategy_id}_performance_{timestamp}.json")
+            filepath = os.path.join(
+                self.storage_path, 
+                f"{self.strategy_id}_performance_{timestamp}.json"
+            )
             
         # Calculate metrics
         metrics = self.calculate_metrics()
-        
+                
         # Helper function to make data JSON-serializable
         def make_serializable(obj):
-            if pd.isna(obj):
-                return None
-            if isinstance(obj, pd.Timestamp):
-                return obj.strftime('%Y-%m-%d %H:%M:%S')
-            if isinstance(obj, datetime):
-                return obj.strftime('%Y-%m-%d %H:%M:%S')
-            if isinstance(obj, (pd.Series, pd.DataFrame)):
-                return obj.to_dict()
-            if isinstance(obj, np.integer):
-                return int(obj)
-            if isinstance(obj, np.floating):
-                return float(obj)
-            if isinstance(obj, (list, tuple)):
-                return [make_serializable(item) for item in obj]
             if isinstance(obj, dict):
                 return {k: make_serializable(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple)):
+                return [make_serializable(item) for item in obj]
+            if isinstance(obj, (pd.Timestamp, datetime)):
+                return obj.strftime('%Y-%m-%d %H:%M:%S')
+            if isinstance(obj, pd.Series):
+                return make_serializable(obj.to_dict())
+            if isinstance(obj, pd.DataFrame):
+                return make_serializable(obj.to_dict(orient='records'))
+            if isinstance(obj, np.ndarray):
+                return make_serializable(obj.tolist())
+            if isinstance(obj, np.generic):
+                return obj.item()
+                
+            try:
+                if pd.isna(obj):
+                    return None
+            except TypeError:
+                pass
+                
             return obj
-        
+
+        # Helper to safely get history records (修复版)
+        def get_history_records(history_dict, reset_index=False):
+            entry = history_dict.get(self.strategy_id)
+            
+            # 确保返回列表类型
+            if isinstance(entry, pd.DataFrame):
+                df = entry.reset_index() if reset_index else entry
+                return df.to_dict(orient='records')
+            if isinstance(entry, pd.Series):
+                s = entry.reset_index() if reset_index else entry
+                return s.to_dict()
+            return []  # 统一返回空列表而不是字典
+
         # Prepare data for serialization
         data = {
-            'self.strategy_id': self.strategy_id,
+            'strategy_id': self.strategy_id,
             'metrics': make_serializable(metrics),
-            'equity': make_serializable(self.equity_history[self.strategy_id].reset_index().to_dict(orient='records') if not self.equity_history[self.strategy_id].empty else []),
-            'trades': make_serializable(self.trade_history[self.strategy_id].to_dict(orient='records') if not self.trade_history[self.strategy_id].empty else []),
-            'drawdown': make_serializable(self.drawdown_history[self.strategy_id].reset_index().to_dict(orient='records') if not self.drawdown_history[self.strategy_id].empty else []),
+            'equity': make_serializable(
+                get_history_records(self.equity_history, reset_index=True)
+            ),
+            'trades': make_serializable(
+                get_history_records(self.trade_history)
+            ),
+            'drawdown': make_serializable(
+                get_history_records(self.drawdown_history, reset_index=True)
+            ),
             'timestamp': datetime.now().isoformat()
         }
         
@@ -207,11 +250,11 @@ class BacktestPerformanceAnalyzer(BasePerformanceAnalyzer):
         self.logger.info(f"Performance data for {self.strategy_id} saved to {filepath}")
         
         # Save additional CSV files if configured
-        if 'csv' in self.output_formats:
+        if hasattr(self, 'output_formats') and 'csv' in self.output_formats:
             self._save_csv_data(filepath)
         
         return filepath
-
+    
     def _save_csv_data(self, base_filepath: str) -> None:
         """Save additional data in CSV format
         

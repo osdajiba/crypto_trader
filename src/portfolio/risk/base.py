@@ -166,13 +166,13 @@ class BaseRiskManager(ABC):
         portfolio_value = Decimal(str(self._portfolio.get_total_value()))
         
         # Calculate value as percentage of portfolio
-        value_pct = order_value / portfolio_value if portfolio_value > 0 else Decimal('1')
+        value_pct = order_value / portfolio_value if portfolio_value > 0 else Decimal('0.01')
         
         # List of validation checks
         validations = []
         
         # 1. Check trade size limit
-        trade_size_limit = Decimal(str(self.get_risk_limit('trade_size_limit', 0.02)))
+        trade_size_limit = Decimal(str(self.get_risk_limit('trade_size_limit', 0.0001)))
         if value_pct > trade_size_limit:
             validations.append({
                 'check': 'trade_size_limit',

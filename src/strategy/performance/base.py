@@ -110,7 +110,7 @@ class BasePerformanceAnalyzer(ABC):
         self.equity_history[self.strategy_id] = self.equity_history[self.strategy_id].sort_index()
         
         # Update drawdown
-        self._update_drawdown(self.strategy_id)
+        self._update_drawdown()
         
         # Keep system equity updated - THIS IS WHERE THE ERROR OCCURS
         if self.strategy_id != 'system':
@@ -127,7 +127,7 @@ class BasePerformanceAnalyzer(ABC):
                     self.equity_history['system'] = system_equity
                     
                     # Update system drawdown
-                    self._update_drawdown('system')
+                    self._update_drawdown()
     
     def record_trade(self, trade_data: Dict[str, Any]) -> None:
         """Record a trade for performance analysis
@@ -251,18 +251,23 @@ class BasePerformanceAnalyzer(ABC):
             return pd.Series()
             
         equity = self.equity_history[self.strategy_id]
-        if equity.empty:
+        if len(equity) == 0:  # Use len() instead of empty property
             return pd.Series()
+        
+        # Convert millisecond timestamps to proper datetime index
+        if not isinstance(equity.index, pd.DatetimeIndex):
+            equity.index = pd.to_datetime(equity.index, unit='ms')
+                
         # Resample to desired frequency if needed
         if period == 'daily':
             equity_resampled = equity.resample('D').last().dropna()
         elif period == 'weekly':
             equity_resampled = equity.resample('W').last().dropna()
         elif period == 'monthly':
-            # Change 'M' to 'ME' for month-end resampling (fix for the deprecation warning)
             equity_resampled = equity.resample('ME').last().dropna()
         else:
             equity_resampled = equity            
+        
         # Calculate period returns
         returns = equity_resampled.pct_change().dropna()
         return returns
@@ -324,7 +329,7 @@ class BasePerformanceAnalyzer(ABC):
         auto_save = self.config.get("performance", "auto_save_on_shutdown", default=True)
         if auto_save and self.strategy_id in self.equity_history:
             try:
-                filepath = self.save_to_file(self.strategy_id)
+                filepath = self.save_to_file()
                 self.logger.info(f"System performance data auto-saved to {filepath}")
             except Exception as e:
                 self.logger.error(f"Error auto-saving system performance data: {e}")

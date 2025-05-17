@@ -657,8 +657,12 @@ class Asset(ABC):
                     "amount": amount
                 }
                 
-            order_type = kwargs.get('order_type', 'market').lower()
-            order = await self.create_order(order_type, Direction.BUY, amount, **kwargs)
+            kwargs_copy = kwargs.copy()
+            if 'order_type' in kwargs_copy:
+                order_type = kwargs.get('order_type', 'market').lower()
+                del kwargs_copy['order_type']
+                
+            order = await self.create_order(order_type, Direction.BUY, amount, **kwargs_copy)
             
             return {
                 "success": True,
@@ -715,8 +719,12 @@ class Asset(ABC):
                     "amount": amount
                 }
                 
-            order_type = kwargs.get('order_type', 'market').lower()
-            order = await self.create_order(order_type, Direction.SELL, amount, **kwargs)
+            kwargs_copy = kwargs.copy()
+            if 'order_type' in kwargs_copy:
+                order_type = kwargs.get('order_type', 'market').lower()
+                del kwargs_copy['order_type']
+                
+            order = await self.create_order(order_type, Direction.BUY, amount, **kwargs_copy)
             
             return {
                 "success": True,

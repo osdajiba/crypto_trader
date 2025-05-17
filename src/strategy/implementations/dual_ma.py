@@ -35,7 +35,7 @@ class DualMAStrategy(BaseStrategy):
         # Load parameters from config with fallbacks
         self.short_window = config.get("strategy", "parameters", "fast_period", default=20)
         self.long_window = config.get("strategy", "parameters", "slow_period", default=60)
-        self.signal_threshold = config.get("strategy", "parameters", "threshold", default=0.005)
+        self.signal_threshold = config.get("strategy", "parameters", "threshold", default=0.0)
         self.primary_symbol = config.get("trading", "instruments", 0, default="BTC/USDT")
         self.position_size = config.get("strategy", "parameters", "position_size", default=0.01)
         self.use_risk_based_sizing = config.get("strategy", "parameters", "use_risk_based_sizing", default=True)
@@ -280,7 +280,6 @@ class DualMAStrategy(BaseStrategy):
                 long_ma = factor_values['long_ma']
                 short_ema = factor_values.get('short_ema')
                 long_ema = factor_values.get('long_ema')
-                price_change = factor_values.get('price_change')
             else:
                 # Calculate moving averages
                 short_ma = data['close'].rolling(window=self.short_window, min_periods=1).mean()
@@ -289,9 +288,6 @@ class DualMAStrategy(BaseStrategy):
                 # Calculate EMAs for confirmation
                 short_ema = data['close'].ewm(span=self.short_window, adjust=False).mean()
                 long_ema = data['close'].ewm(span=self.long_window, adjust=False).mean()
-                
-                # Calculate price change for volatility
-                price_change = data['close'].pct_change(10)
             
             # Add indicators to data for analysis
             processed_data = data.copy()
@@ -299,7 +295,6 @@ class DualMAStrategy(BaseStrategy):
             processed_data['long_ma'] = long_ma
             processed_data['short_ema'] = short_ema if short_ema is not None else short_ma
             processed_data['long_ema'] = long_ema if long_ema is not None else long_ma
-            processed_data['price_change'] = price_change if price_change is not None else data['close'].pct_change(10)
             
             # Calculate MA spread (percentage difference)
             processed_data['ma_spread'] = (processed_data['short_ma'] - processed_data['long_ma']) / processed_data['long_ma']
@@ -320,16 +315,16 @@ class DualMAStrategy(BaseStrategy):
             ema_cross_up = (ema_diff > 0) & (ema_diff.shift(1) < 0)
             ema_cross_down = (ema_diff < 0) & (ema_diff.shift(1) > 0)
             
-            # Price confirmation
-            price_up = processed_data['close'] > processed_data['close'].shift(1)
-            price_down = processed_data['close'] < processed_data['close'].shift(1)
+            # 为绘图记录信号
+            processed_data['ma_cross_up'] = ma_cross_up
+            processed_data['ma_cross_down'] = ma_cross_down
+            processed_data['ema_cross_up'] = ema_cross_up
+            processed_data['ema_cross_down'] = ema_cross_down
             
-            # Spread threshold
-            spread_significant = processed_data['ma_spread'].abs() > self.signal_threshold
-            
-            # Combined conditions
-            buy_signals = ma_cross_up & ema_cross_up & price_up & spread_significant
-            sell_signals = ma_cross_down & ema_cross_down & price_down & spread_significant
+            # 重构信号生成逻辑 - 使用绘图代码中的逻辑
+            # 修改：删除price_up和price_down条件，只关注MA和EMA交叉
+            buy_signals = ma_cross_up | ema_cross_up
+            sell_signals = ma_cross_down | ema_cross_down
             
             # Extract signal rows
             buy_rows = processed_data[buy_signals].copy()
@@ -341,6 +336,9 @@ class DualMAStrategy(BaseStrategy):
             # Process buy signals
             if not buy_rows.empty:
                 for idx, row in buy_rows.iterrows():
+                    # 确定信号类型
+                    signal_type = "MA Crossover" if row.get('ma_cross_up', False) else "EMA Crossover"
+                    
                     # Calculate position size
                     quantity = self.calculate_position_size(
                         row['close'],
@@ -355,7 +353,7 @@ class DualMAStrategy(BaseStrategy):
                         'price': float(row['close']),
                         'quantity': quantity,
                         'ma_spread': float(row['ma_spread']),
-                        'reason': 'MA Crossover with EMA confirmation',
+                        'reason': signal_type,
                         'short_ma': float(row['short_ma']),
                         'long_ma': float(row['long_ma'])
                     }
@@ -364,6 +362,9 @@ class DualMAStrategy(BaseStrategy):
             # Process sell signals
             if not sell_rows.empty:
                 for idx, row in sell_rows.iterrows():
+                    # 确定信号类型
+                    signal_type = "MA Crossover" if row.get('ma_cross_down', False) else "EMA Crossover"
+                    
                     # Calculate position size
                     quantity = self.calculate_position_size(
                         row['close'],
@@ -378,22 +379,19 @@ class DualMAStrategy(BaseStrategy):
                         'price': float(row['close']),
                         'quantity': quantity,
                         'ma_spread': float(row['ma_spread']),
-                        'reason': 'MA Crossover with EMA confirmation',
+                        'reason': signal_type,
                         'short_ma': float(row['short_ma']),
                         'long_ma': float(row['long_ma'])
                     }
                     signals_list.append(signal_data)
             
-            # Create DataFrame from signals list
             signals_df = pd.DataFrame(signals_list) if signals_list else pd.DataFrame()
-            
-            if not signals_df.empty:
-                self.logger.info(f"Generated {len(signals_df)} vectorized signals for {symbol}")
-            
             return signals_df
             
         except Exception as e:
             self.logger.error(f"Error generating vectorized signals: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return pd.DataFrame()
     
     def calculate_position_size(self, price: float, capital: float) -> float:

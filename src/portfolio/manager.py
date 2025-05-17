@@ -1129,7 +1129,7 @@ class PortfolioManager:
                     self.logger.info(f"Executed {action} for {symbol}: {quantity} units at {price or 'market price'}")
                 else:
                     error = trade_result.get('error', 'Unknown error') if trade_result else 'No result'
-                    self.logger.error(f"Failed to execute {action} for {symbol}: {error}")
+                    self.logger.warning(f"Failed to execute {action} for {symbol}: {error}")
                     
             except Exception as e:
                 self.logger.error(f"Error processing signal for {symbol}: {e}")
