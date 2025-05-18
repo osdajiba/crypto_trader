@@ -30,8 +30,8 @@ class Asset(ABC):
     """
     
     def __init__(self, name: str, 
-                 exchange: Exchange = None, 
-                 execution_engine: BaseExecutionEngine = None, 
+                 exchange: Exchange, 
+                 execution_engine: BaseExecutionEngine, 
                  config: Optional[ConfigManager] = None, 
                  params: Optional[Dict[str, Any]] = None):
         """
@@ -340,7 +340,7 @@ class Asset(ABC):
         finally:
             self._update_in_progress = False
     
-    async def create_order(self, order_type: str, direction: Direction, 
+    async def _create_order(self, order_type: str, direction: Direction, 
                           quantity: float, **kwargs) -> Order:
         """
         Create an order of the specified type
@@ -428,10 +428,6 @@ class Asset(ABC):
             'params': kwargs
         })
         
-        # Execute order if execution engine is available
-        if self.execution_engine:
-            await self._execute_order(order)
-        
         return order
     
     async def _execute_order(self, order: Order) -> Dict[str, Any]:
@@ -474,6 +470,8 @@ class Asset(ABC):
                     'error': result.get('error', 'Unknown error')
                 })
                 
+            if result["success"]: self.set_quantity(order["amount"])
+
             return result
             
         except Exception as e:
@@ -628,7 +626,7 @@ class Asset(ABC):
             
         return {"success": False, "error": "Order not found"}
     
-    async def buy(self, amount: float, **kwargs) -> Dict[str, Any]:
+    async def buy(self, kwargs) -> Dict[str, Any]:
         """
         Buy this asset
         
@@ -648,6 +646,8 @@ class Asset(ABC):
             return {"success": False, "error": f"Asset {self.name} is not tradable"}
         
         try:
+            amount = kwargs['quantity']
+            
             # Basic validation
             if amount <= 0:
                 return {
@@ -661,17 +661,25 @@ class Asset(ABC):
             if 'order_type' in kwargs_copy:
                 order_type = kwargs.get('order_type', 'market').lower()
                 del kwargs_copy['order_type']
+                del kwargs_copy['quantity']
+                del kwargs_copy['direction']
                 
-            order = await self.create_order(order_type, Direction.BUY, amount, **kwargs_copy)
+            order = await self._create_order(order_type, Direction.BUY, amount, **kwargs_copy)
+            
+            # Execute order if execution engine is available
+            execute_result = await self._execute_order(order)
             
             return {
                 "success": True,
                 "order_id": order.order_id,
                 "order_type": order_type,
-                "direction": "buy",
+                "direction": "sell",
+                "price": order.price if not order_type=='market' else kwargs.price,
                 "amount": amount,
-                "status": order.status.value
+                "status": order.status.value,
+                "execute_result": execute_result
             }
+            
         except Exception as e:
             self.logger.error(f"Buy error for {self.name}: {str(e)}")
             return {
@@ -681,7 +689,7 @@ class Asset(ABC):
                 "amount": amount
             }
     
-    async def sell(self, amount: float, **kwargs) -> Dict[str, Any]:
+    async def sell(self, kwargs) -> Dict[str, Any]:
         """
         Sell this asset
         
@@ -702,6 +710,7 @@ class Asset(ABC):
         
         try:
             # Basic validation
+            amount = kwargs['quantity']
             if amount <= 0:
                 return {
                     "success": False,
@@ -714,7 +723,7 @@ class Asset(ABC):
             if not kwargs.get('allow_partial', False) and isinstance(self._position_size, Decimal) and amount > float(self._position_size):
                 return {
                     "success": False,
-                    "error": f"Insufficient balance: have {float(self._position_size)}, need {amount}",
+                    "error": f"Insufficient position: have {float(self._position_size)}, need {amount}",
                     "direction": "sell",
                     "amount": amount
                 }
@@ -723,16 +732,25 @@ class Asset(ABC):
             if 'order_type' in kwargs_copy:
                 order_type = kwargs.get('order_type', 'market').lower()
                 del kwargs_copy['order_type']
+                del kwargs_copy['quantity']
+                del kwargs_copy['direction']
                 
-            order = await self.create_order(order_type, Direction.BUY, amount, **kwargs_copy)
+                
+            order = await self._create_order(order_type, Direction.BUY, amount, **kwargs_copy)
+            
+            # Execute order if execution engine is available
+            if self.execution_engine:
+                execute_result = await self._execute_order(order)
             
             return {
                 "success": True,
                 "order_id": order.order_id,
                 "order_type": order_type,
                 "direction": "sell",
+                "price": order.price if not order_type=='market' else kwargs.price,
                 "amount": amount,
-                "status": order.status.value
+                "status": order.status.value,
+                "execute_result": execute_result
             }
         except Exception as e:
             self.logger.error(f"Sell error for {self.name}: {str(e)}")
@@ -773,7 +791,10 @@ class Asset(ABC):
             'symbol': self.name,
             'limits': limits
         })
-    
+        
+    def set_quantity(self, new_quantity):
+        self.quantity = new_quantity
+        
     def subscribe(self, event_type: str, callback: Callable[[Dict[str, Any]], None]) -> None:
         """
         Subscribe to asset events

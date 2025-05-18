@@ -59,8 +59,7 @@ class StandardRiskManager(BaseRiskManager):
             self._daily_high_value = Decimal(str(portfolio_value))
             self._daily_low_value = Decimal(str(portfolio_value))
     
-    async def _add_additional_validations(self, asset_name: str, direction: str, amount: float, 
-                                      validations: List[Dict[str, Any]], **kwargs) -> None:
+    async def _add_additional_validations(self, validations: List[Dict[str, Any]], kwargs) -> None:
         """
         Add standard-specific validations
         
@@ -74,9 +73,8 @@ class StandardRiskManager(BaseRiskManager):
         if not self._portfolio:
             return
             
-        # Skip additional validations for sell orders
-        if direction.lower() != 'buy':
-            return
+        asset_name = kwargs["symbol"]
+        amount = kwargs["quantity"]
             
         try:
             # Calculate portfolio value

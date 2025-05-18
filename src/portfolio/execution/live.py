@@ -154,6 +154,7 @@ class LiveExecutionEngine(BaseExecutionEngine):
                 for attempt in range(1, self.max_retry_attempts + 1):
                     try:
                         # Create order on exchange
+                        # TODO: live execution with different logic
                         response = await self.exchange.create_order(
                             symbol=order.symbol,
                             order_type=order.order_type.value,

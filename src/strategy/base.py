@@ -153,7 +153,7 @@ class BaseStrategy(ABC):
             
             # Check if we have enough data to generate signals
             if not sufficient_history:
-                self.logger.debug(f"Insufficient history for {symbol}, need {self._required_data_points} points")
+                self.logger.debug(f"Insufficient historical data to generate factors for {symbol}, need {self._required_data_points} points")
                 return pd.DataFrame()
             
             # Generate signals using strategy-specific logic

@@ -52,7 +52,6 @@ class PortfolioManager:
         self.risk_management_factory = get_risk_factory(self.config)
         
         # Portfolio state tracking
-        self._total_value = Decimal('0')
         self._last_update_time = 0
         self._is_syncing = False
         
@@ -83,6 +82,13 @@ class PortfolioManager:
             self.asset_factory.discover_assets()
             self.logger.info("Asset types discovered")
             await self._initialize_configured_assets()      
+            
+            # Initialize portfolio value 
+            initial_capital = float(self.config.get("trading", "initial_capital", default=100000.0))
+            self._total_value = {'cash': initial_capital}
+            
+            for asset_name, _ in self.assets.items():
+                self._total_value[asset_name] = 0.0  # This should remain float
                   
             self.logger.info("Portfolio manager initialization complete")
 
@@ -245,9 +251,16 @@ class PortfolioManager:
             if reduction_amount > 0:
                 self.logger.info(f"Reducing {asset_name} position by {reduction_amount} units")
                 
-                # Execute the sell
+                # Close all positions the sell with market order
                 try:
-                    await self.sell_asset(asset_name, float(reduction_amount))
+                    kwargs = {
+                        "symbol": asset_name,
+                        "price": None,
+                        "quantity": position_size,
+                        "order_type": "market",
+                        "direction": "sell"
+                    }
+                    await self.sell_asset(kwargs)
                 except Exception as e:
                     self.logger.error(f"Error reducing position for {asset_name}: {e}")
 
@@ -266,9 +279,17 @@ class PortfolioManager:
             if position_size > 0:
                 self.logger.info(f"Closing position for {asset_name}: {position_size} units")
                 
-                # Execute the sell
+                # Close all positions the sell with market order
                 try:
-                    await self.sell_asset(asset_name, float(position_size))
+                    kwargs = {
+                        "symbol": asset_name,
+                        "price": None,
+                        "quantity": position_size,
+                        "order_type": "market",
+                        "direction": "sell"
+                    }
+ 
+                    await self.sell_asset(kwargs)
                 except Exception as e:
                     self.logger.error(f"Error closing position for {asset_name}: {e}")
 
@@ -510,7 +531,7 @@ class PortfolioManager:
         finally:
             self._is_syncing = False
 
-    async def buy_asset(self, asset_name: str, amount: float, **kwargs) -> Dict[str, Any]:
+    async def buy_asset(self, kwargs) -> Dict[str, Any]:
         """
         Buy an existing asset
         
@@ -525,6 +546,9 @@ class PortfolioManager:
         Raises:
             ValueError: If asset doesn't exist
         """
+        asset_name = kwargs['symbol']
+        amount = kwargs['quantity']
+        
         if asset_name not in self.assets:
             raise ValueError(f"Asset '{asset_name}' does not exist")
         
@@ -536,7 +560,7 @@ class PortfolioManager:
         
         # Apply risk checks via risk manager
         if self.risk_manager:
-            validation = await self.risk_manager.validate_order(asset_name, 'buy', amount, **kwargs)
+            validation = await self.risk_manager.validate_order(kwargs)
             if not validation.get('allowed', False):
                 return {
                     'success': False,
@@ -548,13 +572,14 @@ class PortfolioManager:
                 }
         
         # Execute buy
-        result = await asset.buy(amount, **kwargs)
+        result = await asset.buy(kwargs)
         
         # Track order if successful
         if result.get('success', False) and 'order_id' in result:
             self._all_orders[result['order_id']] = {
                 'asset_name': asset_name,
                 'action': 'buy',
+                'price': result.get('price', 0.0),
                 'amount': amount,
                 'result': result,
                 'timestamp': time.time(),
@@ -565,6 +590,7 @@ class PortfolioManager:
             await self.notify_risk_manager('order_executed', {
                 'asset_name': asset_name,
                 'direction': 'buy',
+                'price': result.get('price', 0.0),
                 'amount': amount,
                 'order_id': result['order_id'],
                 'result': result
@@ -572,7 +598,7 @@ class PortfolioManager:
                 
         return result
 
-    async def sell_asset(self, asset_name: str, amount: float, **kwargs) -> Dict[str, Any]:
+    async def sell_asset(self, kwargs) -> Dict[str, Any]:
         """
         Sell an existing asset
         
@@ -587,6 +613,9 @@ class PortfolioManager:
         Raises:
             ValueError: If asset doesn't exist
         """
+        asset_name = kwargs['symbol']
+        amount = kwargs['quantity']
+        
         if asset_name not in self.assets:
             raise ValueError(f"Asset '{asset_name}' does not exist")
         
@@ -598,7 +627,7 @@ class PortfolioManager:
         
         # Apply risk checks via risk manager (simplified for sells)
         if self.risk_manager:
-            validation = await self.risk_manager.validate_order(asset_name, 'sell', amount, **kwargs)
+            validation = await self.risk_manager.validate_order(kwargs)
             if not validation.get('allowed', False):
                 return {
                     'success': False,
@@ -610,13 +639,14 @@ class PortfolioManager:
                 }
         
         # Execute sell
-        result = await asset.sell(amount, **kwargs)
+        result = await asset.sell(kwargs)
         
         # Track order if successful
         if result.get('success', False) and 'order_id' in result:
             self._all_orders[result['order_id']] = {
                 'asset_name': asset_name,
                 'action': 'sell',
+                'price': result.get('price', 0.0),
                 'amount': amount,
                 'result': result,
                 'timestamp': time.time(),
@@ -627,6 +657,7 @@ class PortfolioManager:
             await self.notify_risk_manager('order_executed', {
                 'asset_name': asset_name,
                 'direction': 'sell',
+                'price': result.get('price', 0.0),
                 'amount': amount,
                 'order_id': result['order_id'],
                 'result': result
@@ -634,50 +665,50 @@ class PortfolioManager:
                 
         return result
 
-    async def place_order(self, asset_name: str, order_type: str, direction: str, 
-                      amount: float, **kwargs) -> Dict[str, Any]:
-        """
-        Place an order for an asset
+    # async def place_order(self, **kwargs) -> Dict[str, Any]:
+    #     """
+    #     Place an order for an asset
         
-        Args:
-            asset_name: Name of the asset
-            order_type: Type of order ('market', 'limit', 'stop', etc.)
-            direction: Order direction ('buy', 'sell')
-            amount: Order amount
-            **kwargs: Additional order parameters
+    #     Args:
+    #         asset_name: Name of the asset
+    #         order_type: Type of order ('market', 'limit', 'stop', etc.)
+    #         direction: Order direction ('buy', 'sell')
+    #         amount: Order amount
+    #         **kwargs: Additional order parameters
             
-        Returns:
-            Dict[str, Any]: Order result
-        """
-        if asset_name not in self.assets:
-            raise ValueError(f"Asset '{asset_name}' does not exist")
+    #     Returns:
+    #         Dict[str, Any]: Order result
+    #     """
+    #     asset_name = kwargs['symbol']
+    #     price = kwargs['price']
+    #     amount = kwargs['quantity']
+    #     order_type = kwargs['order_type'].lower()
+    #     direction = kwargs['direction'].lower()    
+            
+    #     if asset_name not in self.assets:
+    #         raise ValueError(f"Asset '{asset_name}' does not exist")
         
-        # Normalize order type and direction
-        order_type = order_type.lower()
-        direction = direction.lower()
-        
-        # Place different order types
-        try:
-            if direction == 'buy':
-                # Add order type to kwargs
-                kwargs['order_type'] = order_type
-                return await self.buy_asset(asset_name, amount, **kwargs)
-            elif direction == 'sell':
-                # Add order type to kwargs
-                kwargs['order_type'] = order_type
-                return await self.sell_asset(asset_name, amount, **kwargs)
-            else:
-                raise ValueError(f"Invalid direction: {direction}. Must be 'buy' or 'sell'")
-        except Exception as e:
-            self.logger.error(f"Error placing {order_type} {direction} order for {asset_name}: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e),
-                'asset_name': asset_name,
-                'order_type': order_type,
-                'direction': direction,
-                'amount': amount
-            }
+    #     # Place different order types
+    #     try:
+    #         if direction == 'buy':
+    #             # Add order type to kwargs
+    #             return await self.buy_asset(kwargs)
+    #         elif direction == 'sell':
+    #             # Add order type to kwargs
+    #             return await self.sell_asset(kwargs)
+    #         else:
+    #             raise ValueError(f"Invalid direction: {direction}. Must be 'buy' or 'sell'")
+    #     except Exception as e:
+    #         self.logger.error(f"Error placing {order_type} {direction} order for {asset_name}: {str(e)}")
+    #         return {
+    #             'success': False,
+    #             'error': str(e),
+    #             'asset_name': asset_name,
+    #             'order_type': order_type,
+    #             'direction': direction,
+    #             'price': price,
+    #             'amount': amount
+    #         }
 
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """
@@ -1099,20 +1130,23 @@ class PortfolioManager:
                 if symbol not in self.assets:
                     self.logger.warning(f"Asset not found: {symbol}")
                     continue
-                    
+                
                 # Prepare trade parameters
                 kwargs = {}
                 price = signal.get('price')
                 if price is not None:
+                    kwargs['symbol'] = symbol
                     kwargs['price'] = price
+                    kwargs['quantity'] = quantity
+                    kwargs['direction'] = action
                     kwargs['order_type'] = 'limit'
                 
                 # Execute appropriate action
                 trade_result = None
                 if action in ['buy', 'long']:
-                    trade_result = await self.buy_asset(symbol, float(quantity), **kwargs)
+                    trade_result = await self.buy_asset(kwargs)
                 elif action in ['sell', 'short']:
-                    trade_result = await self.sell_asset(symbol, float(quantity), **kwargs)
+                    trade_result = await self.sell_asset(kwargs)
                 else:
                     self.logger.warning(f"Unsupported action: {action}")
                     continue
@@ -1166,8 +1200,8 @@ class PortfolioManager:
             # Extract trade details
             symbol = trade.get('symbol')
             direction = trade.get('direction', 'unknown').lower()
-            quantity = trade.get('quantity', 0)
-            price = trade.get('price', 0)
+            quantity = trade.get('quantity', 0.0)
+            price = trade.get('price', 0.0)
             timestamp = trade.get('timestamp')
             
             # Skip invalid trades
@@ -1222,7 +1256,7 @@ class PortfolioManager:
                 'timestamp': timestamp
             })
                 
-        # Update portfolio value after processing all trades
+        # Update portfolio value after processing each trades
         await self.update_all_values()
         
         self.logger.info(f"Batch of {len(trades)} trades recorded successfully")

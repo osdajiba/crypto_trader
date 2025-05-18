@@ -129,7 +129,7 @@ class BaseRiskManager(ABC):
         # Log loaded limits
         self.logger.debug(f"Loaded risk limits: {self._risk_limits}")
     
-    async def validate_order(self, asset_name: str, direction: str, amount: float, **kwargs) -> Dict[str, Any]:
+    async def validate_order(self, kwargs) -> Dict[str, Any]:
         """
         Validate an order against risk parameters
         
@@ -148,6 +148,10 @@ class BaseRiskManager(ABC):
         if not self._portfolio:
             return {'allowed': True, 'reasons': ['No portfolio manager provided']}
         
+        asset_name = kwargs['symbol']
+        amount = kwargs['quantity']
+        direction = kwargs['direction'].lower()   
+         
         # Get asset
         asset = self._portfolio.assets.get(asset_name)
         if not asset:
@@ -286,7 +290,7 @@ class BaseRiskManager(ABC):
                 })
         
         # Allow subclasses to add additional validations
-        await self._add_additional_validations(asset_name, direction, amount, validations, **kwargs)
+        await self._add_additional_validations(validations, kwargs)
         
         # Determine if order is allowed
         passed_all = all(v['passed'] for v in validations)
@@ -303,8 +307,7 @@ class BaseRiskManager(ABC):
             'value_pct': float(value_pct)
         }
     
-    async def _add_additional_validations(self, asset_name: str, direction: str, amount: float, 
-                                        validations: List[Dict[str, Any]], **kwargs) -> None:
+    async def _add_additional_validations(self, validations, kwargs) -> None:
         """
         Add additional validations specific to subclass implementation
         
@@ -351,21 +354,28 @@ class BaseRiskManager(ABC):
             drop_indices = []
             
             for idx, signal in valid_signals.iterrows():
-                action = signal['action'].lower() if 'action' in signal else 'unknown'
+                direction = signal['action'].lower() if 'action' in signal else 'unknown'
                 symbol = signal['symbol'] if 'symbol' in signal else 'unknown'
-                
-                # Skip sell signals (don't restrict selling)
-                if action == 'sell':
-                    continue
+                kwargs = {
+                    "symbol": signal['symbol'],
+                    "price": None,
+                    "quantity": signal['quantity'],
+                    "order_type": None,
+                    "direction": signal['action']
+                }
+                if direction == 'sell':
+                    # Validate the order
+                    validation = await self.validate_order(kwargs)
+                    
+                    if not validation.get('allowed', False):
+                        reasons = validation.get('reasons', ['Failed risk check'])
+                        self.logger.warning(f"Signal for {symbol} rejected: {reasons}")
+                        drop_indices.append(idx)
                 
                 # Validate buy signals
-                if action == 'buy':
+                if direction == 'buy':
                     # Validate the order
-                    validation = await self.validate_order(
-                        asset_name=symbol,
-                        direction=action,
-                        amount=signal.get('quantity', 0)
-                    )
+                    validation = await self.validate_order(kwargs)
                     
                     if not validation.get('allowed', False):
                         reasons = validation.get('reasons', ['Failed risk check'])

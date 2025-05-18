@@ -142,34 +142,35 @@ class Spot(Asset):
                 # Return current value even on error
                 return float(self._value)
             
-    async def buy(self, amount: float, **kwargs) -> Dict[str, Any]:
+    async def buy(self, kwargs) -> Dict[str, Any]:
         """Buy spot asset with validation"""
-        amount_dec = Decimal(str(amount))
-        if amount_dec < self.min_quantity:
+        # TODO: if used other (NOT market) order
+        amount = kwargs['quantity']
+        if amount < self.min_quantity:
             return {"success": False, "error": f"Buy amount {amount} below minimum {float(self.min_quantity)}"}
         
         # For market orders, check estimated value
         order_type = kwargs.get('order_type', 'market')
-        if order_type == 'market' and self.price * amount_dec < self.min_notional:
-            return {"success": False, "error": f"Buy value ${float(self.price * amount_dec)} below minimum ${float(self.min_notional)}"}
+        if order_type == 'market' and self.price * amount < self.min_notional:
+            return {"success": False, "error": f"Buy value ${float(self.price * amount)} below minimum ${float(self.min_notional)}"}
         
-        return await super().buy(amount, **kwargs)
+        return await super().buy(kwargs)
     
-    async def sell(self, amount: float, **kwargs) -> Dict[str, Any]:
+    async def sell(self, kwargs) -> Dict[str, Any]:
         """Sell spot asset with validation"""
-        amount_dec = Decimal(str(amount))
-        if amount_dec > self.quantity:
-            return {"success": False, "error": f"Insufficient {self.symbol} balance: have {float(self.quantity)}, need {amount}"}
+        amount = kwargs['quantity']
+        if amount > self.quantity:
+            return {"success": False, "error": f"Insufficient {self.symbol} position: have {float(self.quantity)}, need {amount}"}
         
-        if amount_dec < self.min_quantity:
+        if amount < self.min_quantity:
             return {"success": False, "error": f"Sell amount {amount} below minimum {float(self.min_quantity)}"}
         
         # For market orders, check estimated value
         order_type = kwargs.get('order_type', 'market')
-        if order_type == 'market' and self.price * amount_dec < self.min_notional:
-            return {"success": False, "error": f"Sell value ${float(self.price * amount_dec)} below minimum ${float(self.min_notional)}"}
+        if order_type == 'market' and self.price * amount < self.min_notional:
+            return {"success": False, "error": f"Sell value ${float(self.price * amount)} below minimum ${float(self.min_notional)}"}
         
-        return await super().sell(amount, **kwargs)
+        return await super().sell(kwargs)
     
     async def sync_balance(self) -> Dict[str, Any]:
         """Sync asset balance with exchange"""

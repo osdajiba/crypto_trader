@@ -177,31 +177,31 @@ class AssetFactory(AbstractFactory):
         except Exception as e:
             logger.error(f"Error during asset discovery: {str(e)}")
             logger.info("Registering default assets only")
-    
-    async def create(self, params: Optional[Dict[str, Any]] = None) -> Asset:
+            
+    async def create_asset(self, params: Optional[Dict[str, Any]] = None) -> Asset:
         """Create an asset instance asynchronously"""
         try:
-            params = params or {}
+            params_copy = params.copy()
             asset_type = await self._resolve_name(params.pop('type', 'spot'))
+            exchange_instance = params_copy.get('exchange', None)
+            execution_engine_instance = params_copy.get('execution_engine', None)
+            
             asset_class = await self._get_concrete_class(asset_type)
             
-            # Apply creation hooks and create instance
-            modified_params = await self._run_creation_hooks(asset_type, params)
+            modified_params = await self._run_creation_hooks(asset_type, params_copy)
             asset_name = modified_params.get('name', '')
-            
+                        
             asset = asset_class(
                 name=asset_name,
-                exchange=modified_params.get('exchange'),
-                execution_engine=modified_params.get('execution_engine'),
+                exchange=exchange_instance,
+                execution_engine=execution_engine_instance,
                 config=self.config,
-                params=modified_params
+                params=params_copy
             )
             
-            # Initialize if needed
             if hasattr(asset, 'initialize') and callable(asset.initialize):
                 await asset.initialize()
             
-            # Track asset
             self._created_assets[asset_name] = {
                 'instance': asset,
                 'type': asset_type,
@@ -219,34 +219,28 @@ class AssetFactory(AbstractFactory):
                                 exchange=None, execution_engine=None) -> Dict[str, Asset]:
         """Create multiple assets from configuration asynchronously"""
         assets = {}
-        
+                
         # Prepare asset configurations
-        valid_configs = []
         for config in assets_config:
             asset_name = config.get('symbol') or config.get('name')
             if not asset_name:
                 self.logger.warning(f"Skipping asset with no symbol or name: {config}")
                 continue
-                
-            # Merge configurations
-            asset_config = {
-                'name': asset_name,
-                'symbol': asset_name,
-                'tradable': True,
-                'exchange': exchange,
-                'execution_engine': execution_engine,
-                **config  # Original config takes precedence
-            }
-            valid_configs.append((asset_name, asset_config))
-        
-        # Create all assets concurrently
-        create_tasks = [(name, asyncio.create_task(self.create(config))) 
-                    for name, config in valid_configs]
-        
-        # Collect results
-        for asset_name, task in create_tasks:
+            
+            config['name'] = asset_name
+            config['symbol'] = asset_name
+            config['tradable'] = True
+
+            if exchange is not None:
+                config['exchange'] = exchange
+            
+            if execution_engine is not None:
+                config['execution_engine'] = execution_engine
+            
             try:
-                assets[asset_name] = await task
+                self.logger.debug(f"Creating asset {asset_name} with execution_engine: {config.get('execution_engine') is not None}")
+                asset = await self.create_asset(params=config)
+                assets[asset_name] = asset
                 self.logger.info(f"Successfully created asset {asset_name}")
             except Exception as e:
                 self.logger.error(f"Error creating asset {asset_name}: {e}")
