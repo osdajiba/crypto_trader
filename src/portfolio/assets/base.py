@@ -23,10 +23,8 @@ from src.portfolio.execution.order import (
 
 class Asset(ABC):
     """
-    Base class for all portfolio assets with trading capabilities.
-    
-    This class provides a unified interface for different asset types,
-    with optional trading functionality that leverages the execution system.
+    Abstract base class for all portfolio assets with trading capabilities.
+    Defines the interface all tradable assets must implement.
     """
     
     def __init__(self, name: str, 
@@ -39,7 +37,8 @@ class Asset(ABC):
 
         Args:
             name: Asset name/symbol
-            exchange: Exchange interface (optional)
+            exchange: Exchange interface
+            execution_engine: Execution engine for order management 
             config: Configuration manager (optional)
             params: Additional parameters (optional)
         """
@@ -58,7 +57,7 @@ class Asset(ABC):
         self._initialized = False
         self._update_in_progress = False
         
-        # Trading capabilities (optional)
+        # Trading capabilities
         self.is_tradable = params.get('tradable', False)
         if self.is_tradable:
             self._setup_trading()
@@ -128,6 +127,297 @@ class Asset(ABC):
         Override in subclasses to provide custom initialization logic.
         """
         pass
+        
+    @abstractmethod
+    async def get_value(self) -> float:
+        """
+        Get current asset value
+        
+        Returns:
+            Current asset value
+        """
+        pass
+    
+    @abstractmethod
+    async def update_value(self) -> float:
+        """
+        Update and return current asset value
+        
+        Returns:
+            Updated asset value
+        """
+        pass
+    
+    @abstractmethod
+    async def update_data(self, data: pd.DataFrame) -> None:
+        """
+        Update asset with market data
+        
+        Args:
+            data: DataFrame containing market data for this asset
+        """
+        pass
+        
+    async def buy(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Buy this asset
+        
+        Args:
+            params: Dictionary with order parameters:
+                quantity: Amount to buy
+                price: Price for limit orders (optional)
+                order_type: Order type (market, limit, etc.)
+                
+        Returns:
+            Dict with order result
+        """
+        if not self.is_tradable:
+            return {"success": False, "error": f"Asset {self.name} is not tradable"}
+        
+        try:
+            # Extract parameters
+            quantity = params['quantity']
+            if quantity <= 0:
+                return {
+                    "success": False,
+                    "error": "Quantity must be positive",
+                    "direction": "buy",
+                    "quantity": quantity
+                }
+            
+            # Create order
+            order_type = params.get('order_type', 'market').lower()
+            
+            # Create a copy of params for passing to _create_order
+            order_params = params.copy()
+            # Remove parameters that will be passed directly
+            if 'order_type' in order_params:
+                del order_params['order_type']
+            if 'quantity' in order_params:
+                del order_params['quantity']
+            if 'direction' in order_params:
+                del order_params['direction']
+            
+            # Create the order object
+            order = await self._create_order(order_type, Direction.BUY, quantity, **order_params)
+            
+            # Execute order if execution engine is available
+            execute_result = await self._execute_order(order)
+            
+            # Return result
+            return {
+                "success": True,
+                "order_id": order.order_id,
+                "order_type": order_type,
+                "direction": "buy",
+                "price": getattr(order, 'price', params.get('price')),
+                "quantity": quantity,
+                "status": order.status.value,
+                "execute_result": execute_result
+            }
+        except Exception as e:
+            self.logger.error(f"Buy error for {self.name}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "direction": "buy",
+                "quantity": params.get('quantity', 0)
+            }
+    
+    async def sell(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sell this asset
+        
+        Args:
+            params: Dictionary with order parameters:
+                quantity: Amount to sell
+                price: Price for limit orders (optional)
+                order_type: Order type (market, limit, etc.)
+                
+        Returns:
+            Dict with order result
+        """
+        if not self.is_tradable:
+            return {"success": False, "error": f"Asset {self.name} is not tradable"}
+        
+        try:
+            # Extract parameters
+            quantity = params['quantity']
+            if quantity <= 0:
+                return {
+                    "success": False,
+                    "error": "Quantity must be positive",
+                    "direction": "sell",
+                    "quantity": quantity
+                }
+            
+            # Check if we have enough to sell (for spot assets)
+            if not params.get('allow_partial', False) and isinstance(self._position_size, Decimal) and quantity > float(self._position_size):
+                return {
+                    "success": False,
+                    "error": f"Insufficient position: have {float(self._position_size)}, need {quantity}",
+                    "direction": "sell",
+                    "quantity": quantity
+                }
+            
+            # Create order
+            order_type = params.get('order_type', 'market').lower()
+            
+            # Create a copy of params for passing to _create_order
+            order_params = params.copy()
+            # Remove parameters that will be passed directly
+            if 'order_type' in order_params:
+                del order_params['order_type']
+            if 'quantity' in order_params:
+                del order_params['quantity']
+            if 'direction' in order_params:
+                del order_params['direction']
+            
+            # Create the order object
+            order = await self._create_order(order_type, Direction.SELL, quantity, **order_params)
+            
+            # Execute order if execution engine is available
+            execute_result = await self._execute_order(order)
+            
+            # Return result
+            return {
+                "success": True,
+                "order_id": order.order_id,
+                "order_type": order_type,
+                "direction": "sell",
+                "price": getattr(order, 'price', params.get('price')),
+                "quantity": quantity,
+                "status": order.status.value,
+                "execute_result": execute_result
+            }
+        except Exception as e:
+            self.logger.error(f"Sell error for {self.name}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "direction": "sell",
+                "quantity": params.get('quantity', 0)
+            }
+                
+    def get_position_size(self) -> float:
+        """
+        Get current position size
+        
+        Returns:
+            Current position size
+        """
+        return float(self._position_size)
+    
+    def get_position_type(self) -> str:
+        """
+        Get current position type
+        
+        Returns:
+            Position type ('long', 'short', 'flat')
+        """
+        # Default implementation - subclasses should override if needed
+        if hasattr(self, '_position_type'):
+            return self._position_type
+        
+        # For simple assets, infer from position size
+        if self._position_size > 0:
+            return 'long'
+        return 'flat'
+        
+    async def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """
+        Cancel an active order
+        
+        Args:
+            order_id: ID of the order to cancel
+            
+        Returns:
+            Dict with cancellation result
+        """
+        if not self.is_tradable:
+            return {"success": False, "error": "Trading not available"}
+            
+        # Check if order exists in active orders
+        if order_id not in self.active_orders:
+            return {"success": False, "error": "Order not found"}
+        
+        try:
+            order = self.active_orders[order_id]
+            
+            # Use execution engine to cancel if available
+            if self.execution_engine:
+                result = await self.execution_engine.cancel_order(order_id, self.name)
+                if result.get('success', False):
+                    # Order was canceled by execution engine
+                    
+                    # Notify subscribers
+                    self._notify_subscribers('order_canceled', {
+                        'order_id': order_id,
+                        'symbol': self.name,
+                        'direction': order.direction.value
+                    })
+                    
+                    return result
+                    
+            # If no execution engine or cancellation failed, update order locally
+            order.cancel()
+            
+            # Notify subscribers
+            self._notify_subscribers('order_canceled', {
+                'order_id': order_id,
+                'symbol': self.name,
+                'direction': order.direction.value
+            })
+            
+            return {
+                "success": True,
+                "order_id": order_id,
+                "symbol": self.name,
+                "status": "canceled"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error canceling order {order_id}: {str(e)}")
+            return {
+                "success": False,
+                "order_id": order_id,
+                "error": str(e)
+            }
+    
+    async def get_order_status(self, order_id: str) -> Dict[str, Any]:
+        """
+        Get current status of an order
+        
+        Args:
+            order_id: Order ID to check
+            
+        Returns:
+            Dict with order status information
+        """
+        if not self.is_tradable:
+            return {"success": False, "error": "Trading not available"}
+            
+        # Check local status first
+        order = self.get_order(order_id)
+        if order:
+            return {
+                "success": True,
+                "order_id": order_id,
+                "symbol": order.symbol,
+                "status": order.status.value,
+                "filled_qty": order.filled_quantity,
+                "unfilled_qty": order.quantity - order.filled_quantity,
+                "price": getattr(order, 'price', None),
+                "avg_price": order.avg_filled_price,
+                "direction": order.direction.value,
+                "timestamp": order.timestamp
+            }
+            
+        # If not found locally, check with execution engine
+        if self.execution_engine:
+            return await self.execution_engine.get_order_status(order_id, self.name)
+            
+        return {"success": False, "error": "Order not found"}
     
     def _on_order_fill(self, order):
         """
@@ -230,115 +520,6 @@ class Asset(ABC):
             'value': float(self._value),
             'last_price': float(self._last_price)
         })
-    
-    def get_value(self) -> float:
-        """
-        Get current asset value
-        
-        Returns:
-            Current asset value
-        """
-        return float(self._value)
-    
-    def get_position_size(self) -> float:
-        """
-        Get current position size
-        
-        Returns:
-            Current position size
-        """
-        return float(self._position_size)
-    
-    async def update_data(self, data: pd.DataFrame) -> None:
-        """
-        Update asset with market data
-        
-        This method should be implemented by asset subclasses to 
-        update their state based on market data.
-        
-        Args:
-            data: DataFrame containing market data for this asset
-        """
-        if data.empty:
-            return
-            
-        try:
-            # Avoid concurrent updates
-            if self._update_in_progress:
-                return
-                
-            self._update_in_progress = True
-            
-            # Get latest price from data (typically close price from the latest candle)
-            if 'close' in data.columns and len(data) > 0:
-                last_row = data.iloc[-1]
-                old_price = self._last_price
-                self._last_price = Decimal(str(last_row['close']))
-                
-                # Update value based on new price
-                self._value = self._position_size * self._last_price
-                self._last_update_time = time.time()
-                
-                # Calculate price change percentage
-                price_change_pct = 0
-                if old_price > 0:
-                    price_change_pct = (self._last_price - old_price) * 100 / old_price
-                
-                # Notify subscribers of value changes
-                if abs(price_change_pct) > 0:
-                    self._notify_subscribers('value_changed', {
-                        'symbol': self.name,
-                        'old_price': float(old_price),
-                        'new_price': float(self._last_price),
-                        'change_pct': float(price_change_pct),
-                        'position_size': float(self._position_size),
-                        'value': float(self._value)
-                    })
-                    
-                self.logger.debug(f"Updated {self.name} with latest price: {float(self._last_price):.2f}, value: {float(self._value):.2f}")
-        
-        except Exception as e:
-            self.logger.error(f"Error updating {self.name} with market data: {str(e)}")
-        finally:
-            self._update_in_progress = False
-            
-    async def update_value(self) -> float:
-        """
-        Update and return current asset value
-        
-        This method should be implemented by asset subclasses to
-        calculate the current value based on market data.
-        
-        Returns:
-            Updated asset value
-        """
-        # Avoid concurrent updates
-        if self._update_in_progress:
-            return float(self._value)
-            
-        self._update_in_progress = True
-        
-        try:
-            # Basic implementation - subclasses should override
-            if self._position_size > 0 and self._last_price > 0:
-                old_value = self._value
-                self._value = self._position_size * self._last_price
-                self._last_update_time = time.time()
-                
-                # Notify subscribers of significant value changes
-                if old_value > 0 and abs((self._value - old_value) / old_value) > 0.0:
-                    self._notify_subscribers('value_changed', {
-                        'symbol': self.name,
-                        'old_value': float(old_value),
-                        'new_value': float(self._value),
-                        'change_pct': float((self._value - old_value) / old_value),
-                        'position_size': float(self._position_size),
-                        'price': float(self._last_price)
-                    })
-                    
-            return float(self._value)
-        finally:
-            self._update_in_progress = False
     
     async def _create_order(self, order_type: str, direction: Direction, 
                           quantity: float, **kwargs) -> Order:
@@ -486,57 +667,6 @@ class Asset(ABC):
             
             return {"success": False, "error": str(e)}
     
-    async def cancel_order(self, order_id: str) -> bool:
-        """
-        Cancel an active order
-        
-        Args:
-            order_id: ID of the order to cancel
-            
-        Returns:
-            True if canceled successfully, False otherwise
-        """
-        if not self.is_tradable:
-            return False
-            
-        # Check if order exists in active orders
-        if order_id not in self.active_orders:
-            return False
-        
-        try:
-            order = self.active_orders[order_id]
-            
-            # Use execution engine to cancel if available
-            if self.execution_engine:
-                result = await self.execution_engine.cancel_order(order_id, self.name)
-                if result.get('success', False):
-                    # Order was canceled by execution engine
-                    
-                    # Notify subscribers
-                    self._notify_subscribers('order_canceled', {
-                        'order_id': order_id,
-                        'symbol': self.name,
-                        'direction': order.direction.value
-                    })
-                    
-                    return True
-                    
-            # If no execution engine or cancellation failed, update order locally
-            order.cancel()
-            
-            # Notify subscribers
-            self._notify_subscribers('order_canceled', {
-                'order_id': order_id,
-                'symbol': self.name,
-                'direction': order.direction.value
-            })
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error canceling order {order_id}: {str(e)}")
-            return False
-    
     async def cancel_all_orders(self) -> Dict[str, bool]:
         """
         Cancel all active orders
@@ -591,175 +721,73 @@ class Asset(ABC):
         
         return list(self.active_orders.values())
     
-    async def get_order_status(self, order_id: str) -> Dict[str, Any]:
+    async def open_long_position(self, quantity: float, **kwargs) -> Dict[str, Any]:
         """
-        Get the current status of an order
+        Open a long position
         
         Args:
-            order_id: Order ID to check
+            quantity: Position size
+            **kwargs: Additional parameters
             
         Returns:
-            Order status dictionary
+            Dict[str, Any]: Operation result
         """
-        if not self.is_tradable:
-            return {"success": False, "error": "Trading not available"}
-            
-        # Check local status first
-        order = self.get_order(order_id)
-        if order:
-            return {
-                "success": True,
-                "order_id": order_id,
-                "symbol": order.symbol,
-                "status": order.status.value,
-                "filled_qty": order.filled_quantity,
-                "unfilled_qty": order.quantity - order.filled_quantity,
-                "price": getattr(order, 'price', None),
-                "avg_price": order.avg_filled_price,
-                "direction": order.direction.value,
-                "timestamp": order.timestamp
-            }
-            
-        # If not found locally, check with execution engine
-        if self.execution_engine:
-            return await self.execution_engine.get_order_status(order_id, self.name)
-            
-        return {"success": False, "error": "Order not found"}
-    
-    async def buy(self, kwargs) -> Dict[str, Any]:
+        return await self.buy({'quantity': quantity, 'symbol': self.name, **kwargs})
+        
+    async def close_long_position(self, quantity: float = None, **kwargs) -> Dict[str, Any]:
         """
-        Buy this asset
+        Close a long position
         
         Args:
-            amount: Amount to buy
-            **kwargs: Additional parameters including:
-                - order_type: Type of order ('market', 'limit', etc.)
-                - price: Limit price (required for limit orders)
-                - stop_price: Stop price (for stop orders)
-                - take_profit_price: Take profit price
-                - reduce_only: Whether the order reduces position only
-                
+            quantity: Position size to close (default: all)
+            **kwargs: Additional parameters
+            
         Returns:
-            Buy operation result dictionary
+            Dict[str, Any]: Operation result
         """
-        if not self.is_tradable:
-            return {"success": False, "error": f"Asset {self.name} is not tradable"}
+        # If position is not long, nothing to close
+        if self._position_size <= 0:
+            return {"success": False, "error": "No long position to close"}
+            
+        # Default to closing entire position
+        if quantity is None:
+            quantity = float(self._position_size)
+            
+        return await self.sell({'quantity': quantity, 'symbol': self.name, **kwargs})
         
-        try:
-            amount = kwargs['quantity']
-            
-            # Basic validation
-            if amount <= 0:
-                return {
-                    "success": False,
-                    "error": "Amount must be positive",
-                    "direction": "buy",
-                    "amount": amount
-                }
-                
-            kwargs_copy = kwargs.copy()
-            if 'order_type' in kwargs_copy:
-                order_type = kwargs.get('order_type', 'market').lower()
-                del kwargs_copy['order_type']
-                del kwargs_copy['quantity']
-                del kwargs_copy['direction']
-                
-            order = await self._create_order(order_type, Direction.BUY, amount, **kwargs_copy)
-            
-            # Execute order if execution engine is available
-            execute_result = await self._execute_order(order)
-            
-            return {
-                "success": True,
-                "order_id": order.order_id,
-                "order_type": order_type,
-                "direction": "sell",
-                "price": order.price if not order_type=='market' else kwargs.price,
-                "amount": amount,
-                "status": order.status.value,
-                "execute_result": execute_result
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Buy error for {self.name}: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e),
-                "direction": "buy",
-                "amount": amount
-            }
-    
-    async def sell(self, kwargs) -> Dict[str, Any]:
+    async def open_short_position(self, quantity: float, **kwargs) -> Dict[str, Any]:
         """
-        Sell this asset
+        Open a short position
         
         Args:
-            amount: Amount to sell
-            **kwargs: Additional parameters including:
-                - order_type: Type of order ('market', 'limit', etc.)
-                - price: Limit price (required for limit orders)
-                - stop_price: Stop price (for stop orders)
-                - take_profit_price: Take profit price
-                - reduce_only: Whether the order reduces position only
-                
+            quantity: Position size
+            **kwargs: Additional parameters
+            
         Returns:
-            Sell operation result dictionary
+            Dict[str, Any]: Operation result
         """
-        if not self.is_tradable:
-            return {"success": False, "error": f"Asset {self.name} is not tradable"}
+        return await self.sell({'quantity': quantity, 'symbol': self.name, **kwargs})
         
-        try:
-            # Basic validation
-            amount = kwargs['quantity']
-            if amount <= 0:
-                return {
-                    "success": False,
-                    "error": "Amount must be positive",
-                    "direction": "sell",
-                    "amount": amount
-                }
-                
-            # Check if we have enough to sell (for spot assets)
-            if not kwargs.get('allow_partial', False) and isinstance(self._position_size, Decimal) and amount > float(self._position_size):
-                return {
-                    "success": False,
-                    "error": f"Insufficient position: have {float(self._position_size)}, need {amount}",
-                    "direction": "sell",
-                    "amount": amount
-                }
-                
-            kwargs_copy = kwargs.copy()
-            if 'order_type' in kwargs_copy:
-                order_type = kwargs.get('order_type', 'market').lower()
-                del kwargs_copy['order_type']
-                del kwargs_copy['quantity']
-                del kwargs_copy['direction']
-                
-                
-            order = await self._create_order(order_type, Direction.BUY, amount, **kwargs_copy)
+    async def close_short_position(self, quantity: float = None, **kwargs) -> Dict[str, Any]:
+        """
+        Close a short position
+        
+        Args:
+            quantity: Position size to close (default: all)
+            **kwargs: Additional parameters
             
-            # Execute order if execution engine is available
-            if self.execution_engine:
-                execute_result = await self._execute_order(order)
+        Returns:
+            Dict[str, Any]: Operation result
+        """
+        # If position is not short, nothing to close
+        if self._position_size >= 0:
+            return {"success": False, "error": "No short position to close"}
             
-            return {
-                "success": True,
-                "order_id": order.order_id,
-                "order_type": order_type,
-                "direction": "sell",
-                "price": order.price if not order_type=='market' else kwargs.price,
-                "amount": amount,
-                "status": order.status.value,
-                "execute_result": execute_result
-            }
-        except Exception as e:
-            self.logger.error(f"Sell error for {self.name}: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e),
-                "direction": "sell",
-                "amount": amount
-            }
+        # Default to closing entire position
+        if quantity is None:
+            quantity = abs(float(self._position_size))
+            
+        return await self.buy({'quantity': quantity, 'symbol': self.name, **kwargs})
     
     def set_exchange(self, exchange) -> None:
         """

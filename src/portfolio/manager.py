@@ -6,6 +6,7 @@ import time
 from decimal import Decimal
 from typing import Dict, List, Any, Optional, Union, Callable
 import pandas as pd
+from portfolio.execution.order import Direction
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
@@ -110,9 +111,14 @@ class PortfolioManager:
             assets = await self.asset_factory.create_multi_assets(assets_config, self.exchange, self.execution_engine)
             self.logger.info(f"Successfully initialized {len(assets)} assets")
             
-            # Add assets to portfolio manager
+            # Add assets to portfolio manager and ensure execution engine is set
             for asset_name, asset in assets.items():
                 try:
+                    # Explicitly set execution engine if it's missing
+                    if hasattr(asset, 'execution_engine') and asset.execution_engine is None:
+                        asset.execution_engine = self.execution_engine
+                        self.logger.info(f"Set missing execution engine for {asset_name}")
+                    
                     self.assets[asset_name] = asset
                     self.logger.info(f"Added {asset_name} to portfolio")
                 except Exception as e:
@@ -536,13 +542,16 @@ class PortfolioManager:
         Buy an existing asset
         
         Args:
-            asset_name: Name of the asset to buy
-            amount: Amount to buy (currency amount or quantity depending on asset type)
-            **kwargs: Additional parameters for the buy operation
-            
+            kwargs: Dictionary containing order parameters:
+                symbol: Name of the asset to buy
+                quantity: Amount to buy
+                price: Limit price (optional)
+                order_type: Order type (e.g., 'market', 'limit')
+                reduce_only: Whether to reduce position only (optional)
+                    
         Returns:
             Dict[str, Any]: Buy operation result
-            
+                
         Raises:
             ValueError: If asset doesn't exist
         """
@@ -571,45 +580,64 @@ class PortfolioManager:
                     'reasons': validation.get('reasons', ['Risk check failed'])
                 }
         
-        # Execute buy
-        result = await asset.buy(kwargs)
+        # Make a copy of kwargs to avoid modifying the original
+        order_params = kwargs.copy()
         
-        # Track order if successful
-        if result.get('success', False) and 'order_id' in result:
-            self._all_orders[result['order_id']] = {
+        # Ensure the direction is correctly set to 'buy'
+        order_params['direction'] = 'buy'
+        
+        # Execute buy
+        try:
+            result = await asset.buy(order_params)
+            
+            # Track order if successful
+            if result.get('success', False) and 'order_id' in result:
+                self._all_orders[result['order_id']] = {
+                    'asset_name': asset_name,
+                    'action': 'buy',
+                    'price': result.get('price', 0.0),
+                    'amount': amount,
+                    'result': result,
+                    'timestamp': time.time(),
+                    'params': kwargs
+                }
+                    
+                # Notify risk manager of new order
+                await self.notify_risk_manager('order_executed', {
+                    'asset_name': asset_name,
+                    'direction': 'buy',
+                    'price': result.get('price', 0.0),
+                    'amount': amount,
+                    'order_id': result['order_id'],
+                    'result': result
+                })
+                        
+            return result
+        except Exception as e:
+            self.logger.warning(f"Failed to execute buy for {asset_name}: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
                 'asset_name': asset_name,
                 'action': 'buy',
-                'price': result.get('price', 0.0),
-                'amount': amount,
-                'result': result,
-                'timestamp': time.time(),
-                'params': kwargs
+                'amount': amount
             }
-            
-            # Notify risk manager of new order
-            await self.notify_risk_manager('order_executed', {
-                'asset_name': asset_name,
-                'direction': 'buy',
-                'price': result.get('price', 0.0),
-                'amount': amount,
-                'order_id': result['order_id'],
-                'result': result
-            })
-                
-        return result
 
     async def sell_asset(self, kwargs) -> Dict[str, Any]:
         """
         Sell an existing asset
         
         Args:
-            asset_name: Name of the asset to sell
-            amount: Amount to sell (currency amount or quantity depending on asset type)
-            **kwargs: Additional parameters for the sell operation
-            
+            kwargs: Dictionary containing order parameters:
+                symbol: Name of the asset to sell
+                quantity: Amount to sell
+                price: Limit price (optional)
+                order_type: Order type (e.g., 'market', 'limit')
+                reduce_only: Whether to reduce position only (optional)
+                    
         Returns:
             Dict[str, Any]: Sell operation result
-            
+                
         Raises:
             ValueError: If asset doesn't exist
         """
@@ -638,161 +666,492 @@ class PortfolioManager:
                     'reasons': validation.get('reasons', ['Risk check failed'])
                 }
         
-        # Execute sell
-        result = await asset.sell(kwargs)
+        # Make a copy of kwargs to avoid modifying the original
+        order_params = kwargs.copy()
         
-        # Track order if successful
-        if result.get('success', False) and 'order_id' in result:
-            self._all_orders[result['order_id']] = {
+        # Ensure the direction is correctly set to 'sell'
+        order_params['direction'] = 'sell'
+        
+        # Execute sell
+        try:
+            result = await asset.sell(order_params)
+            
+            # Track order if successful
+            if result.get('success', False) and 'order_id' in result:
+                self._all_orders[result['order_id']] = {
+                    'asset_name': asset_name,
+                    'action': 'sell',
+                    'price': result.get('price', 0.0),
+                    'amount': amount,
+                    'result': result,
+                    'timestamp': time.time(),
+                    'params': kwargs
+                }
+                    
+                # Notify risk manager of new order
+                await self.notify_risk_manager('order_executed', {
+                    'asset_name': asset_name,
+                    'direction': 'sell',
+                    'price': result.get('price', 0.0),
+                    'amount': amount,
+                    'order_id': result['order_id'],
+                    'result': result
+                })
+                        
+            return result
+        except Exception as e:
+            self.logger.warning(f"Failed to execute sell for {asset_name}: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
                 'asset_name': asset_name,
                 'action': 'sell',
+                'amount': amount
+            }
+        
+    async def process_signals(self, signals: pd.DataFrame, data: pd.DataFrame = None) -> Dict[str, Any]:
+        """
+        Process trading signals and route to appropriate asset operations
+        
+        Args:
+            signals: DataFrame containing trading signals with columns:
+                - symbol: Asset symbol
+                - action: Trading action (buy, sell, long, short, close_long, close_short)
+                - quantity: Amount to trade
+                - price: Optional price for limit orders
+                - order_type: Optional order type (default: market)
+                - additional parameters depending on asset type
+            data: Optional market data for reference
+            
+        Returns:
+            Dict containing execution results
+        """
+        if signals.empty:
+            self.logger.info("No signals to process")
+            return {"success": True, "message": "No signals to process", "orders": []}
+        
+        # Validate required columns
+        required_columns = ['symbol', 'action']
+        missing_columns = [col for col in required_columns if col not in signals.columns]
+        if missing_columns:
+            return {
+                "success": False, 
+                "error": f"Missing required columns in signals: {missing_columns}",
+                "orders": []
+            }
+        
+        # Process each signal and collect results
+        order_results = []
+        for _, signal in signals.iterrows():
+            try:
+                # Extract basic signal information
+                symbol = signal['symbol']
+                action = signal['action'].lower()
+                quantity = signal.get('quantity')
+                
+                # Handle auto-sizing if quantity not provided
+                if quantity is None and data is not None:
+                    quantity = self._auto_size_position(symbol, action, data)
+                    
+                if quantity is None or quantity <= 0:
+                    self.logger.warning(f"Invalid quantity for {symbol}: {quantity}")
+                    order_results.append({
+                        "success": False,
+                        "symbol": symbol,
+                        "action": action,
+                        "error": "Invalid or missing quantity"
+                    })
+                    continue
+                    
+                # Find corresponding asset
+                asset = self._find_asset_by_symbol(symbol)
+                if asset is None:
+                    self.logger.warning(f"Asset not found: {symbol}")
+                    order_results.append({
+                        "success": False,
+                        "symbol": symbol,
+                        "action": action,
+                        "error": "Asset not found"
+                    })
+                    continue
+                    
+                # Prepare order parameters
+                order_params = self._prepare_order_params(signal, quantity)
+                
+                # Apply risk checks before execution
+                if self.risk_manager:
+                    validation = await self.risk_manager.validate_order(order_params)
+                    if not validation.get('allowed', False):
+                        reasons = validation.get('reasons', ['Risk check failed'])
+                        self.logger.warning(f"Order rejected by risk manager for {symbol}: {reasons}")
+                        order_results.append({
+                            "success": False,
+                            "symbol": symbol,
+                            "action": action,
+                            "quantity": quantity,
+                            "error": f"Risk check failed: {reasons}"
+                        })
+                        continue
+                
+                # Route to appropriate asset method based on action
+                result = await self._route_order_to_asset(asset, action, order_params)
+                
+                # Track successful orders
+                if result.get('success', False) and 'order_id' in result:
+                    self._all_orders[result['order_id']] = {
+                        'asset_name': symbol,
+                        'action': action,
+                        'price': result.get('price', 0.0),
+                        'quantity': quantity,
+                        'result': result,
+                        'timestamp': time.time(),
+                        'params': order_params
+                    }
+                    
+                    # Notify risk manager of executed order
+                    await self.notify_risk_manager('order_executed', {
+                        'asset_name': symbol,
+                        'action': action,
+                        'price': result.get('price', 0.0),
+                        'quantity': quantity,
+                        'order_id': result['order_id'],
+                        'result': result
+                    })
+                
+                order_results.append(result)
+                
+            except Exception as e:
+                self.logger.error(f"Error processing signal for {signal.get('symbol', 'unknown')}: {str(e)}")
+                order_results.append({
+                    "success": False,
+                    "symbol": signal.get('symbol', 'unknown'),
+                    "action": signal.get('action', 'unknown'),
+                    "error": str(e)
+                })
+        
+        # Summarize results
+        success_count = sum(1 for r in order_results if r.get('success', False))
+        self.logger.info(f"Processed {len(order_results)} signals: {success_count} successful, {len(order_results) - success_count} failed")
+        
+        return {
+            "success": True,
+            "orders": order_results,
+            "successful": success_count,
+            "failed": len(order_results) - success_count
+        }
+
+    def _prepare_order_params(self, signal: pd.Series, quantity: float) -> Dict[str, Any]:
+        """
+        Prepare order parameters from signal data
+        
+        Args:
+            signal: Signal series from DataFrame row
+            quantity: Order quantity (may be auto-calculated)
+            
+        Returns:
+            Dict with order parameters
+        """
+        params = {
+            'symbol': signal['symbol'],
+            'quantity': quantity,
+            'direction': signal['action'].lower()  # Initially set to action, will be mapped if needed
+        }
+        
+        # Add optional parameters if present
+        if 'price' in signal and not pd.isna(signal['price']):
+            params['price'] = signal['price']
+            
+        if 'order_type' in signal and not pd.isna(signal['order_type']):
+            params['order_type'] = signal['order_type'].lower()
+        else:
+            params['order_type'] = 'market'  # Default to market orders
+            
+        # Handle other common parameters
+        for param in ['leverage', 'stop_price', 'take_profit', 'reduce_only', 'time_in_force']:
+            if param in signal and not pd.isna(signal[param]):
+                params[param] = signal[param]
+        
+        # Add any remaining parameters that might be asset-specific
+        for column, value in signal.items():
+            if column not in params and not pd.isna(value):
+                params[column] = value
+                
+        return params
+
+    def _auto_size_position(self, symbol: str, action: str, data: pd.DataFrame) -> Optional[float]:
+        """
+        Calculate position size based on portfolio value and risk settings
+        
+        Args:
+            symbol: Asset symbol
+            action: Trading action
+            data: Market data DataFrame
+            
+        Returns:
+            Calculated quantity or None if calculation fails
+        """
+        try:
+            # Get latest price from data
+            if data is None or data.empty or 'close' not in data.columns:
+                self.logger.warning(f"Cannot auto-size position for {symbol}: No price data available")
+                return None
+                
+            latest_price = data['close'].iloc[-1]
+            if latest_price <= 0:
+                self.logger.warning(f"Invalid price for auto-sizing {symbol}: {latest_price}")
+                return None
+                
+            # Get portfolio value
+            portfolio_value = self.get_total_value()
+            
+            # Get position size percentage from config or use default
+            position_size_pct = self.config.get("trading", "position_size_pct", default=0.02)
+            
+            # Calculate quantity
+            quantity = (portfolio_value * position_size_pct) / latest_price
+            
+            # Round to appropriate precision (could be asset-specific)
+            asset = self._find_asset_by_symbol(symbol)
+            precision = 8  # Default precision
+            if asset and hasattr(asset, 'precision'):
+                precision = asset.precision
+                
+            rounded_quantity = round(quantity, precision)
+            
+            self.logger.info(f"Auto-sized {action} for {symbol}: {rounded_quantity} units ({position_size_pct*100:.1f}% of portfolio)")
+            return rounded_quantity
+            
+        except Exception as e:
+            self.logger.error(f"Error auto-sizing position for {symbol}: {str(e)}")
+            return None
+
+    async def _route_order_to_asset(self, asset: Asset, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Route order to appropriate asset method based on action
+        
+        Args:
+            asset: Asset instance
+            action: Trading action (buy, sell, long, short, close_long, close_short)
+            params: Order parameters
+            
+        Returns:
+            Order execution result
+        """
+        # Map action to asset method
+        action = action.lower()
+        
+        # Basic spot trading operations
+        if action in ['buy', 'sell']:
+            # For spot assets, just use the basic buy/sell methods
+            method = getattr(asset, action, None)
+            if method and callable(method):
+                return await method(params)
+                
+        # Futures/options position operations
+        elif action == 'long' or action == 'open_long':
+            # For futures/options, use the position opening methods
+            method = getattr(asset, 'open_long_position', None)
+            if method and callable(method):
+                return await method(params['quantity'], **params)
+                
+        elif action == 'short' or action == 'open_short':
+            # For futures/options, use the position opening methods
+            method = getattr(asset, 'open_short_position', None)
+            if method and callable(method):
+                return await method(params['quantity'], **params)
+                
+        elif action == 'close_long':
+            # For futures/options, use the position closing methods
+            method = getattr(asset, 'close_long_position', None)
+            if method and callable(method):
+                return await method(params.get('quantity'), **params)
+                
+        elif action == 'close_short':
+            # For futures/options, use the position closing methods
+            method = getattr(asset, 'close_short_position', None)
+            if method and callable(method):
+                return await method(params.get('quantity'), **params)
+                
+        # If action not recognized or method not available, return error
+        self.logger.error(f"Unsupported action {action} for asset {asset.name} or method not implemented")
+        return {
+            "success": False,
+            "symbol": params['symbol'],
+            "action": action,
+            "error": f"Unsupported action or method not implemented: {action}"
+        }
+
+    async def execute_order(self, order_params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute a single order with the specified parameters
+        
+        Args:
+            order_params: Dictionary containing:
+                - symbol: Asset symbol
+                - action: Trading action (buy, sell, long, short, etc.)
+                - quantity: Amount to trade
+                - price: Optional price for limit orders
+                - Additional parameters depending on asset type
+                
+        Returns:
+            Dict with order execution result
+        """
+        if 'symbol' not in order_params:
+            return {"success": False, "error": "Missing 'symbol' parameter"}
+            
+        if 'action' not in order_params:
+            return {"success": False, "error": "Missing 'action' parameter"}
+            
+        symbol = order_params['symbol']
+        action = order_params['action'].lower()
+        
+        # Find the asset
+        asset = self._find_asset_by_symbol(symbol)
+        if asset is None:
+            return {"success": False, "error": f"Asset not found: {symbol}"}
+        
+        # Apply risk validation if needed
+        if self.risk_manager:
+            validation = await self.risk_manager.validate_order(order_params)
+            if not validation.get('allowed', False):
+                reasons = validation.get('reasons', ['Risk check failed'])
+                return {
+                    "success": False,
+                    "symbol": symbol,
+                    "action": action,
+                    "error": f"Risk check failed: {reasons}"
+                }
+        
+        # Route to appropriate asset method
+        result = await self._route_order_to_asset(asset, action, order_params)
+        
+        # Track successful orders
+        if result.get('success', False) and 'order_id' in result:
+            self._all_orders[result['order_id']] = {
+                'asset_name': symbol,
+                'action': action,
                 'price': result.get('price', 0.0),
-                'amount': amount,
+                'quantity': order_params.get('quantity', 0.0),
                 'result': result,
                 'timestamp': time.time(),
-                'params': kwargs
+                'params': order_params
             }
             
-            # Notify risk manager of new order
+            # Notify risk manager of executed order
             await self.notify_risk_manager('order_executed', {
-                'asset_name': asset_name,
-                'direction': 'sell',
+                'asset_name': symbol,
+                'action': action,
                 'price': result.get('price', 0.0),
-                'amount': amount,
+                'quantity': order_params.get('quantity', 0.0),
                 'order_id': result['order_id'],
                 'result': result
             })
-                
+        
         return result
-
-    # async def place_order(self, **kwargs) -> Dict[str, Any]:
-    #     """
-    #     Place an order for an asset
-        
-    #     Args:
-    #         asset_name: Name of the asset
-    #         order_type: Type of order ('market', 'limit', 'stop', etc.)
-    #         direction: Order direction ('buy', 'sell')
-    #         amount: Order amount
-    #         **kwargs: Additional order parameters
-            
-    #     Returns:
-    #         Dict[str, Any]: Order result
-    #     """
-    #     asset_name = kwargs['symbol']
-    #     price = kwargs['price']
-    #     amount = kwargs['quantity']
-    #     order_type = kwargs['order_type'].lower()
-    #     direction = kwargs['direction'].lower()    
-            
-    #     if asset_name not in self.assets:
-    #         raise ValueError(f"Asset '{asset_name}' does not exist")
-        
-    #     # Place different order types
-    #     try:
-    #         if direction == 'buy':
-    #             # Add order type to kwargs
-    #             return await self.buy_asset(kwargs)
-    #         elif direction == 'sell':
-    #             # Add order type to kwargs
-    #             return await self.sell_asset(kwargs)
-    #         else:
-    #             raise ValueError(f"Invalid direction: {direction}. Must be 'buy' or 'sell'")
-    #     except Exception as e:
-    #         self.logger.error(f"Error placing {order_type} {direction} order for {asset_name}: {str(e)}")
-    #         return {
-    #             'success': False,
-    #             'error': str(e),
-    #             'asset_name': asset_name,
-    #             'order_type': order_type,
-    #             'direction': direction,
-    #             'price': price,
-    #             'amount': amount
-    #         }
 
     async def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """
-        Cancel an order by ID
+        Cancel an active order
         
         Args:
-            order_id: Order ID
+            order_id: Order ID to cancel
             
         Returns:
-            Dict[str, Any]: Cancel result
+            Dict with cancellation result
         """
-        # Find the asset that owns this order
+        # Check if we're tracking this order
         if order_id in self._all_orders:
-            asset_name = self._all_orders[order_id]['asset_name']
-            asset = self.assets.get(asset_name)
+            order_info = self._all_orders[order_id]
+            asset_name = order_info['asset_name']
             
-            if asset and hasattr(asset, 'cancel_order') and callable(asset.cancel_order):
-                try:
-                    success = await asset.cancel_order(order_id)
+            # Find the asset
+            asset = self._find_asset_by_symbol(asset_name)
+            if asset is None:
+                return {
+                    "success": False,
+                    "order_id": order_id,
+                    "error": f"Asset not found for order: {asset_name}"
+                }
+                
+            # Cancel the order through the asset
+            if hasattr(asset, 'cancel_order') and callable(asset.cancel_order):
+                result = await asset.cancel_order(order_id)
+                
+                # Notify risk manager of cancellation
+                if result.get('success', False):
+                    await self.notify_risk_manager('order_canceled', {
+                        'asset_name': asset_name,
+                        'order_id': order_id
+                    })
                     
-                    if success:
-                        result = {
-                            'success': True,
-                            'order_id': order_id,
-                            'asset_name': asset_name,
-                            'status': 'canceled'
-                        }
-                        
-                        # Notify risk manager of order cancellation
+                return result
+        
+        # If order not tracked, try canceling on all assets
+        for asset_name, asset in self.assets.items():
+            if hasattr(asset, 'cancel_order') and callable(asset.cancel_order):
+                try:
+                    result = await asset.cancel_order(order_id)
+                    if result.get('success', False):
+                        # Notify risk manager of cancellation
                         await self.notify_risk_manager('order_canceled', {
                             'asset_name': asset_name,
                             'order_id': order_id
                         })
                         
                         return result
-                    else:
-                        return {
-                            'success': False,
-                            'order_id': order_id,
-                            'asset_name': asset_name,
-                            'error': 'Cancel failed'
-                        }
-                except Exception as e:
-                    self.logger.error(f"Error canceling order {order_id}: {str(e)}")
-                    return {
-                        'success': False,
-                        'order_id': order_id,
-                        'asset_name': asset_name,
-                        'error': str(e)
-                    }
-            else:
-                return {
-                    'success': False,
-                    'order_id': order_id,
-                    'error': f"Asset {asset_name} not found or does not support order operations"
-                }
-        
-        # If order not tracked, try canceling on all assets
-        for asset_name, asset in self.assets.items():
-            if hasattr(asset, 'cancel_order') and callable(asset.cancel_order):
-                try:
-                    success = await asset.cancel_order(order_id)
-                    if success:
-                        # Notify risk manager of order cancellation
-                        await self.notify_risk_manager('order_canceled', {
-                            'asset_name': asset_name,
-                            'order_id': order_id
-                        })
-                        
-                        return {
-                            'success': True,
-                            'order_id': order_id,
-                            'asset_name': asset_name,
-                            'status': 'canceled'
-                        }
                 except Exception:
                     continue
         
         return {
-            'success': False,
-            'order_id': order_id,
-            'error': 'Order not found'
+            "success": False,
+            "order_id": order_id,
+            "error": "Order not found"
         }
 
+    async def get_order_status(self, order_id: str) -> Dict[str, Any]:
+        """
+        Get current status of an order
+        
+        Args:
+            order_id: Order ID to check
+            
+        Returns:
+            Dict with order status information
+        """
+        # Check if we're tracking this order
+        if order_id in self._all_orders:
+            order_info = self._all_orders[order_id]
+            asset_name = order_info['asset_name']
+            
+            # Find the asset
+            asset = self._find_asset_by_symbol(asset_name)
+            if asset is None:
+                return {
+                    "success": False,
+                    "order_id": order_id,
+                    "error": f"Asset not found for order: {asset_name}"
+                }
+                
+            # Get order status through the asset
+            if hasattr(asset, 'get_order_status') and callable(asset.get_order_status):
+                return await asset.get_order_status(order_id)
+        
+        # If order not tracked, try checking on all assets
+        for asset_name, asset in self.assets.items():
+            if hasattr(asset, 'get_order_status') and callable(asset.get_order_status):
+                try:
+                    result = await asset.get_order_status(order_id)
+                    if result.get('success', False):
+                        return result
+                except Exception:
+                    continue
+        
+        return {
+            "success": False,
+            "order_id": order_id,
+            "error": "Order not found"
+        }
+        
     async def get_order(self, order_id: str) -> Dict[str, Any]:
         """
         Get order details by ID
@@ -1063,125 +1422,6 @@ class PortfolioManager:
             }
         finally:
             self._is_syncing = False
-    
-    async def process_signals(self, signals: pd.DataFrame, data: pd.DataFrame = None) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
-        """
-        Process and execute trading signals
-        
-        Args:
-            signals: DataFrame containing trading signals
-            data: DataFrame containing market data (optional, for auto-sizing)
-        
-        Returns:
-            List[Dict[str, Any]] or Dict[str, Any]: Either list of trade results or structured results dictionary
-        """
-        # Handle empty signals case
-        if signals.empty:
-            self.logger.info("No signals to process")
-            return []
-        
-        # Validate signal format
-        required_columns = ['symbol', 'action', 'timestamp']
-        if not all(col in signals.columns for col in required_columns):
-            missing = [col for col in required_columns if col not in signals.columns]
-            self.logger.error(f"Invalid signal format, missing columns: {missing}")
-            return []
-        
-        # Apply risk management rules
-        validated_signals = signals
-        if self.risk_manager and hasattr(self.risk_manager, 'validate_signals'):
-            try:
-                validated_signals = await self.risk_manager.validate_signals(signals)
-                if len(validated_signals) < len(signals):
-                    self.logger.info(f"Risk manager filtered out {len(signals) - len(validated_signals)} signals")
-            except Exception as e:
-                self.logger.error(f"Error validating signals: {e}")
-        
-        # Notify risk manager of batch start
-        if self.risk_manager:
-            await self.notify_risk_manager('batch_execution_start', {
-                'signal_count': len(validated_signals),
-                'symbols': validated_signals['symbol'].unique().tolist() if not validated_signals.empty else []
-            })
-        
-        executed_trades = []
-        
-        # Process each signal
-        for _, signal in validated_signals.iterrows():
-            symbol = signal['symbol']
-            action = signal['action'].lower()
-            timestamp = signal['timestamp']
-            
-            # Handle quantity with auto-sizing if needed
-            quantity = signal.get('quantity')
-            if quantity is None and data is not None and 'close' in data.columns:
-                position_size_pct = self.config.get("trading", "position_size_pct", default=0.02)
-                portfolio_value = self.get_total_value()
-                latest_price = data['close'].iloc[-1]
-                quantity = (portfolio_value * position_size_pct) / latest_price
-                self.logger.info(f"Auto-sizing: {symbol} {quantity:.6f} units ({position_size_pct*100:.1f}% of portfolio)")
-            elif quantity is None:
-                self.logger.error(f"No quantity provided for {symbol} and no market data for auto-sizing")
-                continue
-            
-            # Execute the trade
-            try:
-                # Check if asset exists
-                if symbol not in self.assets:
-                    self.logger.warning(f"Asset not found: {symbol}")
-                    continue
-                
-                # Prepare trade parameters
-                kwargs = {}
-                price = signal.get('price')
-                if price is not None:
-                    kwargs['symbol'] = symbol
-                    kwargs['price'] = price
-                    kwargs['quantity'] = quantity
-                    kwargs['direction'] = action
-                    kwargs['order_type'] = 'limit'
-                
-                # Execute appropriate action
-                trade_result = None
-                if action in ['buy', 'long']:
-                    trade_result = await self.buy_asset(kwargs)
-                elif action in ['sell', 'short']:
-                    trade_result = await self.sell_asset(kwargs)
-                else:
-                    self.logger.warning(f"Unsupported action: {action}")
-                    continue
-                
-                # Process result
-                if trade_result and trade_result.get('success', False):
-                    trade_result.update({
-                        'symbol': symbol,
-                        'action': action,
-                        'amount': float(quantity),
-                        'timestamp': timestamp
-                    })
-                    executed_trades.append(trade_result)
-                    self.logger.info(f"Executed {action} for {symbol}: {quantity} units at {price or 'market price'}")
-                else:
-                    error = trade_result.get('error', 'Unknown error') if trade_result else 'No result'
-                    self.logger.warning(f"Failed to execute {action} for {symbol}: {error}")
-                    
-            except Exception as e:
-                self.logger.error(f"Error processing signal for {symbol}: {e}")
-        
-        # Notify risk manager of completion
-        if self.risk_manager:
-            success_count = sum(1 for trade in executed_trades if trade.get('success', False))
-            await self.notify_risk_manager('batch_execution_complete', {
-                'total': len(validated_signals),
-                'successful': success_count,
-                'failed': len(validated_signals) - success_count
-            })
-        
-        # Log summary
-        if executed_trades:
-            self.logger.info(f"Executed {len(executed_trades)} trades from {len(validated_signals)} signals")
-        
-        return executed_trades
     
     async def record_batch_trades(self, trades: List[Dict[str, Any]]) -> None:
         """

@@ -121,20 +121,17 @@ class MarketReplayEngine(BaseBacktestEngine):
             
         Returns:
             Dict[str, Any]: Backtest results
-            
-        Raises:
-            MarketReplayEngineError: If backtest execution fails
         """
         if not self._is_initialized:
             await self.initialize()
         
         # Check for portfolio manager
         if not self.portfolio:
-            raise MarketReplayEngineError("Portfolio manager not set, cannot run backtest")
+            raise BacktestEngineError("Portfolio manager not set, cannot run backtest")
             
         # Check for strategy
         if not self.strategy:
-            raise MarketReplayEngineError("Strategy not set, cannot run backtest")
+            raise BacktestEngineError("Strategy not set, cannot run backtest")
         
         start_time = time.time()
         self._is_running = True
@@ -165,6 +162,9 @@ class MarketReplayEngine(BaseBacktestEngine):
             show_progress = self.params.get('show_progress', True)
             progress_bar = tqdm(total=len(timeline), desc="Market Replay") if show_progress else None
             
+            # Make sure we have assets in the portfolio for each symbol
+            await self._ensure_assets_in_portfolio(symbols)
+            
             # Track initial portfolio value
             initial_value = self.portfolio.get_total_value()
             self.portfolio_history.append({
@@ -183,7 +183,8 @@ class MarketReplayEngine(BaseBacktestEngine):
                 current_data = self._get_data_at_timestamp(data, timestamp)
                 
                 # Update portfolio with current market data
-                await self.portfolio.update_market_data(current_data)
+                if current_data:
+                    await self.portfolio.update_market_data(current_data)
                 
                 # Track baseline (underlying asset) price
                 if main_symbol in current_data and not current_data[main_symbol].empty:
@@ -203,7 +204,7 @@ class MarketReplayEngine(BaseBacktestEngine):
                     # If signals were generated, execute them immediately
                     if not signals.empty:
                         # Execute the signals
-                        executed_trades = await self.portfolio.process_signals(signals, current_data)
+                        executed_trades = await self.portfolio.process_signals(signals, data_point)
                         if executed_trades:
                             self.trades.extend(executed_trades)
                             self.logger.debug(f"Executed {len(executed_trades)} trades for {symbol} at {timestamp}")
@@ -297,6 +298,8 @@ class MarketReplayEngine(BaseBacktestEngine):
         
         except Exception as e:
             self.logger.error(f"Error during market replay: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             # More graceful failure - return partial results if available
             if self.portfolio_history:
                 # Try to salvage what data we have
@@ -315,9 +318,46 @@ class MarketReplayEngine(BaseBacktestEngine):
                     }
                 }
             else:
-                raise MarketReplayEngineError(f"Market replay failed: {str(e)}")
+                raise BacktestEngineError(f"Market replay failed: {str(e)}")
         finally:
             self._is_running = False
+
+    async def _ensure_assets_in_portfolio(self, symbols: List[str]) -> None:
+        """
+        Make sure all symbols are present as assets in the portfolio
+        
+        Args:
+            symbols: List of symbol names
+        """
+        if not self.portfolio:
+            return
+            
+        # Get current assets in portfolio
+        portfolio_assets = self.portfolio.list_assets()
+        
+        # For each symbol, ensure it's in the portfolio
+        for symbol in symbols:
+            if symbol not in portfolio_assets:
+                self.logger.info(f"Adding {symbol} to portfolio for backtesting")
+                
+                # Create asset params
+                asset_params = {
+                    'name': symbol,
+                    'symbol': symbol,
+                    'type': 'spot',
+                    'tradable': True,
+                    'quantity': 0.0,
+                    'price': 100.0  # Default price, will be updated with market data
+                }
+                
+                try:
+                    # Create asset through the portfolio
+                    if hasattr(self.portfolio, 'asset_factory'):
+                        asset = await self.portfolio.asset_factory.create_asset(asset_params)
+                        await self.portfolio.add_asset(asset)
+                except Exception as e:
+                    self.logger.error(f"Error adding {symbol} to portfolio: {e}")
+
 
     def _get_common_timeline(self, data: Dict[str, pd.DataFrame]) -> List:
         """

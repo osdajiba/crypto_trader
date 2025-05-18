@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-# src/backtest/engine/ohlcv.py
-
-"""
-OHLCV backtest engine implementation.
-Provides vectorized backtesting for OHLCV (Open, High, Low, Close, Volume) data.
-"""
+# src/backtest/engine/ohlcv.py (Fixed Implementation)
 
 from collections import deque
 import pandas as pd
@@ -111,6 +105,9 @@ class OHLCVEngine(BaseBacktestEngine):
         try:
             self.logger.info("Starting OHLCV backtest run")
             
+            # Ensure all required symbols are in the portfolio
+            await self._ensure_assets_in_portfolio(list(data.keys()))
+            
             # Calculate all factors for each symbol in vectorized manner
             if self.use_vectorized:
                 for symbol, df in data.items():
@@ -157,12 +154,17 @@ class OHLCVEngine(BaseBacktestEngine):
                     executed_trades = await self.portfolio.process_signals(current_signals, market_data)
                     if executed_trades:
                         trades.extend(executed_trades)
-                        self.logger.debug(f"Executed {len(executed_trades)} trades for {symbol} at {timestamp}")
+                        symbols_traded = set(trade.get('symbol', '') for trade in executed_trades)
+                        self.logger.debug(f"Executed {len(executed_trades)} trades for {', '.join(symbols_traded)} at {timestamp}")
     
                         # Update performance analyzer if available
                         if hasattr(self, 'performance_analyzer') and self.performance_analyzer:
                             for trade in executed_trades:
                                 self.performance_analyzer.record_trade(trade)
+                
+                # Update all assets with the latest market data
+                if market_data:
+                    await self.portfolio.update_market_data(market_data)
                 
                 # Record portfolio value at this timestamp
                 portfolio_value = self.portfolio.get_total_value()
@@ -170,6 +172,7 @@ class OHLCVEngine(BaseBacktestEngine):
                     'timestamp': timestamp,
                     'portfolio_value': portfolio_value
                 })
+                
                 # Update performance analyzer with equity update
                 if hasattr(self, 'performance_analyzer') and self.performance_analyzer:
                     self.performance_analyzer.update_equity(timestamp, portfolio_value)
@@ -225,9 +228,47 @@ class OHLCVEngine(BaseBacktestEngine):
             
         except Exception as e:
             self.logger.error(f"Error during OHLCV backtest: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             raise OHLCVEngineError(f"Backtest execution failed: {str(e)}")
         finally:
             self._is_running = False
+
+    async def _ensure_assets_in_portfolio(self, symbols: List[str]) -> None:
+        """
+        Make sure all symbols are present as assets in the portfolio
+        
+        Args:
+            symbols: List of symbol names
+        """
+        if not self.portfolio:
+            return
+            
+        # Get current assets in portfolio
+        portfolio_assets = self.portfolio.list_assets()
+        
+        # For each symbol, ensure it's in the portfolio
+        for symbol in symbols:
+            if symbol not in portfolio_assets:
+                self.logger.info(f"Adding {symbol} to portfolio for backtesting")
+                
+                # Create asset params
+                asset_params = {
+                    'name': symbol,
+                    'symbol': symbol,
+                    'type': 'spot',
+                    'tradable': True,
+                    'quantity': 0.0,
+                    'price': 100.0  # Default price, will be updated with market data
+                }
+                
+                try:
+                    # Create asset through the portfolio
+                    if hasattr(self.portfolio, 'asset_factory'):
+                        asset = await self.portfolio.asset_factory.create_asset(asset_params)
+                        await self.portfolio.add_asset(asset)
+                except Exception as e:
+                    self.logger.error(f"Error adding {symbol} to portfolio: {e}")
     
     def _create_signal_timeline(self, all_signals: Dict[str, pd.DataFrame]) -> List:
         """
@@ -478,15 +519,34 @@ class OHLCVEngine(BaseBacktestEngine):
         
         # Process with strategy
         if self.strategy:
-            signals = await self.strategy._generate_signals(self.data_buffers[symbol])
+            try:
+                # Try to use the strategy's process_data method first
+                if hasattr(self.strategy, 'process_data') and callable(self.strategy.process_data):
+                    signals = await self.strategy.process_data(self.data_buffers[symbol], symbol)
+                # Fall back to _generate_signals if process_data is not available
+                elif hasattr(self.strategy, '_generate_signals') and callable(self.strategy._generate_signals):
+                    signals = await self.strategy._generate_signals(self.data_buffers[symbol])
+                else:
+                    self.logger.warning(f"Strategy doesn't have process_data or _generate_signals methods")
+                    return pd.DataFrame()
+                
+                # Add symbol if not present
+                if not signals.empty and 'symbol' not in signals.columns:
+                    signals['symbol'] = symbol
+                
+                # Add timestamp if not present
+                if not signals.empty and 'timestamp' not in signals.columns:
+                    if 'timestamp' in data_point.columns:
+                        signals['timestamp'] = data_point['timestamp'].iloc[0]
+                    elif 'datetime' in data_point.columns:
+                        signals['timestamp'] = data_point['datetime'].iloc[0]
+                
+                return signals
             
-            # Add symbol if not present
-            if not signals.empty and 'symbol' not in signals.columns:
-                signals['symbol'] = symbol
-            
-            return signals
+            except Exception as e:
+                self.logger.error(f"Error generating signals for {symbol}: {str(e)}")
         
-        # No strategy, no signals
+        # No strategy or error occurred, no signals
         return pd.DataFrame()
     
     def _get_data_at_timestamp(self, data: Dict[str, pd.DataFrame], timestamp) -> Dict[str, pd.DataFrame]:

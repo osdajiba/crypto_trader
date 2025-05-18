@@ -183,6 +183,8 @@ class AssetFactory(AbstractFactory):
         try:
             params_copy = params.copy()
             asset_type = await self._resolve_name(params.pop('type', 'spot'))
+            
+            # Extract these from params correctly before passing to asset constructor
             exchange_instance = params_copy.get('exchange', None)
             execution_engine_instance = params_copy.get('execution_engine', None)
             
@@ -194,7 +196,7 @@ class AssetFactory(AbstractFactory):
             asset = asset_class(
                 name=asset_name,
                 exchange=exchange_instance,
-                execution_engine=execution_engine_instance,
+                execution_engine=execution_engine_instance,  # This needs to be properly passed
                 config=self.config,
                 params=params_copy
             )

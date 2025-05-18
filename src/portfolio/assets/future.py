@@ -17,12 +17,12 @@ from src.portfolio.execution.order import Direction, Order, OrderStatus
 
 logger = LogManager.get_logger("asset.future")
 
-
 @register_factory_class('asset_factory', 'future')
 class Future(Asset):
     """
-    Future contract asset implementation for derivatives trading
-    Integrates with CCXT exchange API futures markets and execution engine
+    Future contract asset implementation for derivatives trading.
+    
+    Supports both long and short positions, leverage, and position management.
     """
     
     def __init__(self, name: str, 
@@ -34,27 +34,26 @@ class Future(Asset):
         Initialize future asset
         
         Args:
+            name: Future contract symbol
+            exchange: Exchange interface
+            execution_engine: Execution engine
             config: Configuration manager
-            params: Parameters including:
-                name: Future contract symbol (e.g. 'BTC/USDT:USDT')
-                contract_size: Contract size
+            params: Additional parameters including:
+                contract_size: Size of each contract
                 price: Current contract price
-                leverage: Trading leverage (default 1 = no leverage)
-                position_type: 'long' or 'short'
-                exchange: Exchange interface (optional)
-                execution_mode: Execution mode ('live', 'backtest', 'simple_backtest')
+                leverage: Trading leverage
         """
         params = params or {}
-        # Ensure spot assets are tradable
+        # Ensure futures are tradable
         params['tradable'] = True
         super().__init__(name, exchange, execution_engine, config, params)
         
-        # Asset specific properties
+        # Futures-specific properties
         self.contract_size = Decimal(str(params.get('contract_size', 1)))
         self.price = Decimal(str(params.get('price', 0.0)))
-        self.symbol = name  # Contract symbol
+        self.symbol = name
         self.leverage = Decimal(str(params.get('leverage', 1)))
-        self.position_type = params.get('position_type', 'long')  # 'long' or 'short'
+        self.position_type = params.get('position_type', 'flat')  # 'long', 'short', or 'flat'
         
         # Trading parameters
         self.precision = params.get('precision', 8)
@@ -74,18 +73,349 @@ class Future(Asset):
         # Calculate liquidation price
         self._calculate_liquidation_price()
         
-        logger.info(f"Initialized {self.symbol} future contract with {float(self._contracts)} contracts "
-                    f"at ${float(self.price):.2f}, leverage: {float(self.leverage)}x")
-
-    def get_value(self) -> float:
+        self.logger.info(f"Initialized {self.symbol} future contract with {float(self._contracts)} contracts "
+                        f"at ${float(self.price):.2f}, leverage: {float(self.leverage)}x")
+    
+    async def get_value(self) -> float:
         """
         Get the current notional value of the futures position
         
         Returns:
-            float: Current position value (contracts * contract_size * price)
+            Current position value
         """
         return float(self._value)
     
+    def get_position_type(self) -> str:
+        """
+        Get current position type
+        
+        Returns:
+            Position type ('long', 'short', 'flat')
+        """
+        return self.position_type
+    
+    # Position management methods for futures
+    
+    async def open_long_position(self, quantity: float, **kwargs) -> Dict[str, Any]:
+        """
+        Open a long position in the futures market
+        
+        Args:
+            quantity: Number of contracts to buy
+            **kwargs: Additional parameters:
+                price: Limit price (optional)
+                leverage: Leverage to use (optional)
+                
+        Returns:
+            Dict with order result
+        """
+        # Update leverage if specified
+        if 'leverage' in kwargs and kwargs['leverage'] != self.leverage:
+            try:
+                await self.set_leverage(float(kwargs['leverage']))
+            except Exception as e:
+                self.logger.error(f"Failed to set leverage to {kwargs['leverage']}: {e}")
+                return {
+                    "success": False,
+                    "error": f"Failed to set leverage: {str(e)}",
+                    "direction": "buy",
+                    "quantity": quantity
+                }
+
+        # Set reduce_only if we have an existing short position
+        reduce_only = False
+        if self.position_type == 'short' and self._contracts > 0:
+            reduce_only = True
+            self.logger.info(f"Opening long will reduce existing short position")
+        
+        # Prepare buy parameters
+        buy_params = {
+            'symbol': self.symbol,
+            'quantity': quantity,
+            'direction': 'buy',
+            'reduce_only': reduce_only
+        }
+        
+        # Add optional parameters
+        for param in ['price', 'order_type', 'stop_price', 'take_profit_price']:
+            if param in kwargs:
+                buy_params[param] = kwargs[param]
+        
+        # Execute buy
+        result = await self.buy(buy_params)
+        
+        # Log position update if successful
+        if result.get('success', False):
+            self.logger.info(f"Opened long position: {quantity} contracts of {self.symbol}")
+        
+        return result
+
+    async def close_long_position(self, quantity: float = None, **kwargs) -> Dict[str, Any]:
+        """
+        Close a long position in the futures market
+        
+        Args:
+            quantity: Number of contracts to sell (defaults to all if None)
+            **kwargs: Additional parameters:
+                price: Limit price (optional)
+                
+        Returns:
+            Dict with order result
+        """
+        # Check if we have a long position to close
+        if self.position_type != 'long' or self._contracts <= 0:
+            return {
+                "success": False,
+                "error": f"No long position to close. Current position: {self.position_type} with {float(self._contracts)} contracts",
+                "direction": "sell",
+                "quantity": quantity or 0
+            }
+        
+        # If quantity not specified, close the entire position
+        if quantity is None:
+            quantity = float(self._contracts)
+        elif quantity > float(self._contracts):
+            # Limit quantity to current position size
+            quantity = float(self._contracts)
+        
+        # Prepare sell parameters
+        sell_params = {
+            'symbol': self.symbol,
+            'quantity': quantity,
+            'direction': 'sell',
+            'reduce_only': True  # Always reduce_only when closing
+        }
+        
+        # Add optional parameters
+        for param in ['price', 'order_type']:
+            if param in kwargs:
+                sell_params[param] = kwargs[param]
+        
+        # Execute sell
+        result = await self.sell(sell_params)
+        
+        # Log position update if successful
+        if result.get('success', False):
+            self.logger.info(f"Closed long position: {quantity} contracts of {self.symbol}")
+        
+        return result
+
+    async def open_short_position(self, quantity: float, **kwargs) -> Dict[str, Any]:
+        """
+        Open a short position in the futures market
+        
+        Args:
+            quantity: Number of contracts to sell short
+            **kwargs: Additional parameters:
+                price: Limit price (optional)
+                leverage: Leverage to use (optional)
+                
+        Returns:
+            Dict with order result
+        """
+        # Update leverage if specified
+        if 'leverage' in kwargs and kwargs['leverage'] != self.leverage:
+            try:
+                await self.set_leverage(float(kwargs['leverage']))
+            except Exception as e:
+                self.logger.error(f"Failed to set leverage to {kwargs['leverage']}: {e}")
+                return {
+                    "success": False,
+                    "error": f"Failed to set leverage: {str(e)}",
+                    "direction": "sell",
+                    "quantity": quantity
+                }
+
+        # Set reduce_only if we have an existing long position
+        reduce_only = False
+        if self.position_type == 'long' and self._contracts > 0:
+            reduce_only = True
+            self.logger.info(f"Opening short will reduce existing long position")
+        
+        # Prepare sell parameters
+        sell_params = {
+            'symbol': self.symbol,
+            'quantity': quantity,
+            'direction': 'sell',
+            'reduce_only': reduce_only
+        }
+        
+        # Add optional parameters
+        for param in ['price', 'order_type', 'stop_price', 'take_profit_price']:
+            if param in kwargs:
+                sell_params[param] = kwargs[param]
+        
+        # Execute sell
+        result = await self.sell(sell_params)
+        
+        # Log position update if successful
+        if result.get('success', False):
+            self.logger.info(f"Opened short position: {quantity} contracts of {self.symbol}")
+        
+        return result
+
+    async def close_short_position(self, quantity: float = None, **kwargs) -> Dict[str, Any]:
+        """
+        Close a short position in the futures market
+        
+        Args:
+            quantity: Number of contracts to buy to cover (defaults to all if None)
+            **kwargs: Additional parameters:
+                price: Limit price (optional)
+                
+        Returns:
+            Dict with order result
+        """
+        # Check if we have a short position to close
+        if self.position_type != 'short' or self._contracts <= 0:
+            return {
+                "success": False,
+                "error": f"No short position to close. Current position: {self.position_type} with {float(self._contracts)} contracts",
+                "direction": "buy",
+                "quantity": quantity or 0
+            }
+        
+        # If quantity not specified, close the entire position
+        if quantity is None:
+            quantity = float(self._contracts)
+        elif quantity > float(self._contracts):
+            # Limit quantity to current position size
+            quantity = float(self._contracts)
+        
+        # Prepare buy parameters
+        buy_params = {
+            'symbol': self.symbol,
+            'quantity': quantity,
+            'direction': 'buy',
+            'reduce_only': True  # Always reduce_only when closing
+        }
+        
+        # Add optional parameters
+        for param in ['price', 'order_type']:
+            if param in kwargs:
+                buy_params[param] = kwargs[param]
+        
+        # Execute buy
+        result = await self.buy(buy_params)
+        
+        # Log position update if successful
+        if result.get('success', False):
+            self.logger.info(f"Closed short position: {quantity} contracts of {self.symbol}")
+        
+        return result
+    
+    # Updated _update_position_from_filled_order method for proper position tracking
+    
+    def _update_position_from_filled_order(self, order):
+        """
+        Update position based on a filled order
+        
+        Args:
+            order: The filled order
+        """
+        if order.status not in (OrderStatus.FILLED, OrderStatus.PARTIAL):
+            return
+        
+        filled_qty = Decimal(str(order.filled_quantity))
+        avg_price = Decimal(str(order.avg_filled_price))
+        
+        # Calculate fill price from the order result
+        fill_price = avg_price if avg_price > 0 else self.price
+        
+        # Update position tracking
+        if filled_qty > 0:
+            # Check if this is a reduce_only order
+            reduce_only = getattr(order, 'reduce_only', False)
+            
+            if order.direction == Direction.BUY:
+                if self.position_type == 'short' and self._contracts > 0:
+                    # Reducing a short position (buying to cover)
+                    if filled_qty >= self._contracts:
+                        # Closed entire short position
+                        realized_pnl = (self._entry_price - fill_price) * self._contracts * self.contract_size
+                        self._contracts = Decimal('0')
+                        self._entry_price = Decimal('0')
+                        self.position_type = 'flat'
+                        self.logger.info(f"Closed entire short position with realized PNL: ${float(realized_pnl):.2f}")
+                    else:
+                        # Partially reduced short position
+                        realized_pnl = (self._entry_price - fill_price) * filled_qty * self.contract_size
+                        self._contracts -= filled_qty
+                        self.logger.info(f"Reduced short position by {float(filled_qty)} contracts with realized PNL: ${float(realized_pnl):.2f}")
+                else:
+                    # Adding to or opening a long position
+                    if self._contracts > 0 and self.position_type == 'long':
+                        # Calculate average entry price for additional contracts
+                        total_cost = (self._entry_price * self._contracts) + (fill_price * filled_qty)
+                        self._contracts += filled_qty
+                        self._entry_price = total_cost / self._contracts
+                        self.logger.info(f"Added {float(filled_qty)} contracts to long position at ${float(fill_price)}")
+                    else:
+                        # Opening new long position
+                        self._contracts = filled_qty
+                        self._entry_price = fill_price
+                        self.position_type = 'long'
+                        self.logger.info(f"Opened new long position: {float(filled_qty)} contracts at ${float(fill_price)}")
+            else:  # SELL
+                if self.position_type == 'long' and self._contracts > 0:
+                    # Reducing a long position (selling to close)
+                    if filled_qty >= self._contracts:
+                        # Closed entire long position
+                        realized_pnl = (fill_price - self._entry_price) * self._contracts * self.contract_size
+                        self._contracts = Decimal('0')
+                        self._entry_price = Decimal('0')
+                        self.position_type = 'flat'
+                        self.logger.info(f"Closed entire long position with realized PNL: ${float(realized_pnl):.2f}")
+                    else:
+                        # Partially reduced long position
+                        realized_pnl = (fill_price - self._entry_price) * filled_qty * self.contract_size
+                        self._contracts -= filled_qty
+                        self.logger.info(f"Reduced long position by {float(filled_qty)} contracts with realized PNL: ${float(realized_pnl):.2f}")
+                else:
+                    # Adding to or opening a short position
+                    if self._contracts > 0 and self.position_type == 'short':
+                        # Calculate average entry price for additional contracts
+                        total_cost = (self._entry_price * self._contracts) + (fill_price * filled_qty)
+                        self._contracts += filled_qty
+                        self._entry_price = total_cost / self._contracts
+                        self.logger.info(f"Added {float(filled_qty)} contracts to short position at ${float(fill_price)}")
+                    else:
+                        # Opening new short position
+                        self._contracts = filled_qty
+                        self._entry_price = fill_price
+                        self.position_type = 'short'
+                        self.logger.info(f"Opened new short position: {float(filled_qty)} contracts at ${float(fill_price)}")
+        
+        # Update position size and value
+        self._position_size = self._contracts
+        self._value = self._contracts * self.contract_size * self.price
+        
+        # Recalculate liquidation price if we have a position
+        if self._contracts > 0:
+            self._calculate_liquidation_price()
+        
+        # Calculate unrealized PnL
+        if self._contracts > 0 and self._entry_price > 0:
+            if self.position_type == 'long':
+                self._unrealized_pnl = (self.price - self._entry_price) * self._contracts * self.contract_size
+            else:  # short
+                self._unrealized_pnl = (self._entry_price - self.price) * self._contracts * self.contract_size
+        else:
+            self._unrealized_pnl = Decimal('0')
+        
+        # Notify subscribers of position update
+        self._notify_subscribers('position_updated', {
+            'symbol': self.symbol,
+            'position_type': self.position_type,
+            'position_size': float(self._position_size),
+            'entry_price': float(self._entry_price),
+            'current_price': float(self.price),
+            'value': float(self._value),
+            'leverage': float(self.leverage),
+            'unrealized_pnl': float(self._unrealized_pnl),
+            'liquidation_price': float(self._liquidation_price)
+        })
+
     def get_exposure(self) -> float:
         """
         Get the actual exposure considering leverage
@@ -240,84 +570,6 @@ class Future(Asset):
             # Re-raise to allow retry decorator to work
             raise
     
-    def _update_position_from_filled_order(self, order: Order):
-        """
-        Update position based on a filled order
-        
-        Args:
-            order: Filled order
-        """
-        if order.status != OrderStatus.FILLED and order.status != OrderStatus.PARTIAL:
-            return
-        
-        filled_qty = Decimal(str(order.filled_quantity))
-        avg_price = Decimal(str(order.avg_filled_price))
-        
-        # Calculate fill price from the order result
-        fill_price = avg_price if avg_price > 0 else self.price
-        
-        # Update position tracking
-        if filled_qty > 0:
-            if order.direction == Direction.BUY:
-                # For futures, buying could mean opening long or closing short
-                if self.position_type == 'short' and self._contracts > 0:
-                    # Reducing a short position
-                    if filled_qty >= self._contracts:
-                        # Closed entire short position
-                        self._contracts = Decimal('0')
-                        self._entry_price = Decimal('0')
-                        self.position_type = 'flat'
-                    else:
-                        # Partially reduced short position
-                        self._contracts -= filled_qty
-                else:
-                    # Adding to long position
-                    if self._contracts > 0 and self.position_type == 'long':
-                        # Calculate average entry price
-                        total_cost = (self._entry_price * self._contracts) + (fill_price * filled_qty)
-                        self._contracts += filled_qty
-                        self._entry_price = total_cost / self._contracts
-                    else:
-                        # Opening new long position
-                        self._contracts = filled_qty
-                        self._entry_price = fill_price
-                        self.position_type = 'long'
-            else:  # SELL
-                # For futures, selling could mean opening short or closing long
-                if self.position_type == 'long' and self._contracts > 0:
-                    # Reducing a long position
-                    if filled_qty >= self._contracts:
-                        # Closed entire long position
-                        self._contracts = Decimal('0')
-                        self._entry_price = Decimal('0')
-                        self.position_type = 'flat'
-                    else:
-                        # Partially reduced long position
-                        self._contracts -= filled_qty
-                else:
-                    # Adding to short position
-                    if self._contracts > 0 and self.position_type == 'short':
-                        # Calculate average entry price
-                        total_cost = (self._entry_price * self._contracts) + (fill_price * filled_qty)
-                        self._contracts += filled_qty
-                        self._entry_price = total_cost / self._contracts
-                    else:
-                        # Opening new short position
-                        self._contracts = filled_qty
-                        self._entry_price = fill_price
-                        self.position_type = 'short'
-        
-        # Update position size and value
-        self._position_size = self._contracts
-        self._value = self._contracts * self.contract_size * self.price
-        
-        # Recalculate liquidation price if we have a position
-        if self._contracts > 0:
-            self._calculate_liquidation_price()
-        
-        logger.info(f"Updated {self.symbol} future position after order fill: {float(self._contracts)} contracts "
-                   f"at ${float(self._entry_price):.2f}, {self.position_type}")
-
     @retry_exchange_operation(max_attempts=3, base_delay=1.0, max_delay=30.0)
     async def set_leverage(self, leverage: float) -> Dict[str, Any]:
         """
