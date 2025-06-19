@@ -123,7 +123,7 @@ setup_virtual_env() {
     source "$PROJECT_ROOT/venv/bin/activate"
     
     echo "Installing dependencies..."
-    REQUIREMENTS=(pandas numpy pyyaml tqdm)
+    REQUIREMENTS=(pandas numpy pyyaml tqdm aiofiles)
     
     for pkg in "${REQUIREMENTS[@]}"; do
         echo -n "Installing $pkg... "

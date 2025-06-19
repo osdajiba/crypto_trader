@@ -6,7 +6,6 @@ import time
 from decimal import Decimal
 from typing import Dict, List, Any, Optional, Union, Callable
 import pandas as pd
-from portfolio.execution.order import Direction
 
 from src.common.config_manager import ConfigManager
 from src.common.log_manager import LogManager
@@ -46,6 +45,10 @@ class PortfolioManager:
         self.risk_manager = None
         self._risk_callbacks = {}
         self.execution_engine = None        
+        self._portfolio_total_value = Decimal('0')
+        self._total_value = {}
+        
+        self.logger.info("Portfolio manager initialized")
         
         # Initialize factories
         self.asset_factory = get_asset_factory(self.config)
@@ -84,12 +87,15 @@ class PortfolioManager:
             self.logger.info("Asset types discovered")
             await self._initialize_configured_assets()      
             
-            # Initialize portfolio value 
+            # Initialize each asset value in portfolio
             initial_capital = float(self.config.get("trading", "initial_capital", default=100000.0))
             self._total_value = {'cash': initial_capital}
-            
+
             for asset_name, _ in self.assets.items():
                 self._total_value[asset_name] = 0.0  # This should remain float
+            
+            # Initialize portfolio total value 
+            self._portfolio_total_value = Decimal(str(initial_capital))
                   
             self.logger.info("Portfolio manager initialization complete")
 
@@ -413,73 +419,44 @@ class PortfolioManager:
             'asset_name': asset_name
         })
 
-    def get_total_value(self) -> float:
+    async def get_total_value(self) -> float:
         """
         Calculate the total value of all assets in the portfolio
         
         Returns:
             float: Total portfolio value
         """
-        total = sum(asset.get_value() for asset in self.assets.values())
-        self._total_value = Decimal(str(total))
+        # 计算总价值但保持 _total_value 字典不变
+        total = 0.0
         
-        # Notify risk manager of value update
-        if self.risk_manager:
-            # Use appropriate method if available
-            if hasattr(self.risk_manager, 'update_portfolio_value'):
-                self.risk_manager.update_portfolio_value(float(self._total_value))
+        # 首先添加现金价值
+        if 'cash' in self._total_value:
+            total += self._total_value['cash']
         
-        return float(self._total_value)
-
-    async def update_market_data(self, data_map: Dict[str, pd.DataFrame]) -> None:
-        """
-        Update assets with the latest market data
-        
-        Args:
-            data_map: Dictionary mapping symbols to their market data DataFrames
-        """
-        if not data_map:
-            self.logger.warning("Empty data map provided to update_market_data")
-            return
-            
-        # Create update tasks for each asset with corresponding data
-        update_tasks = []
-        
+        # 然后添加所有资产价值
         for asset_name, asset in self.assets.items():
-            # Direct match - asset name matches a symbol in data_map
-            if asset_name in data_map:
-                df = data_map[asset_name]
-                if not df.empty:
-                    update_tasks.append(asset.update_data(df))
-            else:
-                # Try alternative matching for pairs like BTC/USDT matching BTC asset
-                matched = False
-                for symbol, df in data_map.items():
-                    # Check if symbol starts with asset name (e.g., BTC/USDT for BTC asset)
-                    # Or if asset name contains symbol (e.g., "BTCUSDT" asset for "BTC/USDT" symbol)
-                    if (symbol.startswith(asset_name + "/") or 
-                        asset_name.startswith(symbol + "/") or
-                        asset_name.replace("/", "") == symbol.replace("/", "")):
-                        if not df.empty:
-                            update_tasks.append(asset.update_data(df))
-                            matched = True
-                            break
+            try:
+                value = await asset.get_value()
+                # 检查是否是协程，如果是则跳过并发出警告
+                if asyncio.iscoroutine(value):
+                    self.logger.warning(f"Asset {asset_name} has async get_value() but was called synchronously")
+                    continue
                 
-                if not matched:
-                    self.logger.debug(f"No market data provided for asset {asset_name}")
+                # 更新 _total_value 中的资产价值
+                self._total_value[asset_name] = value
+                total += value
+            except Exception as e:
+                self.logger.error(f"Error getting value for asset {asset_name}: {str(e)}")
         
-        # Execute all updates concurrently
-        if update_tasks:
-            results = await asyncio.gather(*update_tasks, return_exceptions=True)
-            
-            # Check for exceptions
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    asset_name = list(self.assets.keys())[i]
-                    self.logger.error(f"Error updating {asset_name} with market data: {str(result)}")
+        # 更新总价值
+        self._portfolio_total_value = Decimal(str(total))
         
-        # After updating all assets, recalculate portfolio total value
-        await self.update_all_values()
+        # 通知风险管理器价值更新
+        if self.risk_manager:
+            if hasattr(self.risk_manager, 'update_portfolio_value'):
+                self.risk_manager.update_portfolio_value(float(self._portfolio_total_value))
+        
+        return float(self._portfolio_total_value)
 
     async def update_all_values(self) -> float:
         """
@@ -490,50 +467,62 @@ class PortfolioManager:
         """
         if self._is_syncing:
             self.logger.debug("Already syncing values, skipping duplicate call")
-            return float(self._total_value)
+            return float(self._portfolio_total_value)
             
         self._is_syncing = True
         
         try:
-            # Use asyncio.gather to update all assets concurrently
+            # 使用 asyncio.gather 并发更新所有资产
             update_tasks = []
-            for asset in self.assets.values():
+            for asset_name, asset in self.assets.items():
                 if hasattr(asset, 'update_value') and callable(asset.update_value):
                     update_tasks.append(asset.update_value())
                 
             if update_tasks:
                 results = await asyncio.gather(*update_tasks, return_exceptions=True)
                 
-                # Check for exceptions
+                # 检查异常
                 for i, result in enumerate(results):
                     if isinstance(result, Exception):
                         asset_name = list(self.assets.keys())[i]
                         self.logger.error(f"Error updating {asset_name} value: {str(result)}")
                 
-            # Calculate total value
-            total = Decimal('0')
-            for asset in self.assets.values():
-                total += Decimal(str(asset.get_value()))
+            # 计算总价值
+            cash_value = self._total_value.get('cash', 0.0)
+            total = Decimal(str(cash_value))
+            
+            # 更新每个资产的价值
+            for asset_name, asset in self.assets.items():
+                try:
+                    # 直接获取值，不需要检查协程，因为已经通过 update_value 更新过
+                    value = await asset.get_value()
+                    if asyncio.iscoroutine(value):
+                        self.logger.warning(f"Asset {asset_name} still returns coroutine after update_value()")
+                        continue
+                        
+                    self._total_value[asset_name] = value
+                    total += Decimal(str(value))
+                except Exception as e:
+                    self.logger.error(f"Error getting updated value for {asset_name}: {str(e)}")
                 
-            old_value = self._total_value
-            self._total_value = total
+            old_value = self._portfolio_total_value
+            self._portfolio_total_value = total
             self._last_update_time = time.time()
             
-            # Notify risk manager of value update
+            # 通知风险管理器价值更新
             if self.risk_manager:
-                # Use appropriate method if available
                 if hasattr(self.risk_manager, 'update_portfolio_value'):
-                    self.risk_manager.update_portfolio_value(float(self._total_value))
+                    self.risk_manager.update_portfolio_value(float(self._portfolio_total_value))
                 
-                # Notify of significant value changes
-                if old_value > 0 and abs((self._total_value - old_value) / old_value) > 0.001:
+                # 通知显著的价值变化
+                if old_value > 0 and abs((self._portfolio_total_value - old_value) / old_value) > 0.001:
                     await self.notify_risk_manager('significant_value_change', {
                         'old_value': float(old_value),
-                        'new_value': float(self._total_value),
-                        'change_pct': float((self._total_value - old_value) / old_value)
+                        'new_value': float(self._portfolio_total_value),
+                        'change_pct': float((self._portfolio_total_value - old_value) / old_value)
                     })
             
-            return float(self._total_value)
+            return float(self._portfolio_total_value)
         finally:
             self._is_syncing = False
 
@@ -708,23 +697,17 @@ class PortfolioManager:
                 'action': 'sell',
                 'amount': amount
             }
-        
+
     async def process_signals(self, signals: pd.DataFrame, data: pd.DataFrame = None) -> Dict[str, Any]:
         """
-        Process trading signals and route to appropriate asset operations
+        改进的信号处理方法，增强执行引擎集成和状态同步
         
         Args:
-            signals: DataFrame containing trading signals with columns:
-                - symbol: Asset symbol
-                - action: Trading action (buy, sell, long, short, close_long, close_short)
-                - quantity: Amount to trade
-                - price: Optional price for limit orders
-                - order_type: Optional order type (default: market)
-                - additional parameters depending on asset type
+            signals: DataFrame containing trading signals
             data: Optional market data for reference
             
         Returns:
-            Dict containing execution results
+            Dict containing execution results with enhanced state tracking
         """
         if signals.empty:
             self.logger.info("No signals to process")
@@ -740,21 +723,213 @@ class PortfolioManager:
                 "orders": []
             }
         
-        # Process each signal and collect results
+        # 1. 使用执行引擎处理信号
+        try:
+            self.logger.info(f"Processing {len(signals)} signals through execution engine")
+            
+            # 准备历史数据给执行引擎
+            if hasattr(self.execution_engine, 'set_historical_data') and data is not None:
+                # 转换单个DataFrame为字典格式
+                historical_data = {}
+                if isinstance(data, pd.DataFrame) and not data.empty:
+                    # 假设data包含多个symbol的数据，或者只是单个symbol
+                    symbols = signals['symbol'].unique()
+                    for symbol in symbols:
+                        historical_data[symbol] = data.copy()
+                
+                self.execution_engine.set_historical_data(historical_data)
+            
+            # 通过执行引擎执行信号
+            executed_orders_df, updated_data = await self.execution_engine.execute(signals)
+            
+            # 2. 从执行引擎获取交易更新
+            if hasattr(self.execution_engine, 'get_trade_updates'):
+                trade_updates = self.execution_engine.get_trade_updates()
+                
+                # 3. 应用交易更新到资产
+                for trade_update in trade_updates:
+                    await self._apply_trade_update_to_asset(trade_update)
+            
+            # 4. 从执行引擎同步资产状态
+            if hasattr(self.execution_engine, 'get_all_asset_states'):
+                asset_states = self.execution_engine.get_all_asset_states()
+                await self._sync_assets_with_execution_states(asset_states)
+            
+            # 5. 转换执行结果为标准格式
+            order_results = []
+            if not executed_orders_df.empty:
+                for _, row in executed_orders_df.iterrows():
+                    order_result = {
+                        "success": row.get('status') in ['filled', 'partial'],
+                        "symbol": row.get('symbol', ''),
+                        "action": row.get('direction', ''),
+                        "quantity": row.get('filled_qty', 0),
+                        "price": row.get('avg_price', 0),
+                        "order_id": row.get('order_id', ''),
+                        "status": row.get('status', 'unknown'),
+                        "commission": row.get('commission', 0),
+                        "timestamp": row.get('timestamp', None)
+                    }
+                    
+                    # 如果执行成功，记录到订单跟踪
+                    if order_result["success"] and order_result["order_id"]:
+                        self._all_orders[order_result["order_id"]] = {
+                            'asset_name': order_result["symbol"],
+                            'action': order_result["action"],
+                            'price': order_result["price"],
+                            'quantity': order_result["quantity"],
+                            'result': order_result,
+                            'timestamp': time.time(),
+                            'execution_details': row.to_dict()
+                        }
+                    
+                    order_results.append(order_result)
+            
+            # 6. 更新组合总价值
+            await self.update_all_values()
+            
+            # 7. 生成汇总结果
+            success_count = sum(1 for r in order_results if r.get('success', False))
+            
+            self.logger.info(f"Processed {len(order_results)} signals through execution engine: "
+                            f"{success_count} successful, {len(order_results) - success_count} failed")
+            
+            return {
+                "success": True,
+                "orders": order_results,
+                "successful": success_count,
+                "failed": len(order_results) - success_count,
+                "execution_engine_used": True,
+                "updated_assets": len(trade_updates) if 'trade_updates' in locals() else 0
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error processing signals through execution engine: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            
+            # 降级到原有的处理方式
+            return await self._fallback_signal_processing(signals, data)
+
+    async def _apply_trade_update_to_asset(self, trade_update: Dict[str, Any]) -> None:
+        """
+        应用交易更新到对应的资产
+        
+        Args:
+            trade_update: 来自执行引擎的交易更新
+        """
+        try:
+            symbol = trade_update['symbol']
+            direction = trade_update['direction']
+            quantity = trade_update['quantity']
+            price = trade_update['price']
+            commission = trade_update.get('commission', 0)
+            
+            # 查找对应的资产
+            asset = self._find_asset_by_symbol(symbol)
+            if not asset:
+                self.logger.warning(f"Asset {symbol} not found for trade update")
+                return
+            
+            # 更新资产状态
+            if hasattr(asset, '_update_position_from_trade'):
+                asset._update_position_from_trade(trade_update)
+            elif hasattr(asset, '_update_position_from_filled_order'):
+                # 创建合成订单对象
+                from src.portfolio.execution.order import Order, Direction, OrderStatus, OrderType
+                
+                synth_order = Order(
+                    symbol=symbol,
+                    order_type=OrderType.MARKET,
+                    direction=Direction.BUY if direction.lower() == 'buy' else Direction.SELL,
+                    quantity=quantity
+                )
+                
+                synth_order.status = OrderStatus.FILLED
+                synth_order.filled_quantity = quantity
+                synth_order.avg_filled_price = price
+                
+                asset._update_position_from_filled_order(synth_order)
+            else:
+                # 基础状态更新
+                if hasattr(asset, '_position_size') and hasattr(asset, '_last_price'):
+                    if direction.lower() == 'buy':
+                        asset._position_size += Decimal(str(quantity))
+                    elif direction.lower() == 'sell':
+                        asset._position_size -= Decimal(str(quantity))
+                        
+                    asset._last_price = Decimal(str(price))
+                    if hasattr(asset, '_value'):
+                        asset._value = asset._position_size * asset._last_price
+            
+            self.logger.debug(f"Applied trade update to {symbol}: {direction} {quantity} @ {price}")
+            
+        except Exception as e:
+            self.logger.error(f"Error applying trade update: {str(e)}")
+
+    async def _sync_assets_with_execution_states(self, asset_states: Dict[str, Dict[str, Any]]) -> None:
+        """
+        将资产状态与执行引擎状态同步
+        
+        Args:
+            asset_states: 来自执行引擎的资产状态字典
+        """
+        try:
+            for symbol, state in asset_states.items():
+                asset = self._find_asset_by_symbol(symbol)
+                if not asset:
+                    continue
+                
+                # 同步持仓数量
+                if 'quantity' in state and hasattr(asset, '_position_size'):
+                    asset._position_size = Decimal(str(state['quantity']))
+                
+                # 同步平均价格
+                if 'avg_price' in state and state['avg_price'] > 0 and hasattr(asset, 'price'):
+                    asset.price = Decimal(str(state['avg_price']))
+                    asset._last_price = Decimal(str(state['avg_price']))
+                
+                # 同步总成本（如果资产支持）
+                if 'total_cost' in state and hasattr(asset, '_total_cost'):
+                    asset._total_cost = Decimal(str(state['total_cost']))
+                
+                # 重新计算资产价值
+                if hasattr(asset, '_value') and hasattr(asset, '_position_size') and hasattr(asset, '_last_price'):
+                    asset._value = asset._position_size * asset._last_price
+                
+                self.logger.debug(f"Synced asset {symbol} with execution state: "
+                                f"quantity={state.get('quantity', 0)}, "
+                                f"avg_price={state.get('avg_price', 0)}")
+            
+            self.logger.info(f"Synced {len(asset_states)} assets with execution engine states")
+            
+        except Exception as e:
+            self.logger.error(f"Error syncing assets with execution states: {str(e)}")
+
+    async def _fallback_signal_processing(self, signals: pd.DataFrame, data: pd.DataFrame = None) -> Dict[str, Any]:
+        """
+        降级信号处理方法（原有逻辑）
+        
+        Args:
+            signals: Trading signals
+            data: Market data
+            
+        Returns:
+            Processing results
+        """
+        self.logger.warning("Using fallback signal processing method")
+        
         order_results = []
         for _, signal in signals.iterrows():
             try:
-                # Extract basic signal information
                 symbol = signal['symbol']
                 action = signal['action'].lower()
                 quantity = signal.get('quantity')
                 
-                # Handle auto-sizing if quantity not provided
                 if quantity is None and data is not None:
-                    quantity = self._auto_size_position(symbol, action, data)
+                    quantity = await self._auto_size_position(symbol, action, data)
                     
                 if quantity is None or quantity <= 0:
-                    self.logger.warning(f"Invalid quantity for {symbol}: {quantity}")
                     order_results.append({
                         "success": False,
                         "symbol": symbol,
@@ -763,10 +938,8 @@ class PortfolioManager:
                     })
                     continue
                     
-                # Find corresponding asset
                 asset = self._find_asset_by_symbol(symbol)
                 if asset is None:
-                    self.logger.warning(f"Asset not found: {symbol}")
                     order_results.append({
                         "success": False,
                         "symbol": symbol,
@@ -775,15 +948,12 @@ class PortfolioManager:
                     })
                     continue
                     
-                # Prepare order parameters
                 order_params = self._prepare_order_params(signal, quantity)
                 
-                # Apply risk checks before execution
                 if self.risk_manager:
                     validation = await self.risk_manager.validate_order(order_params)
                     if not validation.get('allowed', False):
                         reasons = validation.get('reasons', ['Risk check failed'])
-                        self.logger.warning(f"Order rejected by risk manager for {symbol}: {reasons}")
                         order_results.append({
                             "success": False,
                             "symbol": symbol,
@@ -793,35 +963,19 @@ class PortfolioManager:
                         })
                         continue
                 
-                # Route to appropriate asset method based on action
                 result = await self._route_order_to_asset(asset, action, order_params)
                 
-                # Track successful orders
-                if result.get('success', False) and 'order_id' in result:
-                    self._all_orders[result['order_id']] = {
-                        'asset_name': symbol,
-                        'action': action,
-                        'price': result.get('price', 0.0),
-                        'quantity': quantity,
-                        'result': result,
-                        'timestamp': time.time(),
-                        'params': order_params
+                if not isinstance(result, dict):
+                    result = {
+                        "success": False,
+                        "symbol": symbol,
+                        "action": action,
+                        "error": f"Internal error: unexpected result type {type(result)}"
                     }
-                    
-                    # Notify risk manager of executed order
-                    await self.notify_risk_manager('order_executed', {
-                        'asset_name': symbol,
-                        'action': action,
-                        'price': result.get('price', 0.0),
-                        'quantity': quantity,
-                        'order_id': result['order_id'],
-                        'result': result
-                    })
                 
                 order_results.append(result)
                 
             except Exception as e:
-                self.logger.error(f"Error processing signal for {signal.get('symbol', 'unknown')}: {str(e)}")
                 order_results.append({
                     "success": False,
                     "symbol": signal.get('symbol', 'unknown'),
@@ -829,16 +983,175 @@ class PortfolioManager:
                     "error": str(e)
                 })
         
-        # Summarize results
         success_count = sum(1 for r in order_results if r.get('success', False))
-        self.logger.info(f"Processed {len(order_results)} signals: {success_count} successful, {len(order_results) - success_count} failed")
         
         return {
             "success": True,
             "orders": order_results,
             "successful": success_count,
-            "failed": len(order_results) - success_count
+            "failed": len(order_results) - success_count,
+            "execution_engine_used": False
         }
+
+    async def update_market_data(self, data_map: Dict[str, pd.DataFrame]) -> None:
+        """
+        改进的市场数据更新方法，支持执行引擎数据同步
+        
+        Args:
+            data_map: Dictionary mapping symbols to their market data DataFrames
+        """
+        if not data_map:
+            self.logger.warning("Empty data map provided to update_market_data")
+            return
+            
+        # 1. 更新执行引擎的历史数据（如果支持）
+        if (hasattr(self.execution_engine, 'set_historical_data') and 
+            hasattr(self.execution_engine, 'historical_data')):
+            try:
+                # 只更新新数据，避免覆盖整个历史
+                current_data = getattr(self.execution_engine, 'historical_data', {})
+                
+                for symbol, new_data in data_map.items():
+                    if symbol in current_data:
+                        # 合并新数据到现有数据
+                        existing_data = current_data[symbol]
+                        if not new_data.empty and not existing_data.empty:
+                            # 获取最新时间戳，只添加更新的数据
+                            if 'timestamp' in existing_data.columns and 'timestamp' in new_data.columns:
+                                last_timestamp = existing_data['timestamp'].max()
+                                new_rows = new_data[new_data['timestamp'] > last_timestamp]
+                                if not new_rows.empty:
+                                    updated_data = pd.concat([existing_data, new_rows]).sort_values('timestamp')
+                                    current_data[symbol] = updated_data
+                    else:
+                        # 新symbol，直接添加
+                        current_data[symbol] = new_data.copy()
+                
+                self.execution_engine.set_historical_data(current_data)
+                
+            except Exception as e:
+                self.logger.warning(f"Error updating execution engine data: {str(e)}")
+        
+        # 2. 更新资产市场数据（原有逻辑）
+        update_tasks = []
+        
+        for asset_name, asset in self.assets.items():
+            if asset_name in data_map:
+                df = data_map[asset_name]
+                if not df.empty:
+                    update_tasks.append(asset.update_data(df))
+            else:
+                # 尝试匹配变体
+                matched = False
+                for symbol, df in data_map.items():
+                    if (symbol.startswith(asset_name + "/") or 
+                        asset_name.startswith(symbol + "/") or
+                        asset_name.replace("/", "") == symbol.replace("/", "")):
+                        if not df.empty:
+                            update_tasks.append(asset.update_data(df))
+                            matched = True
+                            break
+                
+                if not matched:
+                    self.logger.debug(f"No market data provided for asset {asset_name}")
+        
+        # 3. 并发执行所有更新
+        if update_tasks:
+            results = await asyncio.gather(*update_tasks, return_exceptions=True)
+            
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    asset_name = list(self.assets.keys())[i]
+                    self.logger.error(f"Error updating {asset_name} with market data: {str(result)}")
+        
+        # 4. 重新计算组合价值
+        await self.update_all_values()
+
+    async def get_execution_summary(self) -> Dict[str, Any]:
+        """
+        获取执行引擎的详细执行摘要
+        
+        Returns:
+            Dict containing execution engine statistics and state
+        """
+        summary = {
+            'execution_engine_type': self.execution_engine.__class__.__name__ if self.execution_engine else None,
+            'has_execution_engine': self.execution_engine is not None,
+            'execution_stats': {},
+            'asset_states': {},
+            'execution_log': []
+        }
+        
+        if not self.execution_engine:
+            return summary
+        
+        try:
+            # 获取执行统计
+            if hasattr(self.execution_engine, 'get_stats'):
+                summary['execution_stats'] = self.execution_engine.get_stats()
+            
+            # 获取资产状态
+            if hasattr(self.execution_engine, 'get_all_asset_states'):
+                summary['asset_states'] = self.execution_engine.get_all_asset_states()
+            
+            # 获取执行日志
+            if hasattr(self.execution_engine, 'get_execution_log'):
+                summary['execution_log'] = self.execution_engine.get_execution_log()
+            
+            # 添加同步状态信息
+            summary['sync_info'] = {
+                'assets_in_portfolio': len(self.assets),
+                'assets_in_execution_engine': len(summary['asset_states']),
+                'sync_timestamp': time.time()
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error getting execution summary: {str(e)}")
+            summary['error'] = str(e)
+        
+        return summary
+
+    async def force_sync_with_execution_engine(self) -> Dict[str, Any]:
+        """
+        强制与执行引擎同步状态
+        
+        Returns:
+            Sync result dictionary
+        """
+        if not self.execution_engine:
+            return {'success': False, 'error': 'No execution engine available'}
+        
+        try:
+            self.logger.info("Force syncing portfolio with execution engine")
+            
+            # 获取执行引擎的资产状态
+            if hasattr(self.execution_engine, 'get_all_asset_states'):
+                asset_states = self.execution_engine.get_all_asset_states()
+                await self._sync_assets_with_execution_states(asset_states)
+            
+            # 获取待处理的交易更新
+            if hasattr(self.execution_engine, 'get_trade_updates'):
+                trade_updates = self.execution_engine.get_trade_updates()
+                for trade_update in trade_updates:
+                    await self._apply_trade_update_to_asset(trade_update)
+            
+            # 更新组合价值
+            new_total_value = await self.update_all_values()
+            
+            sync_result = {
+                'success': True,
+                'synced_assets': len(asset_states) if 'asset_states' in locals() else 0,
+                'applied_trades': len(trade_updates) if 'trade_updates' in locals() else 0,
+                'new_total_value': new_total_value,
+                'sync_timestamp': time.time()
+            }
+            
+            self.logger.info(f"Force sync completed: {sync_result}")
+            return sync_result
+            
+        except Exception as e:
+            self.logger.error(f"Error during force sync: {str(e)}")
+            return {'success': False, 'error': str(e)}
 
     def _prepare_order_params(self, signal: pd.Series, quantity: float) -> Dict[str, Any]:
         """
@@ -878,7 +1191,7 @@ class PortfolioManager:
                 
         return params
 
-    def _auto_size_position(self, symbol: str, action: str, data: pd.DataFrame) -> Optional[float]:
+    async def _auto_size_position(self, symbol: str, action: str, data: pd.DataFrame) -> Optional[float]:
         """
         Calculate position size based on portfolio value and risk settings
         
@@ -902,7 +1215,7 @@ class PortfolioManager:
                 return None
                 
             # Get portfolio value
-            portfolio_value = self.get_total_value()
+            portfolio_value = await self.get_total_value()
             
             # Get position size percentage from config or use default
             position_size_pct = self.config.get("trading", "position_size_pct", default=0.02)
@@ -1286,22 +1599,51 @@ class PortfolioManager:
             List[str]: List of asset names
         """
         return list(self.assets.keys())
-
-    def get_asset_weights(self) -> Dict[str, float]:
+    
+    async def get_asset_weights(self) -> Dict[str, float]:
         """
-        Calculate the weight of each asset in the portfolio
-        
-        Returns:
-            Dict[str, float]: Dictionary mapping asset names to their weight percentages
+        Calculate the weight of each asset in the portfolio - Fixed async handling
         """
-        total_value = Decimal(str(self.get_total_value()))
-        
-        if total_value == 0:
-            return {}
+        # FIXED: Use the internal _portfolio_total_value which should be Decimal
+        try:
+            total_value_decimal = self._portfolio_total_value
+            total_value = float(total_value_decimal) if total_value_decimal else 0.0
             
-        return {name: float(Decimal(str(asset.get_value())) / total_value) 
-                for name, asset in self.assets.items()}
-        
+            if total_value == 0:
+                return {}
+                
+            weights = {}
+            
+            # Add cash weight
+            if 'cash' in self._total_value:
+                cash_value = float(self._total_value['cash']) if self._total_value['cash'] else 0.0
+                weights['cash'] = cash_value / total_value if total_value > 0 else 0.0
+            
+            # Add asset weights with proper type conversion
+            for name, asset in self.assets.items():
+                try:
+                    # Get asset value synchronously to avoid coroutine issues
+                    if hasattr(asset, '_value') and asset._value is not None:
+                        # Use cached value to avoid async call
+                        asset_value = float(asset._value) if asset._value else 0.0
+                    else:
+                        # Fallback: calculate from position and price
+                        position = float(asset._position_size) if hasattr(asset, '_position_size') and asset._position_size else 0.0
+                        price = float(asset.price) if hasattr(asset, 'price') and asset.price else 0.0
+                        asset_value = position * price
+                    
+                    weights[name] = asset_value / total_value if total_value > 0 else 0.0
+                    
+                except Exception as e:
+                    self.logger.warning(f"Error calculating weight for {name}: {str(e)}")
+                    weights[name] = 0.0
+            
+            return weights
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating asset weights: {str(e)}")
+            return {}
+
     def is_risk_breached(self) -> bool:
         """
         Check if any risk limits have been breached
@@ -1358,6 +1700,7 @@ class PortfolioManager:
             
         self.logger.info("Updated exchange for portfolio and all assets")
 
+        
     async def sync_with_exchange(self) -> Dict[str, Any]:
         """
         Synchronize all assets with exchange data
@@ -1378,46 +1721,62 @@ class PortfolioManager:
         try:
             results = {}
             
-            # Sync each asset accordingly
+            # 同步每个资产
             for name, asset in self.assets.items():
                 try:
-                    # Different sync methods based on asset type
+                    # 根据资产类型使用不同的同步方法
                     if hasattr(asset, 'sync_balance'):
                         result = await asset.sync_balance()
                     elif hasattr(asset, 'sync_position'):
                         result = await asset.sync_position()
                     else:
-                        # Basic value update
+                        # 基本价值更新
                         value = await asset.update_value()
                         result = {'value': value}
                         
                     results[name] = result
+                    
+                    # 更新资产在字典中的价值
+                    self._total_value[name] = await asset.get_value()
                 except Exception as e:
                     self.logger.error(f"Error syncing {name}: {str(e)}")
                     results[name] = {'error': str(e)}
             
-            # Update total value
-            total = sum(asset.get_value() for asset in self.assets.values())
-            self._total_value = Decimal(str(total))
+            # 更新总价值 - 安全地处理可能的协程
+            cash_value = self._total_value.get('cash', 0)
+            total = Decimal(str(cash_value))
             
-            # Update risk manager
+            for asset_name, asset in self.assets.items():
+                try:
+                    value = await asset.get_value()
+                    if not asyncio.iscoroutine(value):
+                        self._total_value[asset_name] = value
+                        total += Decimal(str(value))
+                    else:
+                        self.logger.warning(f"Asset {asset_name} returned coroutine from get_value()")
+                except Exception as e:
+                    self.logger.error(f"Error getting final value for {asset_name}: {str(e)}")
+            
+            self._portfolio_total_value = total
+            
+            # 更新风险管理器
             if self.risk_manager:
-                # Update portfolio value
+                # 更新投资组合价值
                 if hasattr(self.risk_manager, 'update_portfolio_value'):
-                    self.risk_manager.update_portfolio_value(float(self._total_value))
+                    self.risk_manager.update_portfolio_value(float(self._portfolio_total_value))
                     
-                # Execute risk control
+                # 执行风险控制
                 await self.risk_manager.execute_risk_control()
                 
-                # Notify of sync completion
+                # 通知同步完成
                 await self.notify_risk_manager('sync_completed', {
-                    'total_value': float(self._total_value),
+                    'total_value': float(self._portfolio_total_value),
                     'asset_count': len(self.assets)
                 })
             
             return {
                 'success': True,
-                'total_value': float(self._total_value),
+                'total_value': float(self._portfolio_total_value),
                 'asset_results': results
             }
         finally:
@@ -1436,17 +1795,18 @@ class PortfolioManager:
         self.logger.info(f"Recording batch of {len(trades)} trades")
         
         # Process each trade individually
-        for trade in trades:
+        for symbol, trade_result in trades.items():
             # Extract trade details
-            symbol = trade.get('symbol')
-            direction = trade.get('direction', 'unknown').lower()
-            quantity = trade.get('quantity', 0.0)
-            price = trade.get('price', 0.0)
-            timestamp = trade.get('timestamp')
+            results_df = pd.DataFrame(trade_result)
+            symbol = results_df['symbol']
+            direction = results_df['action']
+            quantity = results_df['quantity']
+            price = results_df['price']
+            timestamp = results_df['timestamp']
             
             # Skip invalid trades
             if not symbol or not quantity or not price:
-                self.logger.warning(f"Skipping invalid trade: {trade}")
+                self.logger.warning(f"Skipping invalid trade: {trade_result}")
                 continue
                 
             # Find the corresponding asset with flexible symbol matching
@@ -1458,7 +1818,7 @@ class PortfolioManager:
                 
             # Update asset position
             if hasattr(asset, '_update_position_from_trade'):
-                asset._update_position_from_trade(trade)
+                asset._update_position_from_trade(trade_result)
             elif hasattr(asset, '_update_position_from_filled_order'):
                 # Create a synthetic order for the asset to process
                 from src.portfolio.execution.order import Order, Direction, OrderStatus, OrderType
@@ -1554,27 +1914,27 @@ class PortfolioManager:
         
         # No match found
         return None
-        
-    def get_portfolio_summary(self) -> Dict[str, Any]:
+    
+    async def get_portfolio_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the portfolio state
         
         Returns:
             Dict with portfolio summary
         """
-        # Basic portfolio information
+        # 基本投资组合信息
         summary = {
-            'total_value': float(self._total_value),
+            'total_value': float(self._portfolio_total_value),
             'assets': len(self.assets),
-            'asset_values': {name: asset.get_value() for name, asset in self.assets.items()},
-            'weights': self.get_asset_weights(),
+            'asset_values': self._total_value.copy(),  # 使用保存的价值字典
+            'weights': await self.get_asset_weights(),
             'last_update': self._last_update_time
         }
         
-        # Add risk information if available
+        # 添加风险信息（如果可用）
         if self.risk_manager:
-            risk_report = self.risk_manager.get_risk_report()
-            # Only add risk metrics, not the full position details which are already in the summary
+            risk_report = await self.risk_manager.get_risk_report()
+            # 只添加风险指标，不添加完整的持仓详情（这些已经在摘要中）
             risk_metrics = {k: v for k, v in risk_report.items() 
                            if k not in ['positions', 'position_count']}
             summary['risk'] = risk_metrics

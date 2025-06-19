@@ -6,6 +6,7 @@ Improved backtest risk manager implementation.
 Provides enhanced risk management functionality for backtesting.
 """
 
+import asyncio
 import time
 import pandas as pd
 from decimal import Decimal
@@ -57,7 +58,7 @@ class BacktestRiskManager(BaseRiskManager):
         
         # Initialize portfolio tracking if portfolio is available
         if self._portfolio:
-            portfolio_value = self._portfolio.get_total_value()
+            portfolio_value = await self._portfolio.get_total_value()
             self._peak_value = Decimal(str(portfolio_value))
             self._last_portfolio_value = Decimal(str(portfolio_value))
             self.logger.info(f"BacktestRiskManager initialized with portfolio value: {portfolio_value}")
@@ -88,7 +89,7 @@ class BacktestRiskManager(BaseRiskManager):
         
         try:
             # Get portfolio value
-            portfolio_value = Decimal(str(self._portfolio.get_total_value()))
+            portfolio_value = await self._portfolio.get_total_value()
             
             # Handle edge cases for portfolio value
             if portfolio_value <= 0:
@@ -136,7 +137,7 @@ class BacktestRiskManager(BaseRiskManager):
             # Get current positions and exposure
             for asset_name, asset in self._portfolio.assets.items():
                 if hasattr(asset, 'get_value') and callable(asset.get_value):
-                    asset_value = Decimal(str(asset.get_value()))
+                    asset_value = Decimal(str(await asset.get_value()))
                     if asset_value > 0:
                         position_count += 1
                         # Add leveraged exposure for futures
@@ -275,7 +276,7 @@ class BacktestRiskManager(BaseRiskManager):
             self._last_check_time = current_time
             
             # Calculate current drawdown
-            current_value = Decimal(str(self._portfolio.get_total_value()))
+            current_value = await self._portfolio.get_total_value()
             
             if current_value > self._peak_value:
                 self._peak_value = current_value
@@ -329,22 +330,18 @@ class BacktestRiskManager(BaseRiskManager):
         elif price is None:
             return {'allowed': False, 'reasons': ["No price available for order validation"]}
             
-        # Convert to Decimal for consistent calculations
-        price = Decimal(str(price))
-        amount = Decimal(str(amount))
-            
         # Calculate order value
         # Different calculation for futures vs spot
         if hasattr(asset, 'contract_size'):
-            order_value = amount * price * Decimal(str(asset.contract_size))
+            order_value = amount * price * asset.contract_size
         else:
             order_value = amount * price
             
         # Get portfolio value
-        portfolio_value = Decimal(str(self._portfolio.get_total_value()))
+        portfolio_value = await self._portfolio.get_total_value()
             
         # Calculate value as percentage of portfolio
-        value_pct = order_value / portfolio_value if portfolio_value > 0 else Decimal('0.01')
+        value_pct = order_value / portfolio_value if portfolio_value > 0 else 0.01
             
         # List of validation checks
         validations = []
@@ -365,7 +362,7 @@ class BacktestRiskManager(BaseRiskManager):
             })
             
         # Check drawdown limits
-        current_drawdown = self._calculate_current_drawdown()
+        current_drawdown = await self._calculate_current_drawdown()
         max_drawdown = Decimal(str(self.get_risk_limit('max_drawdown', 0.3)))
             
         if current_drawdown > max_drawdown:
@@ -432,72 +429,79 @@ class BacktestRiskManager(BaseRiskManager):
             'value_pct': float(value_pct)
         }
     
-    def get_risk_report(self) -> Dict[str, Any]:
-        """
-        Generate a comprehensive risk report for backtesting
+async def get_risk_report(self) -> Dict[str, Any]:
+    """
+    Generate comprehensive risk report - Fixed type conversion issues
+    """
+    try:
+        risk_report = {
+            'portfolio_value': 0.0,
+            'total_exposure': 0.0,
+            'position_count': 0,
+            'max_position_size': 0.0,
+            'current_drawdown': 0.0,
+            'risk_metrics': {},
+            'positions': {}
+        }
         
-        Returns:
-            Dict[str, Any]: Risk report information
-        """
         if not self._portfolio:
-            return {"error": "No portfolio manager provided"}
+            return risk_report
+        try:
+            portfolio_value = await self._portfolio.get_total_value()
+            risk_report['portfolio_value'] = float(portfolio_value) if portfolio_value else 0.0
+        except Exception as e:
+            self.logger.warning(f"Error getting portfolio value: {e}")
+            risk_report['portfolio_value'] = 0.0
         
         try:
-            # Get portfolio value
-            portfolio_value = self._portfolio.get_total_value()
+            asset_weights = {}
+            if hasattr(self._portfolio, 'get_asset_weights'):
+                # Check if it's a coroutine
+                weights_result = self._portfolio.get_asset_weights()
+                if asyncio.iscoroutine(weights_result):
+                    asset_weights = await weights_result
+                else:
+                    asset_weights = weights_result
             
-            # Calculate drawdown
-            current_drawdown = Decimal('0')
-            if self._peak_value > 0:
-                current_drawdown = (self._peak_value - Decimal(str(portfolio_value))) / self._peak_value
-            
-            # Calculate portfolio exposure
-            total_exposure = Decimal('0')
-            position_count = 0
-            
-            # Detailed position information
-            positions = {}
-            asset_weights = self._portfolio.get_asset_weights()
-            
-            for asset_name, asset in self._portfolio.assets.items():
-                asset_value = Decimal(str(asset.get_value()))
-                
-                if asset_value > 0:
-                    position_count += 1
-                    
-                    # Add to positions dictionary
-                    positions[asset_name] = {
-                        "value": float(asset_value),
-                        "weight": asset_weights.get(asset_name, 0)
-                    }
-                    
-                    # Add to total exposure (using leveraged value for futures)
-                    if hasattr(asset, 'get_exposure') and callable(asset.get_exposure):
-                        exposure = Decimal(str(asset.get_exposure()))
-                        positions[asset_name]["exposure"] = float(exposure)
-                        positions[asset_name]["leverage"] = float(getattr(asset, 'leverage', 1.0))
-                        total_exposure += exposure
-                    else:
-                        total_exposure += asset_value
-            
-            # For backtesting, return enhanced report
-            report = {
-                "portfolio_value": float(portfolio_value),
-                "peak_value": float(self._peak_value),
-                "drawdown": float(current_drawdown),
-                "total_exposure": float(total_exposure),
-                "exposure_ratio": float(total_exposure / portfolio_value) if portfolio_value > 0 else 0,
-                "risk_breached": self._risk_breached,
-                "position_count": position_count,
-                "consecutive_losses": self._consecutive_losses,
-                "max_consecutive_losses": self._max_consecutive_losses,
-                "risk_limits": {k: float(v) if isinstance(v, Decimal) else v 
-                               for k, v in self._risk_limits.items()},
-                "positions": positions
-            }
-            
-            return report
-            
+            # Convert all weight values to float
+            for asset_name, weight in asset_weights.items():
+                if weight is not None:
+                    try:
+                        risk_report['positions'][asset_name] = {
+                            'weight': float(weight),
+                            'value': float(weight * risk_report['portfolio_value']) if risk_report['portfolio_value'] > 0 else 0.0
+                        }
+                    except (TypeError, ValueError) as e:
+                        self.logger.warning(f"Error converting weight for {asset_name}: {e}")
+                        risk_report['positions'][asset_name] = {
+                            'weight': 0.0,
+                            'value': 0.0
+                        }
         except Exception as e:
-            self.logger.error(f"Error generating backtest risk report: {e}")
-            return {"error": str(e)}
+            self.logger.warning(f"Error getting asset weights: {e}")
+        
+        # Calculate summary metrics
+        if risk_report['positions']:
+            risk_report['position_count'] = len(risk_report['positions'])
+            weights = [pos['weight'] for pos in risk_report['positions'].values()]
+            risk_report['max_position_size'] = float(max(weights)) if weights else 0.0
+            risk_report['total_exposure'] = float(sum(weights)) if weights else 0.0
+        
+        # Calculate current drawdown
+        risk_report['current_drawdown'] = self._calculate_current_drawdown()
+        
+        return risk_report
+        
+    except Exception as e:
+        self.logger.error(f"Error generating risk report: {str(e)}")
+        # Return safe default values
+        return {
+            'portfolio_value': 0.0,
+            'total_exposure': 0.0,
+            'position_count': 0,
+            'max_position_size': 0.0,
+            'current_drawdown': 0.0,
+            'risk_metrics': {},
+            'positions': {},
+            'error': str(e)
+        }

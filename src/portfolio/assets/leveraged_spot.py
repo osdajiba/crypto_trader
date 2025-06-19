@@ -554,44 +554,41 @@ class LeveragedSpot(Asset):
             return {'symbol': self.symbol, 'error': str(e)}
 
     async def update_value(self) -> float:
-        """Update the asset's value by fetching current market data"""
+        """
+        Update the asset's value - Fixed for backtest mode
+        """
         try:
-            if self.exchange:
-                ticker = await self.exchange.fetch_ticker(self.symbol)
-                if ticker and 'last' in ticker:
-                    old_price = self.price
-                    self.price = Decimal(str(ticker['last']))
-                    
-                    # Update position value
-                    self._value = self.quantity * self.price
-                    self._last_update_time = time.time()
-                    
-                    # Update unrealized PnL
-                    self._update_unrealized_pnl()
-                    
-                    # Process interest accrual
-                    self._process_interest()
-                    
-                    # Check for liquidation
-                    self._check_liquidation()
-                    
-                    # Log significant price changes
-                    price_change_pct = 0
-                    if old_price > 0:
-                        price_change_pct = (self.price - old_price) * 100 / old_price
-                    
-                    if abs(price_change_pct) > 0.1:
-                        self.logger.info(f"Updated {self.symbol} price to ${float(self.price):.2f} "
-                                    f"({float(price_change_pct):.2f}%)")
-                    
-                    return float(self._value)
+            # FIXED: Check if we're in backtest mode to avoid live API calls
+            if hasattr(self, '_backtest_mode') and self._backtest_mode:
+                # In backtest mode, use the last known price from market data
+                self._value = self._position_size * self.price
+                return float(self._value)
             
-            # If no exchange or failed to get ticker, use current value
+            # Only fetch from exchange in live/paper trading modes
+            if self.exchange and hasattr(self.exchange, 'fetch_ticker'):
+                try:
+                    ticker = await self.exchange.fetch_ticker(self.symbol)
+                    if ticker and 'last' in ticker:
+                        price = Decimal(str(ticker['last']))
+                        self._last_price = price
+                        self.price = price
+                        self._value = self._position_size * price
+                        return float(self._value)
+                except Exception as e:
+                    # Don't log as error in backtest mode, just use last known price
+                    if not (hasattr(self, '_backtest_mode') and self._backtest_mode):
+                        self.logger.warning(f"Could not fetch live price for {self.symbol}: {e}")
+            
+            # Fallback: use current price
+            self._value = self._position_size * self.price
             return float(self._value)
+            
         except Exception as e:
-            self.logger.error(f"Error updating {self.symbol} value: {str(e)}")
+            if not (hasattr(self, '_backtest_mode') and self._backtest_mode):
+                self.logger.error(f"Error updating {self.symbol} value: {e}")
+            # Return current value even on error
             return float(self._value)
-            
+
     def get_margin_level(self) -> float:
         """
         Calculate current margin level as a percentage

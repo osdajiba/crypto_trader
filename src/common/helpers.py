@@ -1000,3 +1000,34 @@ class Singleton(type):
     def clear_all(cls):
         """Clear all singleton instances"""
         cls._instances = {}
+        
+
+def diagnose_backtest_data_flow(backtest_engine, portfolio_manager, execution_engine) -> Dict[str, Any]:
+    """
+    Diagnostic function to check data flow in backtest system
+    """
+    diagnosis = {
+        'backtest_engine': {
+            'has_portfolio': backtest_engine.portfolio is not None,
+            'has_strategy': backtest_engine.strategy is not None,
+            'has_data_buffers': bool(backtest_engine.data_buffers) if hasattr(backtest_engine, 'data_buffers') else False
+        },
+        'portfolio_manager': {
+            'has_execution_engine': portfolio_manager.execution_engine is not None,
+            'asset_count': len(portfolio_manager.assets) if hasattr(portfolio_manager, 'assets') else 0,
+            'backtest_mode': getattr(portfolio_manager, '_backtest_mode', 'unknown')
+        },
+        'execution_engine': {
+            'has_historical_data': False,
+            'data_symbols': [],
+            'engine_type': execution_engine.__class__.__name__ if execution_engine else 'None'
+        }
+    }
+    
+    # Check execution engine data
+    if execution_engine and hasattr(execution_engine, 'historical_data'):
+        diagnosis['execution_engine']['has_historical_data'] = bool(execution_engine.historical_data)
+        if execution_engine.historical_data:
+            diagnosis['execution_engine']['data_symbols'] = list(execution_engine.historical_data.keys())
+    
+    return diagnosis

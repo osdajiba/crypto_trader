@@ -297,14 +297,14 @@ class BaseTradingMode(ABC):
                     executed_trades.extend(trades)
         
         # Update equity curve and drawdown
-        self._update_performance_metrics()
+        await self._update_performance_metrics()
         
         # Increment iteration counter
         self._iteration_count += 1
         
         # Log performance summary at intervals
         if self.enable_performance_tracking and self._iteration_count % self.performance_log_interval == 0:
-            self._log_performance_summary()
+            await self._log_performance_summary()
         
         return executed_trades
 
@@ -322,10 +322,10 @@ class BaseTradingMode(ABC):
             if not df.empty and 'close' in df.columns:
                 self.state['market_prices'][symbol] = df['close'].iloc[-1]
     
-    def _update_performance_metrics(self) -> None:
+    async def _update_performance_metrics(self) -> None:
         """Update equity curve and drawdown"""
         # Get current equity value from portfolio
-        equity = self.portfolio.get_total_value()
+        equity = await self.portfolio.get_total_value()
         
         # Record equity point
         equity_point = {
@@ -409,7 +409,7 @@ class BaseTradingMode(ABC):
             'functions': function_metrics
         }
     
-    def _log_performance_summary(self) -> None:
+    async def _log_performance_summary(self) -> None:
         """Log a summary of performance metrics"""
         if not self.enable_performance_tracking:
             return
@@ -463,17 +463,41 @@ class BaseTradingMode(ABC):
             
     @abstractmethod
     async def shutdown(self) -> None:
-        """Shutdown mode specific components"""
+        """Shutdown mode specific components - Fixed type conversion error"""
         self._running = False
         
         try:
-            if self.portfolio:
-                await self.portfolio.close()
-            if self.data_manager:
-                await self.data_manager.close()
-            if self.strategy:
-                await self.strategy.shutdown()
-            if self.performance_analyzer:
-                await self.performance_analyzer.shutdown()                
+            # FIXED: Handle potential dict/float conversion issues
+            components_to_close = [
+                ('portfolio', self.portfolio),
+                ('data_manager', self.data_manager), 
+                ('strategy', self.strategy),
+                ('performance_analyzer', self.performance_analyzer)
+            ]
+            
+            for component_name, component in components_to_close:
+                if component:
+                    try:
+                        if hasattr(component, 'close') and callable(component.close):
+                            if asyncio.iscoroutinefunction(component.close):
+                                await component.close()
+                            else:
+                                component.close()
+                        elif hasattr(component, 'shutdown') and callable(component.shutdown):
+                            if asyncio.iscoroutinefunction(component.shutdown):
+                                await component.shutdown()
+                            else:
+                                component.shutdown()
+                        
+                        self.logger.debug(f"Successfully closed {component_name}")
+                        
+                    except Exception as e:
+                        # FIXED: Don't try to convert dict to float, just log the error
+                        error_msg = str(e) if not isinstance(e, dict) else "Component shutdown error"
+                        self.logger.error(f"Error closing {component_name}: {error_msg}")
+            
+            self.logger.info("Base trading mode shutdown completed")
+            
         except Exception as e:
-            self.logger.error(f"Error during shutdown: {e}")
+            error_msg = str(e) if not isinstance(e, dict) else "General shutdown error"
+            self.logger.error(f"Error during shutdown: {error_msg}")

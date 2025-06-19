@@ -427,31 +427,40 @@ class Spot(Asset):
             self.logger.error(f"Error updating {self.symbol} with market data: {str(e)}")
             
     async def update_value(self) -> float:
-        """Update the asset's value by fetching current market data"""
+        """
+        Update the asset's value - Fixed for backtest mode
+        """
         try:
-            if self.exchange:
-                ticker = await self.exchange.fetch_ticker(self.symbol)
-                if ticker and 'last' in ticker:
-                    price = Decimal(str(ticker['last']))
-                    self._last_price = price
-                    self.price = price
-                    self._value = self._position_size * price
-                    return float(self._value)
+            # FIXED: Check if we're in backtest mode to avoid live API calls
+            if hasattr(self, '_backtest_mode') and self._backtest_mode:
+                # In backtest mode, use the last known price from market data
+                self._value = self._position_size * self.price
+                return float(self._value)
             
-            # If no exchange or failed to get ticker, use the current price
+            # Only fetch from exchange in live/paper trading modes
+            if self.exchange and hasattr(self.exchange, 'fetch_ticker'):
+                try:
+                    ticker = await self.exchange.fetch_ticker(self.symbol)
+                    if ticker and 'last' in ticker:
+                        price = Decimal(str(ticker['last']))
+                        self._last_price = price
+                        self.price = price
+                        self._value = self._position_size * price
+                        return float(self._value)
+                except Exception as e:
+                    # Don't log as error in backtest mode, just use last known price
+                    if not (hasattr(self, '_backtest_mode') and self._backtest_mode):
+                        self.logger.warning(f"Could not fetch live price for {self.symbol}: {e}")
+            
+            # Fallback: use current price
             self._value = self._position_size * self.price
             return float(self._value)
+            
         except Exception as e:
-            # More informative error message
-            error_msg = str(e)
-            if "does not have market symbol" in error_msg:
-                self.logger.warning(f"Symbol {self.symbol} not available on exchange, using last known price")
-                # Still return the current value based on last known price
-                return float(self._value)
-            else:
+            if not (hasattr(self, '_backtest_mode') and self._backtest_mode):
                 self.logger.error(f"Error updating {self.symbol} value: {e}")
-                # Return current value even on error
-                return float(self._value)
+            # Return current value even on error
+            return float(self._value)
             
     async def buy(self, kwargs) -> Dict[str, Any]:
         """Buy spot asset with validation"""

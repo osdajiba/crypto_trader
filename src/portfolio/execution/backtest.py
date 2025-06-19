@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# src/portfolio/execution/backtest.py
+# src/portfolio/execution/backtest.py (改进版)
 
 import asyncio
 from decimal import Decimal
@@ -16,14 +16,6 @@ from src.portfolio.execution.order import Order, OrderStatus, Direction, MarketO
 
 
 class BacktestExecutionEngine(BaseExecutionEngine):
-    """
-    Backtest execution engine for simulating trades on historical data.
-    
-    This class simulates order execution using historical price data, allowing
-    for realistic trading simulation with features like slippage, fees, and
-    volume-based partial fills. It can modify the historical data to account 
-    for market impact of orders.
-    """
     
     def __init__(self, config: ConfigManager, mode: str = "backtest"):
         """
@@ -32,30 +24,39 @@ class BacktestExecutionEngine(BaseExecutionEngine):
         Args:
             config (ConfigManager): Configuration manager instance.
             mode (str): Should be "backtest".
-            historical_data (Optional[Dict[str, pd.DataFrame]]): Historical OHLCV data for backtesting.
         """
         super().__init__(config, mode)
         
-        # Backtest-specific configuration
-        self.volume_participation = config.get("trading", "backtest", "volume_participation", default=0.1)  # Max volume percent per bar
-        self.use_market_impact = config.get("trading", "backtest", "use_market_impact", default=True)  # Simulate market impact
-        self.market_impact_factor = config.get("trading", "backtest", "market_impact_factor", default=0.1)  # Impact strength
-        self.realistic_slippage = config.get("trading", "backtest", "realistic_slippage", default=True)  # More realistic slippage model
+        # 回测专用配置
+        self.volume_participation = config.get("trading", "backtest", "volume_participation", default=0.1)
+        self.use_market_impact = config.get("trading", "backtest", "use_market_impact", default=True)
+        self.market_impact_factor = config.get("trading", "backtest", "market_impact_factor", default=0.1)
+        self.realistic_slippage = config.get("trading", "backtest", "realistic_slippage", default=True)
         
-        self.historical_data = None    # Need historical data for backtest execution
-
-        self.logger.info(f"Backtest execution engine initialized with market impact {'enabled' if self.use_market_impact else 'disabled'}")
+        # 滑点和手续费设置
+        self.slippage_buy = config.get("trading", "execution", "slippage_buy", default=0.0001)
+        self.slippage_sell = config.get("trading", "execution", "slippage_sell", default=0.0001)
+        
+        # 历史数据和状态跟踪
+        self.historical_data = None
+        self.current_timestamp = None
+        self.asset_states = {}  # symbol -> {quantity, avg_price, total_cost}
+        
+        # 成交记录
+        self.execution_log = []
+        
+        self.logger.info(f"Backtest execution engine initialized with volume_participation={self.volume_participation}")
 
     async def execute(self, signals: pd.DataFrame, prices: Optional[Dict[str, float]] = None) -> Tuple[pd.DataFrame, Optional[Dict[str, pd.DataFrame]]]:
         """
-        Execute trading signals in backtest mode using historical data.
-
+        Execute trading signals with volume-based matching
+        
         Args:
-            signals (pd.DataFrame): Signals with 'timestamp', 'symbol', 'action', 'quantity', and optional 'price'.
-            prices (Optional[Dict[str, float]]): Not used in backtest mode, as we use historical data.
-
+            signals: DataFrame containing trading signals
+            prices: Optional current prices (not used in backtest)
+            
         Returns:
-            Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]: Executed order results and updated historical data.
+            Tuple of (executed orders DataFrame, updated historical data)
         """
         if signals.empty:
             self.logger.info("No signals to execute")
@@ -70,339 +71,414 @@ class BacktestExecutionEngine(BaseExecutionEngine):
         # Convert signals to order objects
         orders = await self._create_orders(signals)
         
-        # Execute orders against historical data
-        executed_orders, updated_data = await self._backtest_execution(orders)
+        # Execute orders with volume matching
+        executed_orders = await self._execute_orders_with_matching(orders)
         
-        return executed_orders, updated_data
+        return executed_orders, self.historical_data
 
-    async def _backtest_execution(self, orders: List[Order]) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
+    async def _execute_orders_with_matching(self, orders: List[Order]) -> pd.DataFrame:
         """
-        Execute orders against historical data in backtest mode.
+        Execute orders with realistic volume matching and asset state updates
         
         Args:
-            orders: List of orders to simulate
+            orders: List of orders to execute
             
         Returns:
-            Tuple of (executed orders DataFrame, updated historical data)
+            DataFrame of execution results
         """
-        executed_orders = []
-        updated_data = {k: v.copy() for k, v in self.historical_data.items()}
+        executed_results = []
         
         for order in orders:
             try:
                 symbol = order.symbol
                 
-                # Skip if no historical data available
-                if symbol not in updated_data:
-                    self.logger.warning(f"No historical data for {symbol}, skipping order")
-                    executed_orders.append(self._create_rejected_order_result(
-                        order, "No historical data available"
-                    ))
+                # Get market data for this symbol
+                if symbol not in self.historical_data:
+                    result = self._create_rejected_order_result(order, "No market data available")
+                    executed_results.append(result)
                     continue
                 
-                # Get relevant data for execution
-                symbol_data = updated_data[symbol]
-                
-                # Find execution bar based on timestamp
-                if order.timestamp is not None:
-                    # Find bars on or after the timestamp
-                    execution_bars = symbol_data[symbol_data['timestamp'] >= order.timestamp]
-                    if execution_bars.empty:
-                        self.logger.warning(f"No data after timestamp {order.timestamp} for {symbol}")
-                        executed_orders.append(self._create_rejected_order_result(
-                            order, "No data available after order timestamp"
-                        ))
-                        continue
-                    execution_bar = execution_bars.iloc[0]
-                else:
-                    # Use last bar if no timestamp
-                    execution_bar = symbol_data.iloc[-1]
-                
-                # Calculate maximum execution volume based on participation rate
-                max_volume = execution_bar['volume'] * self.volume_participation
-                filled_qty = min(order.quantity, max_volume)
-                
-                if filled_qty <= 0:
-                    self.logger.info(f"Not enough volume to execute order for {symbol}")
-                    executed_orders.append(self._create_rejected_order_result(
-                        order, "Insufficient volume"
-                    ))
+                # Find the appropriate bar for execution
+                execution_bar = self._find_execution_bar(order, self.historical_data[symbol])
+                if execution_bar is None:
+                    result = self._create_rejected_order_result(order, "No valid execution bar found")
+                    executed_results.append(result)
                     continue
                 
-                # Determine execution price with realistic slippage
-                if self.realistic_slippage:
-                    exec_price = self._calculate_realistic_execution_price(order, execution_bar, filled_qty)
-                else:
-                    # Simple slippage model
-                    if order.direction == Direction.BUY:
-                        # Buy: use high price with positive slippage
-                        exec_price = execution_bar['high'] * (1 + self.slippage)
-                    else:
-                        # Sell: use low price with negative slippage
-                        exec_price = execution_bar['low'] * (1 - self.slippage)
+                # Execute order with volume matching
+                execution_result = await self._execute_single_order(order, execution_bar)
+                executed_results.append(execution_result)
                 
-                # For limit orders, respect limit price
-                if hasattr(order, 'price') and order.price is not None:
-                    if order.direction == Direction.BUY and exec_price > order.price:
-                        self.logger.info(f"Buy limit price {order.price} exceeded by execution price {exec_price}")
-                        executed_orders.append(self._create_rejected_order_result(
-                            order, "Price condition not met"
-                        ))
-                        continue
-                    if order.direction == Direction.SELL and exec_price < order.price:
-                        self.logger.info(f"Sell limit price {order.price} not reached by execution price {exec_price}")
-                        executed_orders.append(self._create_rejected_order_result(
-                            order, "Price condition not met"
-                        ))
-                        continue
-                
-                # Apply market impact if enabled
-                if self.use_market_impact:
-                    updated_data[symbol] = self._apply_market_impact(
-                        symbol_data, 
-                        execution_bar, 
-                        order.direction, 
-                        filled_qty
-                    )
-                
-                # Reduce available volume in the execution bar
-                bar_index = execution_bar.name
-                updated_data[symbol].loc[bar_index, 'volume'] -= filled_qty
-                
-                # Update order status
-                if hasattr(order, 'fill') and filled_qty > 0:
-                    # Fill the order
-                    order.fill(filled_qty, exec_price, max_volume)
-                    
-                # Save order in cache
-                self._order_cache[order.order_id] = order
-                
-                # Calculate commission
-                commission_rate = self.commission_taker if order.order_type.value == 'market' else self.commission_maker
-                commission = filled_qty * exec_price * commission_rate
-                
-                # Determine final status
-                status = 'filled' if filled_qty == order.quantity else 'partial'
-                
-                # Record the execution
-                executed_orders.append({
-                    'order_id': order.order_id,
-                    'symbol': symbol,
-                    'direction': order.direction.value,
-                    'filled_qty': filled_qty,
-                    'unfilled_qty': order.quantity - filled_qty,
-                    'price': exec_price,
-                    'avg_price': exec_price,
-                    'commission': commission,
-                    'status': status,
-                    'timestamp': execution_bar['timestamp'],
-                    'bar_timestamp': execution_bar['timestamp']
-                })
-                
-                self.logger.debug(f"Backtest execution: {order.direction.value} {filled_qty}/{order.quantity} {symbol} @ {exec_price:.6f} ({status})")
+                # Update asset state if execution was successful
+                if execution_result.get('status') in ['filled', 'partial']:
+                    await self._update_asset_state(order, execution_result)
                 
             except Exception as e:
-                self.logger.error(f"Backtest execution failed for {order.symbol}: {str(e)}")
-                # Record the failed order
-                executed_orders.append(self._create_failed_order_result(order, str(e)))
+                self.logger.error(f"Error executing order {order.order_id}: {str(e)}")
+                result = self._create_failed_order_result(order, str(e))
+                executed_results.append(result)
         
-        return pd.DataFrame(executed_orders), updated_data
+        return pd.DataFrame(executed_results)
 
-    def _calculate_realistic_execution_price(self, order: Order, bar: pd.Series, quantity: float) -> float:
+    async def _execute_single_order(self, order: Order, execution_bar: pd.Series) -> Dict[str, Any]:
         """
-        Calculate a realistic execution price based on order type, direction, and size.
+        Execute a single order against a market bar
         
         Args:
-            order: The order being executed
-            bar: OHLCV bar for execution
-            quantity: Quantity being executed
+            order: Order to execute
+            execution_bar: Market data bar for execution
             
         Returns:
-            Realistic execution price with slippage
+            Execution result dictionary
         """
-        # Extract bar data
-        open_price = bar['open']
-        high_price = bar['high']
-        low_price = bar['low']
-        close_price = bar['close']
-        volume = bar['volume']
+        try:
+            # Calculate available liquidity
+            available_volume = execution_bar['volume'] * self.volume_participation
+            
+            # Determine maximum fill quantity
+            max_fill_qty = min(order.quantity, available_volume)
+            
+            if max_fill_qty <= 0:
+                return self._create_rejected_order_result(order, "Insufficient market liquidity")
+            
+            # Calculate execution price with slippage
+            execution_price = self._calculate_execution_price(order, execution_bar)
+            
+            # Validate limit order price constraints
+            if not self._validate_limit_price(order, execution_price):
+                return self._create_rejected_order_result(order, "Limit price not met")
+            
+            # Calculate fees
+            commission = max_fill_qty * execution_price * self.commission_taker
+            
+            # Fill the order
+            if hasattr(order, 'fill'):
+                order.fill(max_fill_qty, execution_price, available_volume)
+            
+            # Cache order
+            self._order_cache[order.order_id] = order
+            
+            # Record execution
+            self.execution_log.append({
+                'timestamp': execution_bar.get('timestamp', execution_bar.name),
+                'order_id': order.order_id,
+                'symbol': order.symbol,
+                'direction': order.direction.value,
+                'quantity': max_fill_qty,
+                'price': execution_price,
+                'commission': commission,
+                'bar_volume': execution_bar['volume'],
+                'used_volume': max_fill_qty
+            })
+            
+            # Determine final status
+            status = 'filled' if max_fill_qty >= order.quantity else 'partial'
+            
+            return {
+                'order_id': order.order_id,
+                'symbol': order.symbol,
+                'direction': order.direction.value,
+                'filled_qty': max_fill_qty,
+                'unfilled_qty': order.quantity - max_fill_qty,
+                'price': execution_price,
+                'avg_price': execution_price,
+                'commission': commission,
+                'status': status,
+                'timestamp': execution_bar.get('timestamp', execution_bar.name),
+                'execution_bar_volume': execution_bar['volume'],
+                'liquidity_used': max_fill_qty / available_volume if available_volume > 0 else 0
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error executing order {order.order_id}: {str(e)}")
+            return self._create_failed_order_result(order, str(e))
+
+    def _calculate_execution_price(self, order: Order, bar: pd.Series) -> float:
+        """
+        Calculate realistic execution price with slippage
         
-        # Calculate volume ratio (order size relative to bar volume)
-        volume_ratio = quantity / volume
+        Args:
+            order: Order being executed
+            bar: Market data bar
+            
+        Returns:
+            Execution price
+        """
+        base_price = bar['close']  # Use close price as base
         
-        # Limit the impact of very large orders
-        volume_ratio = min(volume_ratio, 0.5)
-        
-        # Calculate price range for this bar
-        price_range = high_price - low_price
-        
-        # Add randomness to execution (market noise)
-        import random
-        noise_factor = random.uniform(0.0, 0.3)  # Random noise between 0-30%
-        
-        # For market orders: use VWAP-like price plus slippage
         if order.order_type.value == 'market':
-            # Estimate VWAP (we don't have tick data, so this is approximate)
-            vwap = (open_price + high_price + low_price + close_price) / 4
-            
-            # Apply directional slippage based on order size and direction
+            # Market orders: apply slippage based on direction
             if order.direction == Direction.BUY:
-                # Buy orders - execution price is higher than VWAP
-                slippage_impact = price_range * volume_ratio * (1 + noise_factor) * self.slippage
-                return vwap + slippage_impact
+                # Buy at higher price (adverse slippage)
+                slippage_factor = 1 + self.slippage_buy
+                execution_price = min(base_price * slippage_factor, bar['high'])
             else:
-                # Sell orders - execution price is lower than VWAP
-                slippage_impact = price_range * volume_ratio * (1 + noise_factor) * self.slippage
-                return vwap - slippage_impact
+                # Sell at lower price (adverse slippage)
+                slippage_factor = 1 - self.slippage_sell
+                execution_price = max(base_price * slippage_factor, bar['low'])
         
-        # For limit orders: use limit price with minimal favorable slippage
         elif order.order_type.value == 'limit' and hasattr(order, 'price'):
+            # Limit orders: use limit price but apply minimal slippage
             if order.direction == Direction.BUY:
-                # Buy limit - execution at or better than limit price
-                best_possible = max(low_price, order.price * (1 - self.slippage * noise_factor))
-                return min(order.price, best_possible)
+                # Can get filled at or below limit price
+                best_price = max(bar['low'], order.price * (1 - self.slippage_buy * 0.1))
+                execution_price = min(order.price, best_price)
             else:
-                # Sell limit - execution at or better than limit price
-                best_possible = min(high_price, order.price * (1 + self.slippage * noise_factor))
-                return max(order.price, best_possible)
+                # Can get filled at or above limit price
+                best_price = min(bar['high'], order.price * (1 + self.slippage_sell * 0.1))
+                execution_price = max(order.price, best_price)
         
-        # Default fallback - simple slippage model
-        if order.direction == Direction.BUY:
-            return close_price * (1 + self.slippage)
         else:
-            return close_price * (1 - self.slippage)
+            # Fallback to close price
+            execution_price = base_price
+        
+        return execution_price
 
-    def _apply_market_impact(self, data: pd.DataFrame, bar: pd.Series, direction: Direction, quantity: float) -> pd.DataFrame:
+    def _validate_limit_price(self, order: Order, execution_price: float) -> bool:
         """
-        Apply market impact of an order to future bars in the data.
+        Validate that limit order price constraints are met
         
         Args:
-            data: Full DataFrame of historical data
-            bar: The execution bar
-            direction: Order direction
-            quantity: Executed quantity
+            order: Order to validate
+            execution_price: Proposed execution price
             
         Returns:
-            Updated DataFrame with market impact applied
+            True if price is valid, False otherwise
         """
-        # Copy data to avoid modifying the original
-        updated_data = data.copy()
-        bar_index = bar.name
+        if order.order_type.value != 'limit' or not hasattr(order, 'price'):
+            return True
         
-        # If this is the last bar, no future impact
-        if bar_index >= len(updated_data) - 1:
-            return updated_data
+        if order.direction == Direction.BUY:
+            return execution_price <= order.price
+        else:
+            return execution_price >= order.price
+
+    def _find_execution_bar(self, order: Order, symbol_data: pd.DataFrame) -> Optional[pd.Series]:
+        """
+        Find the appropriate market data bar for order execution
         
-        # Calculate impact factor based on order size relative to bar volume
-        volume_ratio = min(quantity / bar['volume'], 0.5)  # Cap at 50% for very large orders
-        impact = volume_ratio * self.market_impact_factor
-        
-        # Direction of impact depends on order direction
-        impact_direction = 1 if direction == Direction.BUY else -1
-        
-        # Apply impact to future bars with decay
-        decay_rate = 0.7  # Each subsequent bar has 70% of previous impact
-        current_impact = impact
-        
-        # Apply to next 3-5 bars with decay
-        impact_periods = min(5, len(updated_data) - bar_index - 1)
-        
-        for i in range(1, impact_periods + 1):
-            future_idx = bar_index + i
+        Args:
+            order: Order to execute
+            symbol_data: Historical data for the symbol
             
-            # Skip if out of bounds
-            if future_idx >= len(updated_data):
-                break
+        Returns:
+            Market data bar or None if not found
+        """
+        try:
+            if order.timestamp is not None:
+                # Find bar at or after order timestamp
+                if 'timestamp' in symbol_data.columns:
+                    valid_bars = symbol_data[symbol_data['timestamp'] >= order.timestamp]
+                    if not valid_bars.empty:
+                        return valid_bars.iloc[0]
+                elif isinstance(symbol_data.index, pd.DatetimeIndex):
+                    try:
+                        timestamp = pd.to_datetime(order.timestamp)
+                        valid_indices = symbol_data.index[symbol_data.index >= timestamp]
+                        if len(valid_indices) > 0:
+                            return symbol_data.loc[valid_indices[0]]
+                    except Exception:
+                        pass
+            
+            # Fallback to last available bar
+            return symbol_data.iloc[-1]
+            
+        except Exception as e:
+            self.logger.error(f"Error finding execution bar: {str(e)}")
+            return None
+
+    async def _update_asset_state(self, order: Order, execution_result: Dict[str, Any]) -> None:
+        """
+        Update asset state after successful execution
+        
+        Args:
+            order: Executed order
+            execution_result: Execution result details
+        """
+        try:
+            symbol = order.symbol
+            filled_qty = execution_result['filled_qty']
+            avg_price = execution_result['avg_price']
+            commission = execution_result['commission']
+            
+            # Initialize asset state if not exists
+            if symbol not in self.asset_states:
+                self.asset_states[symbol] = {
+                    'quantity': 0.0,
+                    'avg_price': 0.0,
+                    'total_cost': 0.0,
+                    'total_commission': 0.0
+                }
+            
+            asset_state = self.asset_states[symbol]
+            
+            if order.direction == Direction.BUY:
+                # Update for buy order
+                old_quantity = asset_state['quantity']
+                old_total_cost = asset_state['total_cost']
                 
-            # Apply impact proportionally to open, high, low, close
-            impact_amount = current_impact * impact_direction
+                new_cost = filled_qty * avg_price + commission
+                new_quantity = old_quantity + filled_qty
+                new_total_cost = old_total_cost + new_cost
+                
+                asset_state['quantity'] = new_quantity
+                asset_state['total_cost'] = new_total_cost
+                asset_state['total_commission'] += commission
+                
+                if new_quantity > 0:
+                    asset_state['avg_price'] = new_total_cost / new_quantity
+                
+            else:  # SELL
+                # Update for sell order
+                old_quantity = asset_state['quantity']
+                
+                if old_quantity >= filled_qty:
+                    # Sufficient quantity to sell
+                    asset_state['quantity'] -= filled_qty
+                    asset_state['total_commission'] += commission
+                    
+                    # Proportionally reduce total cost
+                    if old_quantity > 0:
+                        cost_reduction = (filled_qty / old_quantity) * asset_state['total_cost']
+                        asset_state['total_cost'] -= cost_reduction
+                    
+                    self.logger.debug(f"Sold {filled_qty} of {symbol}, remaining: {asset_state['quantity']}")
+                else:
+                    self.logger.warning(f"Oversold {symbol}: tried to sell {filled_qty}, had {old_quantity}")
             
-            updated_data.loc[future_idx, 'open'] *= (1 + impact_amount)
-            updated_data.loc[future_idx, 'high'] *= (1 + impact_amount)
-            updated_data.loc[future_idx, 'low'] *= (1 + impact_amount)
-            updated_data.loc[future_idx, 'close'] *= (1 + impact_amount)
+            # Notify asset if it exists in portfolio manager
+            await self._notify_asset_update(symbol, asset_state, execution_result)
             
-            # Increase volume slightly to reflect increased activity
-            updated_data.loc[future_idx, 'volume'] *= (1 + abs(impact_amount) * 0.5)
-            
-            # Decay impact for next bar
-            current_impact *= decay_rate
-        
-        return updated_data
+        except Exception as e:
+            self.logger.error(f"Error updating asset state for {order.symbol}: {str(e)}")
 
-    def _create_failed_order_result(self, order: Order, error_message: str) -> Dict[str, Any]:
+    async def _notify_asset_update(self, symbol: str, asset_state: Dict[str, Any], 
+                                 execution_result: Dict[str, Any]) -> None:
         """
-        Create result entry for a failed order.
+        Notify the corresponding asset about the state change
         
         Args:
-            order: The failed order
-            error_message: Error message
+            symbol: Asset symbol
+            asset_state: Updated asset state
+            execution_result: Execution details
+        """
+        try:
+            # This would typically be injected or accessed through a registry
+            # For now, we'll implement a notification mechanism
             
-        Returns:
-            Order result dictionary with failure information
-        """
-        return {
-            'order_id': order.order_id,
-            'symbol': order.symbol,
-            'direction': order.direction.value,
-            'filled_qty': 0,
-            'unfilled_qty': order.quantity,
-            'price': getattr(order, 'price', 0),
-            'avg_price': 0,
-            'status': 'failed',
-            'timestamp': order.timestamp,
-            'error': error_message
-        }
+            # Create a trade record for the asset to process
+            trade_record = {
+                'symbol': symbol,
+                'direction': execution_result['direction'],
+                'quantity': execution_result['filled_qty'],
+                'price': execution_result['avg_price'],
+                'commission': execution_result['commission'],
+                'timestamp': execution_result['timestamp'],
+                'order_id': execution_result['order_id']
+            }
+            
+            # Store for later retrieval by portfolio manager
+            if not hasattr(self, 'trade_updates'):
+                self.trade_updates = []
+            
+            self.trade_updates.append(trade_record)
+            
+            self.logger.debug(f"Recorded trade update for {symbol}: {trade_record}")
+            
+        except Exception as e:
+            self.logger.error(f"Error notifying asset update for {symbol}: {str(e)}")
 
-    def _create_rejected_order_result(self, order: Order, reason: str) -> Dict[str, Any]:
+    def get_asset_state(self, symbol: str) -> Dict[str, Any]:
         """
-        Create result entry for a rejected order.
+        Get current state of an asset
         
         Args:
-            order: The rejected order
-            reason: Rejection reason
+            symbol: Asset symbol
             
         Returns:
-            Order result dictionary with rejection information
+            Asset state dictionary
         """
-        # Update order status
-        if hasattr(order, 'set_status'):
-            order.set_status(OrderStatus.REJECTED)
+        return self.asset_states.get(symbol, {
+            'quantity': 0.0,
+            'avg_price': 0.0,
+            'total_cost': 0.0,
+            'total_commission': 0.0
+        })
+
+    def get_all_asset_states(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get states of all tracked assets
+        
+        Returns:
+            Dictionary of symbol -> asset state
+        """
+        return self.asset_states.copy()
+
+    def get_execution_log(self) -> List[Dict[str, Any]]:
+        """
+        Get complete execution log
+        
+        Returns:
+            List of execution records
+        """
+        return self.execution_log.copy()
+
+    def get_trade_updates(self) -> List[Dict[str, Any]]:
+        """
+        Get and clear pending trade updates for portfolio manager
+        
+        Returns:
+            List of trade update records
+        """
+        if hasattr(self, 'trade_updates'):
+            updates = self.trade_updates.copy()
+            self.trade_updates.clear()
+            return updates
+        return []
+
+    def set_historical_data(self, data: Dict[str, pd.DataFrame]) -> None:
+        """
+        Set historical data for backtesting with validation
+        
+        Args:
+            data: Dictionary of symbol -> DataFrames
+        """
+        required_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+        
+        validated_data = {}
+        for symbol, df in data.items():
+            # Check required columns
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                self.logger.warning(f"Historical data for {symbol} missing columns: {missing_columns}")
+                continue
+                
+            # Ensure timestamp is datetime
+            if df['timestamp'].dtype != 'datetime64[ns]':
+                try:
+                    df = df.copy()
+                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                except Exception as e:
+                    self.logger.warning(f"Could not parse timestamps for {symbol}: {str(e)}")
+                    continue
             
-        return {
-            'order_id': order.order_id,
-            'symbol': order.symbol,
-            'direction': order.direction.value,
-            'filled_qty': 0,
-            'unfilled_qty': order.quantity,
-            'price': getattr(order, 'price', 0),
-            'avg_price': 0,
-            'status': 'rejected',
-            'timestamp': order.timestamp,
-            'reason': reason
-        }
+            # Validate data integrity
+            if df['volume'].sum() <= 0:
+                self.logger.warning(f"No volume data for {symbol}")
+                continue
+                
+            validated_data[symbol] = df.sort_values('timestamp')
+        
+        self.historical_data = validated_data
+        self.logger.info(f"Historical data set for {len(validated_data)} symbols")
 
     async def cancel_order(self, order_id: str, symbol: str) -> Dict[str, Any]:
-        """
-        Cancel an order in backtest simulation.
-        
-        Args:
-            order_id: Order ID to cancel
-            symbol: Trading symbol
-            
-        Returns:
-            Cancellation result dictionary
-        """
-        # In backtest mode, we can only cancel orders that we have in our cache
+        """Cancel an order in backtest (limited functionality)"""
         if order_id in self._order_cache:
             order = self._order_cache[order_id]
             
-            # Only allow canceling if not in a final state
             if order.status not in (OrderStatus.FILLED, OrderStatus.CANCELED, OrderStatus.REJECTED):
-                # Update order status
-                if hasattr(order, 'set_status'):
-                    order.set_status(OrderStatus.CANCELED)
-                    
+                order.status = OrderStatus.CANCELED
                 self.logger.info(f"Canceled order {order_id} in backtest")
                 return {
                     'success': True,
@@ -418,7 +494,6 @@ class BacktestExecutionEngine(BaseExecutionEngine):
                     'error': f"Cannot cancel order in {order.status.value} state"
                 }
                 
-        # Order not found
         return {
             'success': False,
             'order_id': order_id,
@@ -427,17 +502,7 @@ class BacktestExecutionEngine(BaseExecutionEngine):
         }
 
     async def get_order_status(self, order_id: str, symbol: str) -> Dict[str, Any]:
-        """
-        Get current status of a backtest order.
-        
-        Args:
-            order_id: Order ID to check
-            symbol: Trading symbol
-            
-        Returns:
-            Order status dictionary
-        """
-        # In backtest, we only know about orders in our cache
+        """Get order status in backtest"""
         if order_id in self._order_cache:
             order = self._order_cache[order_id]
             return {
@@ -452,7 +517,6 @@ class BacktestExecutionEngine(BaseExecutionEngine):
                 'timestamp': order.timestamp
             }
             
-        # Order not found
         return {
             'success': False,
             'order_id': order_id,
@@ -460,33 +524,46 @@ class BacktestExecutionEngine(BaseExecutionEngine):
             'error': 'Order not found'
         }
 
-    def set_historical_data(self, data: Dict[str, pd.DataFrame]) -> None:
-        """
-        Set historical data for backtesting.
-        
-        Args:
-            data: Dictionary of symbol -> DataFrames
-        """
-        # Ensure all DataFrames have required columns
-        required_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-        
-        for symbol, df in data.items():
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            if missing_columns:
-                self.logger.warning(f"Historical data for {symbol} missing columns: {missing_columns}")
-                continue
-                
-            # Make sure timestamp is parsed as datetime
-            if df['timestamp'].dtype != 'datetime64[ns]':
-                try:
-                    df['timestamp'] = pd.to_datetime(df['timestamp'])
-                except Exception as e:
-                    self.logger.warning(f"Could not parse timestamps for {symbol}: {str(e)}")
-        
-        # Store the validated data
-        self.historical_data = data
-        self.logger.info(f"Historical data set for {len(data)} symbols")
-        
+    def _create_failed_order_result(self, order: Order, error_message: str) -> Dict[str, Any]:
+        """Create result entry for a failed order"""
+        return {
+            'order_id': order.order_id,
+            'symbol': order.symbol,
+            'direction': order.direction.value,
+            'filled_qty': 0,
+            'unfilled_qty': order.quantity,
+            'price': getattr(order, 'price', 0),
+            'avg_price': 0,
+            'commission': 0,
+            'status': 'failed',
+            'timestamp': order.timestamp,
+            'error': error_message
+        }
+
+    def _create_rejected_order_result(self, order: Order, reason: str) -> Dict[str, Any]:
+        """Create result entry for a rejected order"""
+        if hasattr(order, 'set_status'):
+            order.set_status(OrderStatus.REJECTED)
+            
+        return {
+            'order_id': order.order_id,
+            'symbol': order.symbol,
+            'direction': order.direction.value,
+            'filled_qty': 0,
+            'unfilled_qty': order.quantity,
+            'price': getattr(order, 'price', 0),
+            'avg_price': 0,
+            'commission': 0,
+            'status': 'rejected',
+            'timestamp': order.timestamp,
+            'reason': reason
+        }
+
     async def _close_specific(self):
+        """Clean up backtest-specific resources"""
         if self.historical_data:
             self.historical_data.clear()
+        self.asset_states.clear()
+        self.execution_log.clear()
+        if hasattr(self, 'trade_updates'):
+            self.trade_updates.clear()

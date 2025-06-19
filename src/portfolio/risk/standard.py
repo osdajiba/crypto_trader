@@ -53,7 +53,7 @@ class StandardRiskManager(BaseRiskManager):
             
         # Initialize the start portfolio value
         if self._portfolio:
-            portfolio_value = self._portfolio.get_total_value()
+            portfolio_value = await self._portfolio.get_total_value()
             self._peak_value = Decimal(str(portfolio_value))
             self._last_portfolio_value = Decimal(str(portfolio_value))
             self._daily_high_value = Decimal(str(portfolio_value))
@@ -78,7 +78,7 @@ class StandardRiskManager(BaseRiskManager):
             
         try:
             # Calculate portfolio value
-            portfolio_value = Decimal(str(self._portfolio.get_total_value()))
+            portfolio_value = await self._portfolio.get_total_value()
             
             # Check single asset exposure limit
             max_single_asset_exposure = Decimal(str(self.get_risk_limit('max_single_asset_exposure', 0.3)))
@@ -149,7 +149,7 @@ class StandardRiskManager(BaseRiskManager):
         
         # Check daily loss limit if we're in a drawdown for the day
         if self._portfolio:
-            current_value = Decimal(str(self._portfolio.get_total_value()))
+            current_value = await self._portfolio.get_total_value()
             
             # Calculate daily loss percentage
             if self._daily_high_value > 0:
@@ -176,7 +176,7 @@ class StandardRiskManager(BaseRiskManager):
             
         try:
             # Get current portfolio value
-            current_value = Decimal(str(self._portfolio.get_total_value()))
+            current_value = await self._portfolio.get_total_value()
             
             # Skip further checks if portfolio value is zero or negative
             if current_value <= 0:
@@ -229,7 +229,7 @@ class StandardRiskManager(BaseRiskManager):
             
         # Get all assets
         asset_names = self._portfolio.list_assets()
-        portfolio_value = Decimal(str(self._portfolio.get_total_value()))
+        portfolio_value = await self._portfolio.get_total_value()
         
         # Calculate sector/asset type exposure
         sector_exposure = {}
@@ -239,7 +239,7 @@ class StandardRiskManager(BaseRiskManager):
             asset = self._portfolio.assets.get(asset_name)
             
             # Get asset value
-            asset_value = Decimal(str(asset.get_value()))
+            asset_value = Decimal(str(await asset.get_value()))
             
             # Get sector and asset type if available
             sector = getattr(asset, 'sector', 'unknown')

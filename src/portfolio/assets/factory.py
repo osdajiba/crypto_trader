@@ -177,14 +177,14 @@ class AssetFactory(AbstractFactory):
         except Exception as e:
             logger.error(f"Error during asset discovery: {str(e)}")
             logger.info("Registering default assets only")
-            
+       
     async def create_asset(self, params: Optional[Dict[str, Any]] = None) -> Asset:
-        """Create an asset instance asynchronously"""
+        """Create an asset instance with backtest mode detection"""
         try:
-            params_copy = params.copy()
-            asset_type = await self._resolve_name(params.pop('type', 'spot'))
+            params_copy = params.copy() if params else {}
+            asset_type = await self._resolve_name(params_copy.pop('type', 'spot'))
             
-            # Extract these from params correctly before passing to asset constructor
+            # Extract components
             exchange_instance = params_copy.get('exchange', None)
             execution_engine_instance = params_copy.get('execution_engine', None)
             
@@ -192,14 +192,20 @@ class AssetFactory(AbstractFactory):
             
             modified_params = await self._run_creation_hooks(asset_type, params_copy)
             asset_name = modified_params.get('name', '')
-                        
+            
             asset = asset_class(
                 name=asset_name,
                 exchange=exchange_instance,
-                execution_engine=execution_engine_instance,  # This needs to be properly passed
+                execution_engine=execution_engine_instance,
                 config=self.config,
                 params=params_copy
             )
+            
+            # FIXED: Set backtest mode flag based on system configuration
+            operational_mode = self.config.get("system", "operational_mode", default="backtest")
+            if operational_mode == "backtest":
+                asset._backtest_mode = True
+                self.logger.debug(f"Set backtest mode for asset {asset_name}")
             
             if hasattr(asset, 'initialize') and callable(asset.initialize):
                 await asset.initialize()

@@ -395,7 +395,7 @@ class BaseStrategy(ABC):
             self._has_sufficient_history.clear()
             
             # Shutdown executor
-            await self.executor.shutdown()
+            await self.executor.close()
             
             # Mark as not initialized
             self._is_initialized = False

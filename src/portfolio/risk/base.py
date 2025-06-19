@@ -167,7 +167,7 @@ class BaseRiskManager(ABC):
             order_value = Decimal(str(amount)) * asset_price
         
         # Get portfolio value
-        portfolio_value = Decimal(str(self._portfolio.get_total_value()))
+        portfolio_value = await self._portfolio.get_total_value()
         
         # Calculate value as percentage of portfolio
         value_pct = order_value / portfolio_value if portfolio_value > 0 else Decimal('0.01')
@@ -255,7 +255,7 @@ class BaseRiskManager(ABC):
                     })
         
         # 4. Check drawdown limits
-        current_drawdown = self._calculate_current_drawdown()
+        current_drawdown = await self._calculate_current_drawdown()
         max_drawdown = Decimal(str(self.get_risk_limit('max_drawdown', 0.2)))
         
         if current_drawdown > max_drawdown:
@@ -346,7 +346,7 @@ class BaseRiskManager(ABC):
                 return valid_signals[valid_signals['action'].str.lower() == 'sell'].copy()
             
             # Get portfolio value
-            portfolio_value = Decimal(str(self._portfolio.get_total_value() if self._portfolio else 0))
+            portfolio_value = await self._portfolio.get_total_value() if self._portfolio else 0
             if portfolio_value <= 0:
                 self.logger.error("Invalid portfolio value - cannot validate position sizing")
                 return pd.DataFrame()  # Return empty dataframe to reject all signals
@@ -443,7 +443,7 @@ class BaseRiskManager(ABC):
                 await self._portfolio.update_all_values()
             
             # Check drawdown limits
-            current_drawdown = self._calculate_current_drawdown()
+            current_drawdown = await self._calculate_current_drawdown()
             max_drawdown = Decimal(str(self.get_risk_limit('max_drawdown', 0.2)))
             
             if current_drawdown >= max_drawdown and not self._risk_breached:
@@ -513,30 +513,20 @@ class BaseRiskManager(ABC):
         except Exception as e:
             self.logger.error(f"Error in emergency position reduction: {e}")
     
-    def _calculate_current_drawdown(self) -> Decimal:
-        """
-        Calculate current portfolio drawdown
-        
-        Returns:
-            Decimal: Current drawdown as a fraction (0.0-1.0)
-        """
-        if not self._portfolio:
-            return Decimal('0')
+    def _calculate_current_drawdown(self) -> float:
+        """Calculate current drawdown with safe type conversion"""
+        try:
+            if hasattr(self, 'peak_portfolio_value') and hasattr(self, 'current_portfolio_value'):
+                peak = float(self.peak_portfolio_value) if self.peak_portfolio_value else 0.0
+                current = float(self.current_portfolio_value) if self.current_portfolio_value else 0.0
+                
+                if peak > 0:
+                    return float((peak - current) / peak)
             
-        current_value = Decimal(str(self._portfolio.get_total_value()))
-        peak_value = self._peak_value
-        
-        # Update peak value if needed
-        if current_value > peak_value:
-            self._peak_value = current_value
-            peak_value = current_value
-        
-        # Calculate drawdown
-        if peak_value > 0:
-            return (peak_value - current_value) / peak_value
-        
-        return Decimal('0')
-    
+            return 0.0
+        except Exception:
+            return 0.0
+
     def set_risk_limit(self, limit_name: str, value: Any) -> None:
         """
         Set a specific risk limit
@@ -616,7 +606,7 @@ class BaseRiskManager(ABC):
         try:
             # Get all assets
             asset_names = self._portfolio.list_assets()
-            portfolio_value = Decimal(str(self._portfolio.get_total_value()))
+            portfolio_value = await self._portfolio.get_total_value()
             
             if portfolio_value <= 0:
                 return False
@@ -631,7 +621,7 @@ class BaseRiskManager(ABC):
                     total_exposure += Decimal(str(asset.get_exposure()))
                 else:
                     # For spot assets, add direct value
-                    total_exposure += Decimal(str(asset.get_value()))
+                    total_exposure += Decimal(str(await asset.get_value()))
             
             # Check total exposure as percentage of portfolio
             max_exposure = Decimal(str(self.get_risk_limit('max_total_exposure', 2.0)))
@@ -645,7 +635,7 @@ class BaseRiskManager(ABC):
             # Check individual position limits
             for asset_name in asset_names:
                 asset = self._portfolio.assets.get(asset_name)
-                asset_value = Decimal(str(asset.get_value()))
+                asset_value = Decimal(str(await asset.get_value()))
                 
                 # Check asset value as percentage of portfolio
                 position_pct = asset_value / portfolio_value
@@ -684,71 +674,84 @@ class BaseRiskManager(ABC):
         """
         return True
     
-    def get_risk_report(self) -> Dict[str, Any]:
+    async def get_risk_report(self) -> Dict[str, Any]:
         """
-        Generate a comprehensive risk report
-        
-        Returns:
-            Dict[str, Any]: Risk report information
+        Generate comprehensive risk report - Fixed type conversion issues
         """
-        if not self._portfolio:
-            return {"error": "No portfolio manager provided"}
-        
         try:
-            # Get portfolio value
-            portfolio_value = self._portfolio.get_total_value()
-            
-            # Get drawdown
-            current_drawdown = float(self._calculate_current_drawdown())
-            
-            # Get position details
-            positions = {}
-            weights = self._portfolio.get_asset_weights()
-            
-            for asset_name, asset in self._portfolio.assets.items():
-                position_info = {
-                    "value": asset.get_value(),
-                    "weight": weights.get(asset_name, 0),
-                }
-                
-                # Add futures-specific info
-                if hasattr(asset, 'leverage'):
-                    position_info.update({
-                        "leverage": float(asset.leverage),
-                        "exposure": asset.get_exposure(),
-                        "contract_size": float(getattr(asset, 'contract_size', 1.0)),
-                        "liquidation_price": float(getattr(asset, '_liquidation_price', 0.0))
-                    })
-                
-                positions[asset_name] = position_info
-            
-            # Get total exposure
-            total_exposure = sum(
-                pos.get("exposure", pos["value"]) 
-                for pos in positions.values()
-            )
-            
-            # Create report
-            report = {
-                "portfolio_value": float(portfolio_value),
-                "drawdown": current_drawdown,
-                "total_exposure": float(total_exposure),
-                "leverage_ratio": float(total_exposure / portfolio_value) if portfolio_value > 0 else 0,
-                "risk_breached": self._risk_breached,
-                "active_controls": list(self._active_controls),
-                "risk_limits": {k: float(v) if isinstance(v, Decimal) else v for k, v in self._risk_limits.items()},
-                "positions": positions,
-                "position_count": len(positions)
+            risk_report = {
+                'portfolio_value': 0.0,
+                'total_exposure': 0.0,
+                'position_count': 0,
+                'max_position_size': 0.0,
+                'current_drawdown': 0.0,
+                'risk_metrics': {},
+                'positions': {}
             }
             
-            # Allow subclasses to add additional report information
-            self._add_to_risk_report(report)
+            if not self._portfolio:
+                return risk_report
             
-            return report
+            try:
+                portfolio_value = await self._portfolio.get_total_value()
+                risk_report['portfolio_value'] = float(portfolio_value) if portfolio_value else 0.0
+            except Exception as e:
+                self.logger.warning(f"Error getting portfolio value: {e}")
+                risk_report['portfolio_value'] = 0.0
+
+            try:
+                asset_weights = {}
+                if hasattr(self._portfolio, 'get_asset_weights'):
+                    # Check if it's a coroutine
+                    weights_result = self._portfolio.get_asset_weights()
+                    if asyncio.iscoroutine(weights_result):
+                        asset_weights = await weights_result
+                    else:
+                        asset_weights = weights_result
+                
+                # Convert all weight values to float
+                for asset_name, weight in asset_weights.items():
+                    if weight is not None:
+                        try:
+                            risk_report['positions'][asset_name] = {
+                                'weight': float(weight),
+                                'value': float(weight * risk_report['portfolio_value']) if risk_report['portfolio_value'] > 0 else 0.0
+                            }
+                        except (TypeError, ValueError) as e:
+                            self.logger.warning(f"Error converting weight for {asset_name}: {e}")
+                            risk_report['positions'][asset_name] = {
+                                'weight': 0.0,
+                                'value': 0.0
+                            }
+            except Exception as e:
+                self.logger.warning(f"Error getting asset weights: {e}")
+            
+            # Calculate summary metrics
+            if risk_report['positions']:
+                risk_report['position_count'] = len(risk_report['positions'])
+                weights = [pos['weight'] for pos in risk_report['positions'].values()]
+                risk_report['max_position_size'] = float(max(weights)) if weights else 0.0
+                risk_report['total_exposure'] = float(sum(weights)) if weights else 0.0
+            
+            # Calculate current drawdown
+            risk_report['current_drawdown'] = self._calculate_current_drawdown()
+            
+            return risk_report
+            
         except Exception as e:
-            self.logger.error(f"Error generating risk report: {e}")
-            return {"error": str(e)}
-    
+            self.logger.error(f"Error generating risk report: {str(e)}")
+            # Return safe default values
+            return {
+                'portfolio_value': 0.0,
+                'total_exposure': 0.0,
+                'position_count': 0,
+                'max_position_size': 0.0,
+                'current_drawdown': 0.0,
+                'risk_metrics': {},
+                'positions': {},
+                'error': str(e)
+            }
+        
     def _add_to_risk_report(self, report: Dict[str, Any]) -> None:
         """
         Add additional information to risk report (subclass specific)
@@ -860,7 +863,7 @@ class BaseRiskManager(ABC):
         
         # Check for large drawdowns
         if change_pct < -0.05:  # More than 5% drop
-            drawdown = self._calculate_current_drawdown()
+            drawdown = await self._calculate_current_drawdown()
             max_drawdown = Decimal(str(self.get_risk_limit('max_drawdown', 0.2)))
             
             # Send notification for significant drawdowns
