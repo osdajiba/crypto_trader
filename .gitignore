@@ -51,6 +51,9 @@ data/
 
 config/config.yaml
 config/autosave/
+conf/config.yaml
+conf/strategy.yaml
+conf/autosave/
 
 # 敏感文件
 src/strategy/rotation.py
@@ -61,3 +64,13 @@ src/strategy/Multi_Factors.py
 *.gitignore.un~
 *.gitignore~
 venv/
+.venv/
+
+# Local/private workspace files
+.superpowers/
+photos/
+reports/
+cache/
+CRYPTO_TRADER_ANALYSIS.md
+项目分析报告.md
+启动.md

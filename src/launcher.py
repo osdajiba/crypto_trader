@@ -16,6 +16,9 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 sys.path.append(project_root)
 
+def default_config_path() -> Path:
+    return Path(project_root) / "conf" / "config.yaml"
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments for the launcher"""
     parser = argparse.ArgumentParser(description="Trading System Launcher")
@@ -46,7 +49,29 @@ def parse_arguments() -> argparse.Namespace:
     # Backtest engine selection
     parser.add_argument("--backtest-engine", type=str,
                       choices=["ohlcv", "market_replay", "basic", "advanced"],
-                      help="Backtest engine to use")
+                      help="Execution model name for backtest compatibility; does not call legacy BacktestFactory")
+
+    # Local backtest research
+    parser.add_argument("--research", action="store_true",
+                      help="Run local backtest research instead of a single trading pipeline")
+    parser.add_argument("--research-grid", type=str, default="{}",
+                      help="JSON parameter grid for research runs, e.g. '{\"short_window\":[5,10]}'")
+    parser.add_argument("--research-metric", type=str, default="final_equity",
+                      help="Metric used to rank research runs; dot paths such as diagnostics.cost_to_abs_net_return are supported")
+    parser.add_argument("--research-ascending", action="store_true",
+                      help="Sort research runs ascending by metric")
+    parser.add_argument("--research-output-dir", type=str, default="reports/research",
+                      help="Directory for research summary JSON output")
+    parser.add_argument("--research-walk-forward-start", type=str,
+                      help="Walk-forward planning start date, YYYY-MM-DD")
+    parser.add_argument("--research-walk-forward-end", type=str,
+                      help="Walk-forward planning end date, YYYY-MM-DD")
+    parser.add_argument("--research-train-days", type=int,
+                      help="Walk-forward training window size in days")
+    parser.add_argument("--research-test-days", type=int,
+                      help="Walk-forward test window size in days")
+    parser.add_argument("--research-step-days", type=int,
+                      help="Walk-forward step size in days; defaults to test window size")
     
     # Debug options
     parser.add_argument("--debug", action="store_true", 
@@ -103,10 +128,7 @@ def prompt_backtest_engine_selection() -> str:
 
 def setup_environment(args):
     """Setup environment variables and paths with enhanced logging"""
-    # Constants
-    base_dir = Path(project_root)
-    default_config_path = base_dir / "conf/bt_config.yaml"
-    config_path = Path(args.config) if args.config else default_config_path
+    config_path = Path(args.config) if args.config else default_config_path()
     
     config_manager = ConfigManager(config_path=config_path)
     config_manager.load()
@@ -148,6 +170,16 @@ def launch():
             app = TradingSystemGUI(root, args)
             root.mainloop()
         else:
+            if args.research:
+                args.mode = args.mode or "backtest"
+                if args.mode != "backtest":
+                    raise ValueError("Research CLI only supports backtest mode")
+                args.backtest_engine = args.backtest_engine or "ohlcv"
+                from src.ui.research_cli import run_research_cli_mode
+                run_research_cli_mode(args, args.config, logger)
+                logger.info("Trading system shutting down")
+                return {"status": "completed"}
+
             # Start CLI mode
             # If no trading mode specified, prompt for selection
             if not args.mode:
@@ -159,7 +191,7 @@ def launch():
                 
             # Run in CLI mode
             from src.ui.cli import run_cli_mode
-            run_cli_mode(args, logger)
+            run_cli_mode(args, args.config, args.config, logger)
             
     except Exception as e:
         logger.error(f"Critical error in launcher: {str(e)}", exc_info=True)

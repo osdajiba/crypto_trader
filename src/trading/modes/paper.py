@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime
 
 from src.trading.modes.base import BaseTradingMode
-from src.trading.execution.manager import ExecutionEngine
+from src.application.runtime_builder import RuntimeBuilder
 
 
 class PaperTradingMode(BaseTradingMode):
@@ -15,12 +15,6 @@ class PaperTradingMode(BaseTradingMode):
     async def initialize(self) -> None:
         """Initialize paper trading mode components"""
         self.logger.info("Initializing paper trading mode")
-        
-        # Create paper trading specific execution engine
-        self.execution_engine = ExecutionEngine(
-            config=self.config,
-            mode="paper"
-        )
         
         # Get strategy configuration
         strategy_name = self.config.get("paper_trading", "strategy", default=None)
@@ -41,8 +35,7 @@ class PaperTradingMode(BaseTradingMode):
             symbols: List of trading symbols
             timeframe: Time period
         """
-        # Paper trading doesn't need additional setup
-        pass
+        RuntimeBuilder(self).build_paper_runtime()
     
     async def _execute_trading_loop(self, symbols: List[str], timeframe: str) -> Dict[str, Any]:
         """
@@ -58,11 +51,8 @@ class PaperTradingMode(BaseTradingMode):
         try:
             # Trading loop
             while self._should_continue():
-                # Get market data
-                data_map = await self.data_manager.fetch_all_data_for_symbols(symbols, timeframe)
-                
-                # Process market data
-                await self._process_market_data(data_map)
+                # paper mode 只编排 use case，真实交易决策交给 DomainTradingPipeline。
+                await self.paper_use_case.run_once(symbols, timeframe)
                 
                 # Check risk control
                 if await self.risk_manager.execute_risk_control():
@@ -79,10 +69,14 @@ class PaperTradingMode(BaseTradingMode):
         except asyncio.CancelledError:
             self.logger.warning("Paper trading cancelled")
             raise
-            
+
         except Exception as e:
             self.logger.error(f"Paper trading error: {e}", exc_info=True)
             raise
+
+    def _create_domain_pipeline(self):
+        """兼容旧入口：模拟盘领域流水线由 RuntimeBuilder 统一组装。"""
+        return RuntimeBuilder(self).build_paper_runtime().domain_pipeline
     
     def _add_mode_specific_metrics(self, report: Dict[str, Any]) -> None:
         """
@@ -108,9 +102,6 @@ class PaperTradingMode(BaseTradingMode):
         
         if hasattr(self, 'strategy') and self.strategy:
             await self.strategy.shutdown()
-        
-        if hasattr(self, 'execution_engine') and self.execution_engine:
-            await self.execution_engine.close()
         
         self._running = False
         self.logger.info("Paper trading mode shutdown complete")

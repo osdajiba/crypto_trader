@@ -4,6 +4,7 @@
 import os
 import sys
 import argparse
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 import importlib.util
@@ -50,8 +51,8 @@ def run_cli_mode(args: argparse.Namespace, config_path: Path, config, logger) ->
 
     # Apply timeframe override
     if hasattr(args, 'timeframe') and args.timeframe:
-        # Assuming there's a timeframe configuration
-        config.set("strategy", "timeframe", args.timeframe)
+        # core.run_pipeline 读取 trading.timeframe，这里必须写到同一个配置路径。
+        config.set("trading", "timeframe", args.timeframe)
         logger.info(f"Overriding timeframe: {args.timeframe}")
 
     # Apply backtest date range overrides
@@ -101,9 +102,7 @@ def run_cli_mode(args: argparse.Namespace, config_path: Path, config, logger) ->
         logger.info("Trading pipeline completed")
         logger.info(f"Result: {result}")
         
-        # Shutdown properly
-        executor.run(trader.shutdown())
-        
+        # run_pipeline 的 finally 已经负责 shutdown，避免再次启动 singleton executor 导致进程不退出。
         return result
     except ModuleNotFoundError as e:
         logger.error(f"Failed to import required module: {str(e)}", exc_info=True)
@@ -111,3 +110,6 @@ def run_cli_mode(args: argparse.Namespace, config_path: Path, config, logger) ->
     except Exception as e:
         logger.error(f"Error running trading pipeline: {str(e)}", exc_info=True)
         return {"error": f"Error running trading pipeline: {str(e)}"}
+    finally:
+        # 异步日志 handler 内部有线程池；CLI 结束时显式关闭，避免报告已生成但进程不返回。
+        logging.shutdown()

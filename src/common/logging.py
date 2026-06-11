@@ -27,7 +27,7 @@ class AsyncLogHandler(logging.Handler):
         self.flush_interval = flush_interval
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.buffer = []
-        self.lock = threading.Lock()
+        self.buffer_lock = threading.Lock()
         self.timer = None
         self._is_closing = False
         self._schedule_flush()
@@ -36,7 +36,7 @@ class AsyncLogHandler(logging.Handler):
         """Buffer a log record and flush if needed"""
         try:
             should_flush = False
-            with self.lock:
+            with self.buffer_lock:
                 self.buffer.append(record)
                 if len(self.buffer) >= self.buffer_size:
                     should_flush = True
@@ -88,7 +88,8 @@ class AsyncLogHandler(logging.Handler):
             self.timer.cancel()
             self.timer = None
         self.flush()
-        self.executor.shutdown(wait=False)  # Don't block on shutdown
+        # 等待已提交的日志写入任务完成，否则 CLI 主流程结束后线程池仍会阻止进程退出。
+        self.executor.shutdown(wait=True)
         if hasattr(self.handler, 'close'):
             self.handler.close()
         super().close()

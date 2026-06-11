@@ -141,9 +141,14 @@ class PerformanceMonitor:
         daily_return = (current_balance - last_balance) / last_balance
         cumulative_return = current_balance / self.initial_balance - 1
         
+        timestamp = pd.Timestamp(timestamp)
+        if timestamp.tzinfo is not None:
+            # NumPy datetime64 不保留时区，先转 UTC 再去掉时区，避免运行时刷屏 warning。
+            timestamp = timestamp.tz_convert('UTC').tz_localize(None)
+
         # Append to NumPy arrays
         self.equity_curve['timestamps'] = np.append(
-            self.equity_curve['timestamps'], 
+            self.equity_curve['timestamps'],
             np.datetime64(timestamp)
         )
         self.equity_curve['balance'] = np.append(
@@ -182,7 +187,13 @@ class PerformanceMonitor:
             returns = self.equity_curve['daily_return']
             
             # Risk-free rate from configuration
-            risk_free_rate = self.config.get('risk_free_rate', 0.02)
+            if hasattr(self.config, 'get'):
+                try:
+                    risk_free_rate = self.config.get('risk_free_rate', default=0.02)
+                except TypeError:
+                    risk_free_rate = self.config.get('risk_free_rate', 0.02)
+            else:
+                risk_free_rate = 0.02
             
             # Annualized return and volatility
             annualized_return = (1 + returns.mean()) ** 252 - 1
@@ -243,7 +254,7 @@ class PerformanceMonitor:
                 'sortino_ratio': self.performance_metrics.sortino_ratio
             },
             'trade_log': [
-                {name: trade[i] for i, name in enumerate(self.trade_log_dtype)} 
+                {name: trade[name] for name, _ in self.trade_log_dtype}
                 for trade in self.trade_log
             ],
             'equity_curve': {
