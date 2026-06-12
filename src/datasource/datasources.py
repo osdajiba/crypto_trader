@@ -10,6 +10,7 @@ from common.logging import LogManager
 from common.config import ConfigManager
 from src.common.async_executor import AsyncExecutor
 from datasource.integrity import DataIntegrityChecker
+from src.datasource.stores.parquet_store import ParquetHistoricalStore
 
 logger = LogManager.get_logger("trading_system")
 
@@ -138,6 +139,8 @@ class LocalSource(DataSource):
         
         # Track missing data info
         self.missing_symbols = set()
+        # 本地历史数据读取统一走 parquet store，避免各处重复拼目录、筛文件和规范化字段。
+        self.historical_store = ParquetHistoricalStore(self.data_path)
         logger.info(f"LocalSource initialized, data path: {self.data_path}")
 
     def _get_data_path(self) -> str:
@@ -185,20 +188,16 @@ class LocalSource(DataSource):
             if not start_dt:
                 start_dt = end_dt - timedelta(days=30)
             
-            # Find files matching the date range
-            from src.common.helpers import ParquetFileManager
-            file_paths = ParquetFileManager.find_files_in_date_range(self.data_path, timeframe, symbol, start_dt, end_dt)
+            # 先查文件用于保留原有缺失数据日志，再由 store 负责真正读取和时间过滤。
+            file_paths = self.historical_store.find_files(symbol, timeframe, start_dt, end_dt)
             
             if not file_paths:
                 logger.debug(f"No matching files found for {symbol} {timeframe} between {start_dt} and {end_dt}")
                 self.missing_symbols.add(f"{symbol}_{timeframe}")
                 return pd.DataFrame()
             
-            # Load and combine files
-            df = await ParquetFileManager.load_and_combine_files(
-                file_paths,
-                date_filter=(start_dt, end_dt)
-            )
+            # load 内部会合并 parquet、规范化时间列，并裁剪到请求区间。
+            df = await self.historical_store.load(symbol, timeframe, start_dt, end_dt)
             
             if not df.empty:
                 logger.info(f"Retrieved {len(df)} rows for {symbol} {timeframe} from {len(file_paths)} files")

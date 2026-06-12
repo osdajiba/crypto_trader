@@ -702,7 +702,8 @@ for col in ['open', 'high', 'low', 'close']:
     async def close(self):
         """Clean up resources"""
         try:
-            self.thread_pool.shutdown(wait=False)
+            # 校验线程池必须等待关闭，否则本地回测完成后进程会被后台 worker 挂住。
+            self.thread_pool.shutdown(wait=True)
             self.logger.debug("Thread pool shutdown")
         except Exception as e:
             self.logger.error(f"Error shutting down thread pool: {e}")

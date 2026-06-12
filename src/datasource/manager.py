@@ -97,9 +97,11 @@ class DataManager:
                 raise ValueError(f"Unsupported data source type: {self.source_type}")
                     
             if self._get_trading_mode() == "BACKTEST" and not self.backup_source:
-                if self.source_type == "local":
+                use_backup = self.config.get("data", "backup_source_enabled", default=False)
+                if self.source_type == "local" and use_backup:
+                    # 本地回测默认只读本地数据，避免启动时初始化交易所并卡在外网请求。
                     self.backup_source = factory.create_source(backup_type, self.config)
-                    
+
         except Exception as e:
             self.logger.error(f"Error initializing data sources: {e}", exc_info=True)
             raise
@@ -1066,10 +1068,19 @@ class DataManager:
                 self.logger.debug("Closed backup data source")
             except Exception as e:
                 self.logger.error(f"Error closing backup data source: {e}")
-        
+
+        if self.integrity_checker and hasattr(self.integrity_checker, 'close'):
+            try:
+                # DataIntegrityChecker 也持有线程池，必须一起关闭。
+                await self.integrity_checker.close()
+                self.logger.debug("Closed data integrity checker")
+            except Exception as e:
+                self.logger.error(f"Error closing data integrity checker: {e}")
+
         # Shutdown thread pool
         try:
-            self.thread_pool.shutdown(wait=False)
+            # 等待 DataManager 自己的线程池结束，避免 CLI 主流程完成后进程仍挂住。
+            self.thread_pool.shutdown(wait=True)
             self.logger.debug("Thread pool shutdown")
         except Exception as e:
             self.logger.error(f"Error shutting down thread pool: {e}")

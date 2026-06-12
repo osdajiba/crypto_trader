@@ -400,6 +400,96 @@ class ParquetFileManager:
     ) -> List[str]:
         """Find Parquet files for symbol/timeframe within a date range"""
         try:
+            start_dt, end_dt = map(TimeUtils.ensure_tz_aware, (start_dt, end_dt))
+            start_ts, end_ts = int(start_dt.timestamp()), int(end_dt.timestamp())
+            symbol_name = symbol.replace('/', '_')
+            base_path = os.path.abspath(base_path)
+
+            candidate_dirs = [
+                os.path.join(base_path, timeframe, symbol_name),
+                os.path.join(base_path, "binance", symbol_name, timeframe),
+                os.path.join(base_path, symbol_name, timeframe),
+            ]
+
+            parent_dir = os.path.dirname(base_path)
+            if os.path.basename(base_path).lower() == "historical":
+                candidate_dirs.append(os.path.join(parent_dir, "binance", symbol_name, timeframe))
+
+            existing_dirs = [path for path in dict.fromkeys(candidate_dirs) if os.path.exists(path)]
+            if not existing_dirs:
+                logger.warning(f"No data directory found for {symbol} {timeframe}: {candidate_dirs}")
+                return []
+
+            def overlaps(file_start_ts: int, file_end_ts: int) -> bool:
+                return (
+                    (start_ts <= file_start_ts <= end_ts) or
+                    (start_ts <= file_end_ts <= end_ts) or
+                    (file_start_ts <= start_ts and file_end_ts >= end_ts)
+                )
+
+            def parse_file_range(file_name: str) -> Optional[Tuple[int, int]]:
+                stem = os.path.splitext(file_name)[0]
+
+                parts = stem.split('_')
+                if len(parts) >= 2:
+                    try:
+                        return int(parts[0]), int(parts[1])
+                    except ValueError:
+                        pass
+
+                if stem.startswith(f"{timeframe}-"):
+                    try:
+                        date_str = stem.replace(f"{timeframe}-", "")
+                        date_dt = datetime.strptime(date_str, "%Y-%m-%d")
+                        file_start_ts = int(date_dt.replace(tzinfo=timezone.utc).timestamp())
+                        file_end_ts = int((date_dt + timedelta(days=1)).replace(tzinfo=timezone.utc).timestamp())
+                        return file_start_ts, file_end_ts
+                    except ValueError:
+                        pass
+
+                if "to" in stem and "T" in stem:
+                    try:
+                        start_text, end_text = stem.split("to", 1)
+                        file_start_dt = datetime.fromisoformat(start_text.replace('_', ':'))
+                        file_end_dt = datetime.fromisoformat(end_text.replace('_', ':'))
+                        file_start_dt = TimeUtils.ensure_tz_aware(file_start_dt)
+                        file_end_dt = TimeUtils.ensure_tz_aware(file_end_dt)
+                        return int(file_start_dt.timestamp()), int(file_end_dt.timestamp())
+                    except ValueError:
+                        pass
+
+                return None
+
+            date_ranges = []
+            current = datetime(start_dt.year, start_dt.month, 1, tzinfo=timezone.utc)
+            end_month = datetime(end_dt.year, end_dt.month, 1, tzinfo=timezone.utc)
+
+            while current <= end_month:
+                date_ranges.append((current.year, current.month))
+                current = (datetime(current.year + 1, 1, 1) if current.month == 12
+                        else datetime(current.year, current.month + 1, 1)).replace(tzinfo=timezone.utc)
+
+            file_paths = []
+            for symbol_dir in existing_dirs:
+                logger.info(f"Searching for files in {symbol_dir} from timestamp {start_ts} to {end_ts}")
+                search_dirs = [symbol_dir]
+                search_dirs.extend(
+                    os.path.join(symbol_dir, str(year), f"{month:02d}")
+                    for year, month in date_ranges
+                    if os.path.exists(os.path.join(symbol_dir, str(year), f"{month:02d}"))
+                )
+
+                for search_dir in search_dirs:
+                    for file in (f for f in os.listdir(search_dir) if f.endswith('.parquet')):
+                        file_path = os.path.join(search_dir, file)
+                        file_range = parse_file_range(file)
+                        if file_range is None or overlaps(*file_range):
+                            file_paths.append(file_path)
+
+            file_paths = sorted(dict.fromkeys(file_paths))
+            logger.info(f"Found {len(file_paths)} files for {symbol} {timeframe} in date range")
+            return file_paths
+
             symbol_dir = os.path.join(base_path, timeframe, symbol.replace('/', '_'))
             
             # 确保时区感知的日期时间并转换为时间戳

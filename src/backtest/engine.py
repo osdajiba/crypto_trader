@@ -1,4 +1,8 @@
-# src/backtest/base_backtest_engine.py
+"""LEGACY COMPATIBILITY: legacy DataFrame backtest engines.
+
+The primary backtest path is `RuntimeBuilder -> DomainTradingPipeline`.
+This module remains for historical factories and explicit compatibility use.
+"""
 
 import asyncio
 import pandas as pd

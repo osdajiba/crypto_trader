@@ -231,6 +231,30 @@ class Binance:
                 
             raise RuntimeError(f"Binance初始化失败: {str(e)}")
 
+    def create_order(self, symbol, direction, order_type, quantity, price=None):
+        """Create an order through the underlying ccxt exchange."""
+        side = getattr(direction, "value", direction)
+        return self.exchange.create_order(
+            symbol=symbol,
+            type=order_type,
+            side=str(side).lower(),
+            amount=quantity,
+            price=price,
+        )
+
+    def get_account_balance(self):
+        """Return total account balances from the underlying exchange."""
+        balance = self.exchange.fetch_balance()
+        return balance.get("total", balance)
+
+    def get_open_orders(self):
+        """Return current open orders from the underlying exchange."""
+        return self.exchange.fetch_open_orders()
+
+    def cancel_order(self, order_id, symbol=None):
+        """Cancel an order through the underlying exchange."""
+        return self.exchange.cancel_order(order_id, symbol)
+
     async def _init_async_exchange(self) -> None:
         """初始化异步交易所（延迟初始化），针对高延迟网络进行优化"""
         if self.async_exchange is not None:

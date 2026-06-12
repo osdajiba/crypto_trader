@@ -2,13 +2,7 @@
 
 from abc import ABC, abstractmethod
 import asyncio
-import pandas as pd
-import json
-import os
-from pathlib import Path
-from datetime import datetime
 from typing import Dict, Optional, Any, Type, List
-from pathlib import Path
 
 from common.config import ConfigManager
 from common.logging import LogManager
@@ -18,7 +12,8 @@ from datasource.manager import DataManager
 from risk.manager import RiskManagerFactory
 from backtest.performance import PerformanceMonitor
 from strategy.base import StrategyFactory
-from trading.execution.order import Direction
+from src.domain.portfolio import PortfolioBook
+from src.application.report_use_case import TradingReportUseCase
 
 
 class BaseTradingMode(ABC):
@@ -63,11 +58,12 @@ class BaseTradingMode(ABC):
             'market_prices': {},
             'current_equity': 0,
             'peak_equity': 0,
-            'max_drawdown': 0.0
+            'max_drawdown': 0.0,
+            'processed_signals': set()
         }
         
-        self.execution_engine = None
         self.strategy = None
+        self.portfolio_book = PortfolioBook(initial_cash=0)
         
         self.logger.info(f"Initializing {self.mode_name} trading mode")
     
@@ -114,9 +110,9 @@ class BaseTradingMode(ABC):
         
         This method should be implemented by subclasses to perform mode-specific
         initialization. A subclass implementation should typically:
-        1. Create an execution engine appropriate for the mode
-        2. Initialize the strategy
-        3. Set up any mode-specific state
+        1. Initialize the strategy
+        2. Set up any mode-specific state
+        3. Prepare runtime dependencies through the application layer
         """
         pass
     
@@ -189,8 +185,11 @@ class BaseTradingMode(ABC):
             'market_prices': {},
             'current_equity': initial_capital,
             'peak_equity': initial_capital,
-            'max_drawdown': 0.0
+            'max_drawdown': 0.0,
+            'processed_signals': set()
         })
+        self.portfolio_book = PortfolioBook(initial_capital)
+        self._sync_state_from_portfolio()
         
         self.logger.info(f"State initialized with {initial_capital} initial capital")
     
@@ -219,204 +218,12 @@ class BaseTradingMode(ABC):
         """
         pass
     
-    async def _process_market_data(self, data_map: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
-        """
-        Process market data and generate signals
-        
-        Args:
-            data_map: Mapping of symbols to market data
-            
-        Returns:
-            List: Executed trades
-        """
-        executed_trades = []
-        
-        # Update current time from data
-        self._update_timestamp_from_data(data_map)
-        
-        # Update market prices
-        self._update_market_prices(data_map)
-        
-        # Process each symbol
-        for symbol, data in data_map.items():
-            if data.empty:
-                self.logger.warning(f"No data for {symbol}")
-                continue
-                
-            # Generate signals
-            signals = await self.strategy.process_data(data, symbol)
-            
-            if not signals.empty:
-                # Validate signals
-                valid_signals = await self.risk_manager.validate_signals(signals)
-                
-                # Execute signals
-                if not valid_signals.empty:
-                    trades = await self._execute_signals(valid_signals, data_map)
-                    if trades:
-                        executed_trades.extend(trades)
-        
-        # Update equity curve and drawdown
-        self._update_performance_metrics()
-        
-        return executed_trades
-    
-    def _update_timestamp_from_data(self, data_map: Dict[str, pd.DataFrame]) -> None:
-        """
-        Update current timestamp from data
-        
-        Args:
-            data_map: Mapping of symbols to market data
-        """
-        # Find the latest timestamp across all data
-        for df in data_map.values():
-            if not df.empty and 'datetime' in df.columns:
-                latest_time = df['datetime'].iloc[-1]
-                self.state['timestamp'] = latest_time
-                break
-    
-    def _update_market_prices(self, data_map: Dict[str, pd.DataFrame]) -> None:
-        """
-        Update current market prices
-        
-        Args:
-            data_map: Mapping of symbols to market data
-        """
-        for symbol, df in data_map.items():
-            if not df.empty and 'close' in df.columns:
-                self.state['market_prices'][symbol] = df['close'].iloc[-1]
-    
-    async def _execute_signals(self, signals: pd.DataFrame, data_map: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
-        """
-        Execute trading signals
-        
-        Args:
-            signals: Trading signals
-            data_map: Current market data
-            
-        Returns:
-            List: Executed trades
-        """
-        if not self.execution_engine:
-            self.logger.error("Execution engine not initialized")
-            return []
-            
-        # Execute signals
-        executed_trades = []
-        
-        try:
-            # Call execution engine
-            executed_orders, _ = await self.execution_engine.execute(signals)
-            
-            # Process executed orders
-            for _, order in executed_orders.iterrows():
-                trade = self._process_executed_order(order)
-                if trade:
-                    executed_trades.append(trade)
-                    
-            return executed_trades
-            
-        except Exception as e:
-            self.logger.error(f"Error executing signals: {e}")
-            return []
-    
-    def _process_executed_order(self, order: pd.Series) -> Optional[Dict[str, Any]]:
-        """
-        Process an executed order and update state
-        
-        Args:
-            order: Executed order details
-            
-        Returns:
-            Dict: Trade record or None if invalid
-        """
-        # Extract order details
-        try:
-            symbol = order.symbol
-            direction = order.direction
-            price = order.price
-            quantity = order.filled_qty
-            # timestamp = order.timestamp
-            
-            # Calculate commission
-            commission_rate = self.config.get(self.mode_name, "commission_rate", 
-                                            default=self.config.get("default_config", "user_config", "commission", default=0.001))
-            commission = price * quantity * commission_rate
-            
-            # Update cash and positions
-            if direction.value == 'buy':
-                # Update cash (deduct cost and commission)
-                total_cost = (price * quantity) + commission
-                if total_cost > self.state['cash']:
-                    self.logger.warning(f"Insufficient cash for {direction} {quantity} {symbol} @ {price}")
-                    return None
-                    
-                self.state['cash'] -= total_cost
-                
-                # Update position
-                if symbol not in self.state['positions']:
-                    self.state['positions'][symbol] = 0
-                self.state['positions'][symbol] += quantity
-                
-            elif direction.value == 'sell' or 'short':
-                # Check position
-                current_position = self.state['positions'].get(symbol, 0)
-                
-                if current_position < quantity and direction.value == 'sell':
-                    self.logger.warning(f"Insufficient position for {direction} {quantity} {symbol}, CANNOT sell without a positive position: current position: {current_position}")
-                    return None
-                
-                # Update position
-                self.state['positions'][symbol] -= quantity
-                if self.state['positions'][symbol] <= 0:
-                    del self.state['positions'][symbol]
-                
-                # Update cash (add proceeds, subtract commission)
-                self.state['cash'] += (price * quantity) - commission
-            
-            # Create trade record
-            trade = {
-                'timestamp': self.state['timestamp'],
-                'symbol': symbol,
-                'action': direction,
-                'quantity': quantity,
-                'price': price,
-                'commission': commission,
-                'cash_after': self.state['cash']
-            }
-            
-            # Record the trade
-            self.state['trades'].append(trade)
-            self.logger.info(f"Executed {direction} {quantity} {symbol} @ {price}")
-            
-            return trade
-            
-        except KeyError as e:
-            self.logger.error(f"Missing required field in order: {e}")
-            return None
-    
     def _update_performance_metrics(self) -> None:
         """
         Update equity curve and drawdown
         """
-        # Calculate current equity
-        equity = self._calculate_equity()
-        self.state['current_equity'] = equity
-        
-        # Update equity curve
-        equity_point = {
-            'timestamp': self.state['timestamp'],
-            'equity': equity
-        }
-        self.state['equity_curve'].append(equity_point)
-        
-        # Update peak and drawdown
-        if equity > self.state['peak_equity']:
-            self.state['peak_equity'] = equity
-        
-        if self.state['peak_equity'] > 0:
-            drawdown = (self.state['peak_equity'] - equity) / self.state['peak_equity']
-            self.state['max_drawdown'] = max(self.state['max_drawdown'], drawdown)
+        self.portfolio_book.record_equity(self.state['timestamp'])
+        self._sync_state_from_portfolio()
     
     def _calculate_equity(self) -> float:
         """
@@ -425,15 +232,18 @@ class BaseTradingMode(ABC):
         Returns:
             float: Current equity value
         """
-        equity = self.state['cash']
-        
-        # Add position values
-        for symbol, quantity in self.state['positions'].items():
-            if symbol in self.state['market_prices']:
-                price = self.state['market_prices'][symbol]
-                equity += quantity * price
-        
-        return equity
+        return self.portfolio_book.calculate_equity()
+
+    def _sync_state_from_portfolio(self) -> None:
+        # 兼容旧代码读取 self.state 的方式，同时把真实账本收敛到 PortfolioBook。
+        self.state['cash'] = self.portfolio_book.cash
+        self.state['positions'] = self.portfolio_book.positions
+        self.state['trades'] = self.portfolio_book.trades
+        self.state['equity_curve'] = self.portfolio_book.equity_curve
+        self.state['market_prices'] = self.portfolio_book.market_prices
+        self.state['current_equity'] = self.portfolio_book.current_equity
+        self.state['peak_equity'] = self.portfolio_book.peak_equity
+        self.state['max_drawdown'] = self.portfolio_book.max_drawdown
     
     def _generate_report(self) -> Dict[str, Any]:
         """
@@ -442,60 +252,12 @@ class BaseTradingMode(ABC):
         Returns:
             Dict: Performance report
         """
-        # Get initial values
-        initial_capital = self.config.get(
-            self.mode_name, "initial_capital", 
-            default=self.config.get("default_config", "user_config", "initial_cash", default=100000)
-        )
-        
-        # Current values
-        final_equity = self._calculate_equity()
-        total_return = final_equity - initial_capital
-        total_return_pct = (total_return / initial_capital * 100) if initial_capital > 0 else 0
-        
-        # Calculate trade statistics
-        trades = self.state['trades']
-        buy_trades = len([t for t in trades if t['action'] == 'buy'])
-        sell_trades = len([t for t in trades if t['action'] == 'sell'])
-        
-        # Build report
-        report = {
-            'initial_capital': initial_capital,
-            'final_equity': final_equity,
-            'total_return': total_return,
-            'total_return_pct': total_return_pct,
-            'max_drawdown_pct': self.state['max_drawdown'] * 100,
-            'total_trades': len(trades),
-            'buy_trades': buy_trades,
-            'sell_trades': sell_trades,
-            'current_positions': self.state['positions'],
-            'remaining_cash': self.state['cash'],
-            'trades': trades
-        }
-        
-        # Calculate additional metrics if we have enough data
-        equity_curve = self.state['equity_curve']
-        if len(equity_curve) > 1:
-            # Convert to DataFrame for calculations
-            equity_df = pd.DataFrame(equity_curve)
-            
-            # Calculate Sharpe ratio or other metrics
-            if 'equity' in equity_df.columns:
-                equity_df['return'] = equity_df['equity'].pct_change()
-                
-                # Calculate cumulative return
-                if not equity_df['return'].empty:
-                    equity_df['cumulative_return'] = (1 + equity_df['return']).cumprod() - 1
-                    
-                    # Calculate Sharpe ratio (assume zero risk-free rate)
-                    if equity_df['return'].std() > 0:
-                        sharpe_ratio = (equity_df['return'].mean() / equity_df['return'].std()) * (252 ** 0.5)
-                        report['sharpe_ratio'] = sharpe_ratio
-        
-        # Add mode-specific metrics
-        self._add_mode_specific_metrics(report)
-        
-        return report
+        # 报告生成已经从 mode 抽到应用层；这里保留旧方法名，降低外部调用方迁移成本。
+        return TradingReportUseCase(self).generate()
+
+    def _trade_action_value(self, trade: Dict[str, Any]) -> str:
+        # 旧测试和旧报告路径仍会调用该方法，暂时作为报告用例的薄代理保留。
+        return TradingReportUseCase(self)._trade_action_value(trade)
     
     def _add_mode_specific_metrics(self, report: Dict[str, Any]) -> None:
         """
@@ -514,45 +276,8 @@ class BaseTradingMode(ABC):
         Args:
             report: Trading performance report
         """
-        # Create report directory
-        report_dir = self.config.get("reporting", f"{self.mode_name}_reports_dir", 
-                                    default=f"reports/{self.mode_name}/")
-        Path(report_dir).mkdir(parents=True, exist_ok=True)
-        
-        # Generate timestamp for filenames
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
-        # Determine output formats
-        output_formats = self.config.get("reporting", "output_formats", default=["json"])
-        
-        # Save trade records
-        if 'csv' in output_formats and report.get('trades'):
-            trades_df = pd.DataFrame(report['trades'])
-            trades_csv = os.path.join(report_dir, f"{self.mode_name}_trades_{timestamp}.csv")
-            trades_df.to_csv(trades_csv, index=False)
-            self.logger.info(f"Trade records saved to {trades_csv}")
-        
-        # Save equity curve
-        if 'csv' in output_formats and report.get('equity_curve'):
-            equity_df = pd.DataFrame(report['equity_curve'])
-            equity_csv = os.path.join(report_dir, f"{self.mode_name}_equity_curve_{timestamp}.csv")
-            equity_df.to_csv(equity_csv, index=False)
-            self.logger.info(f"Equity curve saved to {equity_csv}")
-        
-        # Save as JSON
-        if 'json' in output_formats:
-            # Prepare report for serialization
-            clean_report = self._prepare_report_for_serialization(report)
-            
-            # Save JSON report
-            report_json = os.path.join(report_dir, f"{self.mode_name}_report_{timestamp}.json")
-            with open(report_json, 'w') as f:
-                json.dump(clean_report, f, indent=4, default=str)
-            
-            self.logger.info(f"Performance report saved to {report_json}")
-        
-        # Log summary
-        self._log_report_summary(report)
+        # 报告写盘逻辑委托给 TradingReportUseCase，mode 不再关心文件命名和 JSON 清洗细节。
+        TradingReportUseCase(self).save(report)
     
     def _prepare_report_for_serialization(self, report: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -564,18 +289,8 @@ class BaseTradingMode(ABC):
         Returns:
             Dict: Serializable report
         """
-        # Create a copy to avoid modifying the original
-        clean_report = report.copy()
-        
-        # Handle non-serializable objects
-        for key in ['equity_curve', 'strategy']:
-            if key in clean_report:
-                if key == 'equity_curve':
-                    clean_report[key] = str(f"{len(clean_report[key])} records")
-                elif key == 'strategy':
-                    clean_report[key] = clean_report[key].__class__.__name__
-        
-        return clean_report
+        # 兼容旧入口：实际序列化清洗规则集中在报告用例里维护。
+        return TradingReportUseCase(self).prepare_for_serialization(report)
     
     def _log_report_summary(self, report: Dict[str, Any]) -> None:
         """
@@ -584,17 +299,8 @@ class BaseTradingMode(ABC):
         Args:
             report: Performance report
         """
-        self.logger.info(f"==== {self.mode_name.capitalize()} Performance Summary ====")
-        self.logger.info(f"Initial capital: ${report.get('initial_capital', 0):,.2f}")
-        self.logger.info(f"Final equity: ${report.get('final_equity', 0):,.2f}")
-        self.logger.info(f"Total return: ${report.get('total_return', 0):,.2f} ({report.get('total_return_pct', 0):.2f}%)")
-        self.logger.info(f"Max drawdown: {report.get('max_drawdown_pct', 0):.2f}%")
-        
-        if 'sharpe_ratio' in report:
-            self.logger.info(f"Sharpe ratio: {report.get('sharpe_ratio', 0):.2f}")
-            
-        self.logger.info(f"Total trades: {report.get('total_trades', 0)}")
-        self.logger.info("==========================================")
+        # 兼容旧入口：日志摘要由报告用例统一生成，避免字段解释散落在 mode 层。
+        TradingReportUseCase(self).log_summary(report)
     
     def _should_continue(self) -> bool:
         """

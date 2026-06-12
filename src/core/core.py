@@ -118,7 +118,11 @@ class TradingCore:
         
         # Shutdown trading mode if it exists
         if self.trading_mode is not None and hasattr(self.trading_mode, 'shutdown'):
-            await self.trading_mode.shutdown()
+            if getattr(self.trading_mode, 'is_running', True):
+                await self.trading_mode.shutdown()
+            else:
+                # mode.run() 的 finally 已经关闭过，避免重复导出报告和重复启动/关闭后台资源。
+                self.logger.debug("Trading mode already stopped, skipping duplicate shutdown")
         else:
             self.logger.warning("Trading mode not properly initialized, skipping shutdown")
         

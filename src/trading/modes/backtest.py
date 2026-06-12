@@ -5,9 +5,10 @@ import pandas as pd
 from datetime import datetime
 
 from src.trading.modes.base import BaseTradingMode
-from src.trading.execution.manager import ExecutionEngine
 from src.risk.manager import BacktestRiskManager
 from src.backtest.performance import PerformanceMonitor
+from src.application.backtest_use_case import BacktestUseCase
+from src.application.runtime_builder import RuntimeBuilder
 
 
 class BacktestTradingMode(BaseTradingMode):
@@ -16,12 +17,6 @@ class BacktestTradingMode(BaseTradingMode):
     async def initialize(self) -> None:
         """Initialize backtest mode specific components"""
         self.logger.info("Initializing backtest mode")
-        
-        # Create backtest-specific execution engine
-        self.execution_engine = ExecutionEngine(
-            config=self.config,
-            mode="backtest"
-        )
         
         # Initialize risk manager
         if not self.risk_manager or not isinstance(self.risk_manager, BacktestRiskManager):
@@ -73,8 +68,8 @@ class BacktestTradingMode(BaseTradingMode):
             self.start_date = start.strftime("%Y-%m-%d")
             self.end_date = end.strftime("%Y-%m-%d")
             self.logger.info(f"Using default date range: {self.start_date} to {self.end_date}")
-        
-        # Load historical data
+
+        # 回测主循环优先走 MarketDataFeed；这里仍加载 historical_data，是为了 RuntimeBuilder 构造回测执行模型。
         self.historical_data = await self._load_historical_data(symbols, timeframe)
         if not self.historical_data:
             raise ValueError("Failed to get historical data")
@@ -83,9 +78,18 @@ class BacktestTradingMode(BaseTradingMode):
         self.timestamps = self._get_combined_timestamps(self.historical_data)
         self.logger.info(f"Backtest contains {len(self.timestamps)} time periods")
         
-        # Set execution engine's historical data
-        if self.execution_engine:
-            self.execution_engine.set_historical_data(self.historical_data)
+        runtime = RuntimeBuilder(self).build_backtest_runtime(self.historical_data)
+        if runtime is None:
+            self.domain_pipeline = None
+
+    def _create_market_data_feed(self):
+        # 兼容旧测试入口；真实组装逻辑集中在 RuntimeBuilder。
+        return RuntimeBuilder(self).create_historical_market_data_feed()
+
+    def _create_domain_pipeline(self):
+        """兼容旧入口：回测领域流水线由 RuntimeBuilder 统一组装。"""
+        runtime = RuntimeBuilder(self).build_backtest_runtime(self.historical_data)
+        return runtime.domain_pipeline if runtime is not None else None
     
     async def _load_historical_data(self, symbols: List[str], timeframe: str) -> Dict[str, pd.DataFrame]:
         """
@@ -156,6 +160,7 @@ class BacktestTradingMode(BaseTradingMode):
         result = {}
         
         for symbol, df in self.historical_data.items():
+            # 这是 feed 迁移前的旧切片路径，目前保留给兼容场景和旧测试使用。
             # Get data at the specific timestamp
             if 'datetime' in df.columns:
                 data_at_timestamp = df[df['datetime'] == timestamp]
@@ -184,53 +189,8 @@ class BacktestTradingMode(BaseTradingMode):
         Returns:
             Dict: Backtest results
         """
-        try:
-            # Main backtest loop
-            for i, timestamp in enumerate(self.timestamps):
-                if i % 100 == 0 or i == 0:  # Log progress periodically
-                    self.logger.info(f"Backtest progress: {i}/{len(self.timestamps)}")
-                
-                # Get data for current timestamp
-                current_data = self._get_data_at_timestamp(timestamp)
-                
-                # Update current timestamp
-                self.state['timestamp'] = timestamp
-                
-                # Process this data point
-                trades = await self._process_market_data(current_data)
-                
-                # Update performance monitor with current state
-                if trades and self.performance_monitor:
-                    for trade in trades:
-                        self.performance_monitor.record_trade(
-                            timestamp=trade.get('timestamp', timestamp),
-                            symbol=trade.get('symbol', ''),
-                            direction=trade.get('action', ''),
-                            entry_price=trade.get('price', 0),
-                            exit_price=trade.get('price', 0),
-                            quantity=trade.get('quantity', 0),
-                            commission=trade.get('commission', 0)
-                        )
-                
-                # Update equity curve
-                current_balance = self._calculate_equity()
-                if self.performance_monitor:
-                    self.performance_monitor.update_equity_curve(timestamp, current_balance)
-                
-                # Check risk breach status
-                if not self._should_continue():
-                    self.logger.info("Stopping backtest due to risk breach or user request")
-                    break
-            
-            # Generate report
-            self.performance_monitor.calculate_performance_metrics()
-            report = self.performance_monitor.generate_detailed_report()
-            
-            return report
-            
-        except Exception as e:
-            self.logger.error(f"Backtest execution error: {e}", exc_info=True)
-            raise
+        # 回测编排已抽到 BacktestUseCase，mode 只负责准备依赖和委托执行。
+        return await BacktestUseCase(self).run(symbols, timeframe)
     
     def _add_mode_specific_metrics(self, report: Dict[str, Any]) -> None:
         """
@@ -262,9 +222,10 @@ class BacktestTradingMode(BaseTradingMode):
         if hasattr(self, 'strategy') and self.strategy:
             await self.strategy.shutdown()
         
-        if hasattr(self, 'execution_engine') and self.execution_engine:
-            await self.execution_engine.close()
-        
+        if hasattr(self, 'data_manager') and self.data_manager:
+            # DataManager 持有线程池和数据源，回测结束必须关闭，否则 CLI 会停在后台线程上。
+            await self.data_manager.close()
+
         if hasattr(self, 'performance_monitor') and self.performance_monitor:
             await self.performance_monitor.close()
         

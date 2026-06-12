@@ -672,7 +672,12 @@ class AsyncExecutor:
             # Clear task registry
             with self._lock:
                 self._tasks.clear()
-                
+
+            current_loop = asyncio.get_running_loop()
+            if current_loop is self._loop:
+                # FileUtils 使用 run_in_executor(None, ...)，必须关闭默认线程池，否则 CLI 会在后台 worker 上挂住。
+                await current_loop.shutdown_default_executor()
+
             self._logger.debug("AsyncExecutor closed successfully")
             
         except Exception as e:
