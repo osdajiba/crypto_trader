@@ -349,85 +349,85 @@ class TradingSystemGUI:
     def _init_from_config(self):
         """Initialize form values from config"""
         # General settings
-        self.backtest_engine_var = tk.StringVar(value=self.config.get("backtest", "engine", default="ohlcv"))
+        self._set_or_create_var("backtest_engine_var", tk.StringVar, self.config.get("backtest", "engine", default="ohlcv"))
 
-        self.config_var = tk.StringVar(value=str(self.config._config_path or Path(project_root) / "conf/bt_config.yaml"))
-        self.mode_var = tk.StringVar(value=self.config.get("system", "operational_mode", default="backtest"))
-        self.symbol_var = tk.StringVar(value=",".join(self.config.get("trading", "instruments", default=["BTC/USDT"])))
-        self.initial_capital_var = tk.DoubleVar(value=self.config.get("trading", "capital", "initial", default=10000))
+        self._set_or_create_var("config_var", tk.StringVar, self._current_config_path())
+        self._set_or_create_var("mode_var", tk.StringVar, self.config.get("system", "operational_mode", default="backtest"))
+        self._set_or_create_var("symbol_var", tk.StringVar, ",".join(self.config.get("trading", "instruments", default=["BTC/USDT"])))
+        self._set_or_create_var("initial_capital_var", tk.DoubleVar, self.config.get("trading", "capital", "initial", default=10000))
         
         # Use current date and one month ago as defaults for backtest period
         today = datetime.date.today()
         one_month_ago = today - datetime.timedelta(days=30)
         
-        self.start_date_var = tk.StringVar(value=self.config.get("backtest", "period", "start", 
+        self._set_or_create_var("start_date_var", tk.StringVar, self.config.get("backtest", "period", "start",
                                                           default=one_month_ago.strftime("%Y-%m-%d")))
-        self.end_date_var = tk.StringVar(value=self.config.get("backtest", "period", "end", 
+        self._set_or_create_var("end_date_var", tk.StringVar, self.config.get("backtest", "period", "end",
                                                       default=today.strftime("%Y-%m-%d")))
-        self.debug_var = tk.BooleanVar(value=False)
+        self._set_or_create_var("debug_var", tk.BooleanVar, False)
         
         # Costs
-        self.commission_var = tk.DoubleVar(value=self.config.get("backtest", "costs", "commission", default=0.001))
-        self.slippage_var = tk.DoubleVar(value=self.config.get("backtest", "costs", "slippage", default=0.001))
+        self._set_or_create_var("commission_var", tk.DoubleVar, self.config.get("backtest", "costs", "commission", default=0.001))
+        self._set_or_create_var("slippage_var", tk.DoubleVar, self.config.get("backtest", "costs", "slippage", default=0.001))
         
         # Strategy settings
-        self.strategy_var = tk.StringVar(value=self.config.get("strategy", "active", default="dual_ma"))
-        self.timeframe_var = tk.StringVar(value=self.config.get("strategy", "timeframe", default="1m"))
-        self.fallback_strategy_var = tk.StringVar(value=self.config.get("strategy", "fallback_strategy", default=""))
+        self._set_or_create_var("strategy_var", tk.StringVar, self.config.get("strategy", "active", default="dual_ma"))
+        self._set_or_create_var("timeframe_var", tk.StringVar, self.config.get("strategy", "timeframe", default="1m"))
+        self._set_or_create_var("fallback_strategy_var", tk.StringVar, self.config.get("strategy", "fallback_strategy", default=""))
         
         # Strategy parameters
-        self.fast_period_var = tk.IntVar(value=self.config.get("strategy", "parameters", "fast_period", default=50))
-        self.slow_period_var = tk.IntVar(value=self.config.get("strategy", "parameters", "slow_period", default=200))
-        self.threshold_var = tk.DoubleVar(value=self.config.get("strategy", "parameters", "threshold", default=0.005))
+        self._set_or_create_var("fast_period_var", tk.IntVar, self.config.get("strategy", "parameters", "fast_period", default=50))
+        self._set_or_create_var("slow_period_var", tk.IntVar, self.config.get("strategy", "parameters", "slow_period", default=200))
+        self._set_or_create_var("threshold_var", tk.DoubleVar, self.config.get("strategy", "parameters", "threshold", default=0.005))
         
         # Risk management
-        self.stop_loss_enabled_var = tk.BooleanVar(value=self.config.get("risk", "stop_loss", "enabled", default=True))
-        self.stop_loss_pct_var = tk.DoubleVar(value=self.config.get("risk", "stop_loss", "percentage", default=0.02))
-        self.stop_loss_daily_var = tk.DoubleVar(value=self.config.get("risk", "stop_loss", "max_daily", default=0.05))
+        self._set_or_create_var("stop_loss_enabled_var", tk.BooleanVar, self.config.get("risk", "stop_loss", "enabled", default=True))
+        self._set_or_create_var("stop_loss_pct_var", tk.DoubleVar, self.config.get("risk", "stop_loss", "percentage", default=0.02))
+        self._set_or_create_var("stop_loss_daily_var", tk.DoubleVar, self.config.get("risk", "stop_loss", "max_daily", default=0.05))
         
-        self.take_profit_enabled_var = tk.BooleanVar(value=self.config.get("risk", "take_profit", "enabled", default=True))
-        self.take_profit_pct_var = tk.DoubleVar(value=self.config.get("risk", "take_profit", "percentage", default=0.05))
+        self._set_or_create_var("take_profit_enabled_var", tk.BooleanVar, self.config.get("risk", "take_profit", "enabled", default=True))
+        self._set_or_create_var("take_profit_pct_var", tk.DoubleVar, self.config.get("risk", "take_profit", "percentage", default=0.05))
         
-        self.max_drawdown_var = tk.DoubleVar(value=self.config.get("risk", "drawdown", "max_portfolio", default=0.2))
-        self.max_trade_drawdown_var = tk.DoubleVar(value=self.config.get("risk", "drawdown", "max_single_trade", default=0.1))
+        self._set_or_create_var("max_drawdown_var", tk.DoubleVar, self.config.get("risk", "drawdown", "max_portfolio", default=0.2))
+        self._set_or_create_var("max_trade_drawdown_var", tk.DoubleVar, self.config.get("risk", "drawdown", "max_single_trade", default=0.1))
         
         # Position sizing
-        self.max_position_var = tk.DoubleVar(value=self.config.get("trading", "limits", "position", default=0.1))
-        self.min_order_var = tk.DoubleVar(value=self.config.get("trading", "capital", "min_order", default=0.001))
+        self._set_or_create_var("max_position_var", tk.DoubleVar, self.config.get("trading", "limits", "position", default=0.1))
+        self._set_or_create_var("min_order_var", tk.DoubleVar, self.config.get("trading", "capital", "min_order", default=0.001))
         
         # Advanced settings
-        self.db_url_var = tk.StringVar(value=self.config.get("database", "url", default="sqlite:///database/trading.sqlite"))
-        self.max_workers_var = tk.IntVar(value=self.config.get("system", "performance", "max_threads", default=4))
-        self.max_memory_var = tk.IntVar(value=int(self.config.get("system", "performance", "max_memory", default=1073741824) / 1048576))
-        self.timezone_var = tk.StringVar(value=self.config.get("system", "timezone", default="UTC"))
-        self.task_timeout_var = tk.IntVar(value=self.config.get("system", "performance", "task_timeout", default=300))
+        self._set_or_create_var("db_url_var", tk.StringVar, self.config.get("database", "url", default="sqlite:///database/trading.sqlite"))
+        self._set_or_create_var("max_workers_var", tk.IntVar, self.config.get("system", "performance", "max_threads", default=4))
+        self._set_or_create_var("max_memory_var", tk.IntVar, int(self.config.get("system", "performance", "max_memory", default=1073741824) / 1048576))
+        self._set_or_create_var("timezone_var", tk.StringVar, self.config.get("system", "timezone", default="UTC"))
+        self._set_or_create_var("task_timeout_var", tk.IntVar, self.config.get("system", "performance", "task_timeout", default=300))
         
         # Database settings
-        self.db_pool_size_var = tk.IntVar(value=self.config.get("database", "pool_size", default=5))
-        self.db_timeout_var = tk.IntVar(value=self.config.get("database", "timeout", default=30))
-        self.db_echo_sql_var = tk.BooleanVar(value=self.config.get("database", "echo_sql", default=False))
+        self._set_or_create_var("db_pool_size_var", tk.IntVar, self.config.get("database", "pool_size", default=5))
+        self._set_or_create_var("db_timeout_var", tk.IntVar, self.config.get("database", "timeout", default=30))
+        self._set_or_create_var("db_echo_sql_var", tk.BooleanVar, self.config.get("database", "echo_sql", default=False))
         
         # Live trading safeguards
-        self.emergency_stop_var = tk.BooleanVar(value=self.config.get("live", "safeguards", "emergency_stop", "enabled", default=True))
-        self.emergency_threshold_var = tk.DoubleVar(value=self.config.get("live", "safeguards", "emergency_stop", "threshold", default=0.1))
-        self.max_retries_var = tk.IntVar(value=self.config.get("live", "safeguards", "max_retries", default=3))
-        self.cooldown_var = tk.IntVar(value=self.config.get("live", "safeguards", "cooldown", default=60))
+        self._set_or_create_var("emergency_stop_var", tk.BooleanVar, self.config.get("live", "safeguards", "emergency_stop", "enabled", default=True))
+        self._set_or_create_var("emergency_threshold_var", tk.DoubleVar, self.config.get("live", "safeguards", "emergency_stop", "threshold", default=0.1))
+        self._set_or_create_var("max_retries_var", tk.IntVar, self.config.get("live", "safeguards", "max_retries", default=3))
+        self._set_or_create_var("cooldown_var", tk.IntVar, self.config.get("live", "safeguards", "cooldown", default=60))
         
         # API settings
-        self.api_key_var = tk.StringVar(value=self.config.get("api", "binance", "api_key", default=""))
-        self.api_secret_var = tk.StringVar(value=self.config.get("api", "binance", "secret", default=""))
-        self.api_timeout_var = tk.IntVar(value=self.config.get("api", "timeout", default=30000))
-        self.api_rate_limit_var = tk.IntVar(value=self.config.get("api", "rate_limits", "requests_per_minute", default=20))
-        self.api_retry_attempts_var = tk.IntVar(value=self.config.get("api", "retries", "max_attempts", default=3))
-        self.api_retry_delay_var = tk.IntVar(value=self.config.get("api", "retries", "delay_seconds", default=1))
+        self._set_or_create_var("api_key_var", tk.StringVar, self.config.get("api", "binance", "api_key", default=""))
+        self._set_or_create_var("api_secret_var", tk.StringVar, self.config.get("api", "binance", "secret", default=""))
+        self._set_or_create_var("api_timeout_var", tk.IntVar, self.config.get("api", "timeout", default=30000))
+        self._set_or_create_var("api_rate_limit_var", tk.IntVar, self.config.get("api", "rate_limits", "requests_per_minute", default=20))
+        self._set_or_create_var("api_retry_attempts_var", tk.IntVar, self.config.get("api", "retries", "max_attempts", default=3))
+        self._set_or_create_var("api_retry_delay_var", tk.IntVar, self.config.get("api", "retries", "delay_seconds", default=1))
         
         # Proxy settings
-        self.api_useproxy_var = tk.BooleanVar(value=bool(self.config.get("proxies", "http", default="")))
-        self.api_http_proxy_var = tk.StringVar(value=self.config.get("proxies", "http", default=""))
-        self.api_https_proxy_var = tk.StringVar(value=self.config.get("proxies", "https", default=""))
+        self._set_or_create_var("api_useproxy_var", tk.BooleanVar, bool(self.config.get("proxies", "http", default="")))
+        self._set_or_create_var("api_http_proxy_var", tk.StringVar, self.config.get("proxies", "http", default=""))
+        self._set_or_create_var("api_https_proxy_var", tk.StringVar, self.config.get("proxies", "https", default=""))
         
         # Download settings
-        self.dl_symbols_var = tk.StringVar(value="BTC/USDT")
+        self._set_or_create_var("dl_symbols_var", tk.StringVar, "BTC/USDT")
         self.dl_timeframes = {
             "1m": tk.BooleanVar(value=False),
             "5m": tk.BooleanVar(value=False),
@@ -440,27 +440,38 @@ class TradingSystemGUI:
         }
         
         # Date range for download
-        self.dl_start_date_var = tk.StringVar(value=one_month_ago.strftime("%Y-%m-%d"))
-        self.dl_end_date_var = tk.StringVar(value=today.strftime("%Y-%m-%d"))
-        self.dl_concurrent_var = tk.IntVar(value=3)
+        self._set_or_create_var("dl_start_date_var", tk.StringVar, one_month_ago.strftime("%Y-%m-%d"))
+        self._set_or_create_var("dl_end_date_var", tk.StringVar, today.strftime("%Y-%m-%d"))
+        self._set_or_create_var("dl_concurrent_var", tk.IntVar, 3)
         
         # Migration settings
-        self.migrate_symbol_var = tk.StringVar(value="")
-        self.migrate_timeframe_var = tk.StringVar(value="")
-        self.migrate_backup_var = tk.BooleanVar(value=True)
-        self.migrate_delete_var = tk.BooleanVar(value=False)
+        self._set_or_create_var("migrate_symbol_var", tk.StringVar, "")
+        self._set_or_create_var("migrate_timeframe_var", tk.StringVar, "")
+        self._set_or_create_var("migrate_backup_var", tk.BooleanVar, True)
+        self._set_or_create_var("migrate_delete_var", tk.BooleanVar, False)
         
         # View settings
-        self.view_symbol_var = tk.StringVar(value="BTC/USDT")
-        self.view_timeframe_var = tk.StringVar(value="1h")
+        self._set_or_create_var("view_symbol_var", tk.StringVar, "BTC/USDT")
+        self._set_or_create_var("view_timeframe_var", tk.StringVar, "1h")
         
         # Binance workaround
-        self.use_binance_workaround = tk.BooleanVar(value=True)
-        self.binance_workaround_var = tk.BooleanVar(value=True)
+        self._set_or_create_var("use_binance_workaround", tk.BooleanVar, True)
+        self._set_or_create_var("binance_workaround_var", tk.BooleanVar, True)
+
+    def _set_or_create_var(self, attr_name, var_factory, value):
+        """Update an existing Tk variable without breaking widget bindings."""
+        if hasattr(self, attr_name):
+            getattr(self, attr_name).set(value)
+        else:
+            setattr(self, attr_name, var_factory(value=value))
+
+    def _current_config_path(self) -> str:
+        path = getattr(self.config, "_config_path", None)
+        return str(path or Path(project_root) / "conf" / "config.yaml")
 
     def _init_from_args(self, args):
         """Initialize values from command line args"""
-        if hasattr(args, 'config') and args.config:
+        if hasattr(args, 'config') and args.config and isinstance(args.config, (str, os.PathLike)):
             self.config_var.set(args.config)
         
         if hasattr(args, 'mode') and args.mode:

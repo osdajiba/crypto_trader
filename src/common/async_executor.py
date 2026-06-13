@@ -59,7 +59,7 @@ class AsyncExecutor:
     
     def __new__(cls, *args, **kwargs):
         with cls._lock:
-            if cls._instance is None:
+            if cls._instance is None or getattr(cls._instance, "_closed", False):
                 cls._instance = super().__new__(cls)
                 cls._instance._init_executor(*args, **kwargs)
             return cls._instance
@@ -83,6 +83,7 @@ class AsyncExecutor:
             "tasks_cancelled": 0,
         }
         self._signal_handlers_installed = False
+        self._closed = False
     
     async def __aenter__(self):
         """Support for async context manager pattern"""
@@ -135,6 +136,7 @@ class AsyncExecutor:
                     asyncio.set_event_loop(self._loop)
                     
                 self._running = True
+                self._closed = False
                 self._shutdown_event.clear()
                 
                 # Start the task scheduler for delayed and periodic tasks
@@ -542,12 +544,7 @@ class AsyncExecutor:
             raise TypeError(f"Expected coroutine, got {type(coro).__name__}")
 
         try:
-            # Get or create event loop
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            loop = self._get_usable_event_loop()
             
             # Ensure executor is started
             if not self._running:
@@ -564,6 +561,20 @@ class AsyncExecutor:
         finally:
             # Don't close the event loop as it might be used elsewhere
             pass
+
+    def _get_usable_event_loop(self) -> asyncio.AbstractEventLoop:
+        """Return a loop whose default executor has not been shut down."""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop
+
+        if loop.is_closed() or getattr(loop, "_executor_shutdown_called", False):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop
     
     def _cleanup_task(self, task_id: str):
         """Remove completed task from registry"""
@@ -684,6 +695,15 @@ class AsyncExecutor:
             self._logger.error(f"Error while closing AsyncExecutor: {str(e)}", exc_info=True)
         finally:
             self._in_cleanup = False
+            self._closed = True
+            with self._lock:
+                if AsyncExecutor._instance is self:
+                    AsyncExecutor._instance = None
+            try:
+                if asyncio.get_event_loop() is self._loop:
+                    asyncio.set_event_loop(None)
+            except RuntimeError:
+                pass
     
     @property
     def task_count(self) -> int:

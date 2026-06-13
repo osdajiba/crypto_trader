@@ -1,6 +1,5 @@
 aiofiles
 ccxt
-common
 dotenv
 matplotlib
 numpy
@@ -11,6 +10,8 @@ pyyaml
 requests
 scipy
 seaborn
-src
 tkcalendar
 ttkthemes
+
+# Local project modules are imported through PYTHONPATH, not installed from PyPI:
+#   $env:PYTHONPATH="$PWD\src;$PWD"
