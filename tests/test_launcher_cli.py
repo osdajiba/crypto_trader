@@ -262,6 +262,12 @@ class ResearchCliRunnerTest(unittest.TestCase):
         )
         self.assertEqual(summary["summary_path"], "reports/research/x.json")
 
+    def test_research_cli_rejects_invalid_grid_with_helpful_message(self):
+        from src.ui import research_cli
+
+        with self.assertRaisesRegex(ValueError, "--research-grid must be valid JSON"):
+            research_cli._parse_parameter_grid("{short_window:[5]}")
+
     def test_research_cli_builds_walk_forward_windows(self):
         from src.ui import research_cli
 

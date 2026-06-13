@@ -37,7 +37,14 @@ def _parse_parameter_grid(raw_grid: str | None) -> dict[str, list[Any]]:
     if not raw_grid:
         return {}
 
-    parsed = json.loads(raw_grid)
+    try:
+        parsed = json.loads(raw_grid)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "--research-grid must be valid JSON. In PowerShell, escape inner "
+            "double quotes, for example: "
+            "'{\\\"short_window\\\":[10,20],\\\"long_window\\\":[30,50]}'"
+        ) from exc
     if not isinstance(parsed, dict):
         raise ValueError("--research-grid must be a JSON object")
 
